@@ -227,12 +227,19 @@ CFLAGS += -DCONFIG_P2P_STRICT
 endif
 endif
 
+<<<<<<< HEAD
 ifdef CONFIG_WFD
 OBJS += wfd_supplicant.o
 OBJS += ./src/wfd/wfd.o
 OBJS += ./src/wfd/wfd_parse.o
 OBJS += ./src/wfd/wfd_build.o
 CFLAGS += -DCONFIG_WFD
+=======
+ifdef CONFIG_HS20
+OBJS += hs20_supplicant.o
+CFLAGS += -DCONFIG_HS20
+CONFIG_INTERWORKING=y
+>>>>>>> 25471fe... HS 2.0: Add Hotspot 2.0 ANQP routines
 endif
 
 ifdef CONFIG_INTERWORKING
