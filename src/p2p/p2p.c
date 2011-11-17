@@ -3674,3 +3674,10 @@ p2p_get_peer_found(struct p2p_data *p2p, const u8 *addr, int next)
 
 	return &dev->info;
 }
+
+int p2p_in_progress(struct p2p_data *p2p)
+{
+    if (p2p == NULL)
+        return 0;
+    return p2p->state != P2P_IDLE && p2p->state != P2P_PROVISIONING;
+}
