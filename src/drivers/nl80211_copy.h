@@ -10,6 +10,7 @@
  * Copyright 2008, 2009 Luis R. Rodriguez <lrodriguez@atheros.com>
  * Copyright 2008 Jouni Malinen <jouni.malinen@atheros.com>
  * Copyright 2008 Colin McCabe <colin@cozybit.com>
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1050,6 +1051,7 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_MAX_REMAIN_ON_CHANNEL_DURATION,
 
+	NL80211_ATTR_INTERFACE_COMBINATIONS,
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -1936,4 +1938,77 @@ enum nl80211_tx_power_setting {
 	NL80211_TX_POWER_FIXED,
 };
 
+/**
+ * enum nl80211_iface_limit_attrs - limit attributes
+ * @NL80211_IFACE_LIMIT_UNSPEC: (reserved)
+ * @NL80211_IFACE_LIMIT_MAX: maximum number of interfaces that
+ *	can be chosen from this set of interface types (u32)
+ * @NL80211_IFACE_LIMIT_TYPES: nested attribute containing a
+ *	flag attribute for each interface type in this set
+ * @NUM_NL80211_IFACE_LIMIT: number of attributes
+ * @MAX_NL80211_IFACE_LIMIT: highest attribute number
+ */
+enum nl80211_iface_limit_attrs {
+	NL80211_IFACE_LIMIT_UNSPEC,
+	NL80211_IFACE_LIMIT_MAX,
+	NL80211_IFACE_LIMIT_TYPES,
+
+	/* keep last */
+	NUM_NL80211_IFACE_LIMIT,
+	MAX_NL80211_IFACE_LIMIT = NUM_NL80211_IFACE_LIMIT - 1
+};
+
+/**
+ * enum nl80211_if_combination_attrs -- interface combination attributes
+ *
+ * @NL80211_IFACE_COMB_UNSPEC: (reserved)
+ * @NL80211_IFACE_COMB_LIMITS: Nested attributes containing the limits
+ *	for given interface types, see &enum nl80211_iface_limit_attrs.
+ * @NL80211_IFACE_COMB_MAXNUM: u32 attribute giving the total number of
+ *	interfaces that can be created in this group. This number doesn't
+ *	apply to interfaces purely managed in software, which are listed
+ *	in a separate attribute %NL80211_ATTR_INTERFACES_SOFTWARE.
+ * @NL80211_IFACE_COMB_STA_AP_BI_MATCH: flag attribute specifying that
+ *	beacon intervals within this group must be all the same even for
+ *	infrastructure and AP/GO combinations, i.e. the GO(s) must adopt
+ *	the infrastructure network's beacon interval.
+ * @NL80211_IFACE_COMB_NUM_CHANNELS: u32 attribute specifying how many
+ *	different channels may be used within this group.
+ * @NUM_NL80211_IFACE_COMB: number of attributes
+ * @MAX_NL80211_IFACE_COMB: highest attribute number
+ *
+ * Examples:
+ *	limits = [ #{STA} <= 1, #{AP} <= 1 ], matching BI, channels = 1, max = 2
+ *	=> allows an AP and a STA that must match BIs
+ *
+ *	numbers = [ #{AP, P2P-GO} <= 8 ], channels = 1, max = 8
+ *	=> allows 8 of AP/GO
+ *
+ *	numbers = [ #{STA} <= 2 ], channels = 2, max = 2
+ *	=> allows two STAs on different channels
+ *
+ *	numbers = [ #{STA} <= 1, #{P2P-client,P2P-GO} <= 3 ], max = 4
+ *	=> allows a STA plus three P2P interfaces
+ *
+ * The list of these four possiblities could completely be contained
+ * within the %NL80211_ATTR_INTERFACE_COMBINATIONS attribute to indicate
+ * that any of these groups must match.
+ *
+ * "Combinations" of just a single interface will not be listed here,
+ * a single interface of any valid interface type is assumed to always
+ * be possible by itself. This means that implicitly, for each valid
+ * interface type, the following group always exists:
+ *	numbers = [ #{<type>} <= 1 ], channels = 1, max = 1
+ */
+enum nl80211_if_combination_attrs {
+	NL80211_IFACE_COMB_UNSPEC,
+	NL80211_IFACE_COMB_LIMITS,
+	NL80211_IFACE_COMB_MAXNUM,
+	NL80211_IFACE_COMB_STA_AP_BI_MATCH,
+	NL80211_IFACE_COMB_NUM_CHANNELS,
+
+	/* keep last */
+	NUM_NL80211_IFACE_COMB,
+	MAX_NL80211_IFACE_COMB = NUM_NL80211_IFACE_COMB - 1
+};
 #endif /* __LINUX_NL80211_H */
