@@ -1,6 +1,7 @@
 /*
  * hostapd / Configuration helper functions
  * Copyright (c) 2003-2009, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -90,6 +91,10 @@ void hostapd_config_defaults_bss(struct hostapd_bss_config *bss)
 	/* Set to -1 as defaults depends on HT in setup */
 	bss->wmm_enabled = -1;
 
+#ifdef ANDROID_QCOM_P2P_PATCH
+        bss->wmm_uapsd = 1;
+#endif /* ANDROID_QCOM_P2P_PATCH */
+
 #ifdef CONFIG_IEEE80211R
 	bss->ft_over_ds = 1;
 #endif /* CONFIG_IEEE80211R */
@@ -107,10 +112,17 @@ struct hostapd_config * hostapd_config_defaults(void)
 		{ aCWmin, aCWmax, 7, 0, 0 }; /* background traffic */
 	const struct hostapd_wmm_ac_params ac_be =
 		{ aCWmin, aCWmax, 3, 0, 0 }; /* best effort traffic */
+#ifdef ANDROID_QCOM_P2P_PATCH
+	const struct hostapd_wmm_ac_params ac_vi = /* video traffic */
+		{ aCWmin - 1, aCWmin, 2, 3000 / 32, 0 };
+	const struct hostapd_wmm_ac_params ac_vo = /* voice traffic */
+		{ aCWmin - 2, aCWmin - 1, 2, 1500 / 32, 0 };
+#else
 	const struct hostapd_wmm_ac_params ac_vi = /* video traffic */
 		{ aCWmin - 1, aCWmin, 2, 3000 / 32, 1 };
 	const struct hostapd_wmm_ac_params ac_vo = /* voice traffic */
 		{ aCWmin - 2, aCWmin - 1, 2, 1500 / 32, 1 };
+#endif /* ANDROID_QCOM_P2P_PATCH */
 	const struct hostapd_tx_queue_params txq_bk =
 		{ 7, ecw2cw(aCWmin), ecw2cw(aCWmax), 0 };
 	const struct hostapd_tx_queue_params txq_be =
@@ -161,6 +173,16 @@ struct hostapd_config * hostapd_config_defaults(void)
 	conf->tx_queue[3] = txq_bk;
 
 	conf->ht_capab = HT_CAP_INFO_SMPS_DISABLED;
+
+#ifdef ANDROID_QCOM_P2P_PATCH
+        /* Enable HT and short premable */
+        conf->preamble = SHORT_PREAMBLE;
+        conf->ieee80211n = 1;
+
+        /* Enable ieee80211d and set US as default country */
+        conf->ieee80211d = 1;
+        os_memcpy(conf->country, "US ", 3);
+#endif /* ANDROID_QCOM_P2P_PATCH */
 
 	return conf;
 }
