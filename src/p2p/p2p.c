@@ -1,6 +1,7 @@
 /*
  * Wi-Fi Direct - P2P module
  * Copyright (c) 2009-2010, Atheros Communications
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -939,6 +940,16 @@ void p2p_stop_find_for_freq(struct p2p_data *p2p, int freq)
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Skip stop_listen "
 			"since we are on correct channel for response");
 		return;
+	}
+	if (p2p->drv_in_listen) {
+		/*
+		 * The driver may not deliver callback to p2p_listen_end()
+		 * when the operation gets canceled, so clear the internal
+		 * variable that is tracking driver state.
+		 */
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Clear "
+			"drv_in_listen (%d)", p2p->drv_in_listen);
+		p2p->drv_in_listen = 0;
 	}
 	p2p->cfg->stop_listen(p2p->cfg->cb_ctx);
 }
