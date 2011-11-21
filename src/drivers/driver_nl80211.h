@@ -73,6 +73,7 @@
 
 struct nl80211_global {
 	struct dl_list interfaces;
+	int if_add_ifindex;
 };
 
 struct i802_bss {
@@ -119,8 +120,8 @@ struct wpa_driver_nl80211_data {
 	int associated;
 	u8 ssid[32];
 	size_t ssid_len;
-	int nlmode;
-	int ap_scan_as_station;
+	enum nl80211_iftype nlmode;
+	enum nl80211_iftype ap_scan_as_station;
 	unsigned int assoc_freq;
 
 	int monitor_sock;
