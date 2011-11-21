@@ -567,6 +567,23 @@ static void mlme_event_assoc(struct wpa_driver_nl80211_data *drv,
 		event.assoc_info.addr = mgmt->sa;
 	} else {
 #endif	
+#if (defined (CONFIG_AP) || defined (HOSTAPD) ) && defined (ANDROID_QCOM_P2P_PATCH)
+	if (drv->nlmode == NL80211_IFTYPE_AP || drv->nlmode == NL80211_IFTYPE_P2P_GO) {
+		if (len < 24 + sizeof(mgmt->u.assoc_req)) {
+			wpa_printf(MSG_DEBUG, "nl80211: Too short association event "
+			   "frame");
+			return;
+		}
+		os_memset(&event, 0, sizeof(event));
+		event.assoc_info.freq = drv->assoc_freq;
+		event.assoc_info.resp_ies = (u8 *) mgmt->u.assoc_resp.variable;
+		event.assoc_info.resp_ies_len =
+			len - 24 - sizeof(mgmt->u.assoc_resp);
+		event.assoc_info.req_ies = (u8 *) mgmt->u.assoc_resp.variable;
+		event.assoc_info.req_ies_len = len - 24 - sizeof(mgmt->u.assoc_resp);
+		event.assoc_info.addr = mgmt->da;
+	} else {
+#endif
 	if (len < 24 + sizeof(mgmt->u.assoc_resp)) {
 		wpa_printf(MSG_DEBUG, "nl80211: Too short association event "
 			   "frame");
@@ -601,6 +618,9 @@ static void mlme_event_assoc(struct wpa_driver_nl80211_data *drv,
 
 	event.assoc_info.freq = drv->assoc_freq;
 #if (defined (CONFIG_AP) || defined(HOSTAPD)) && defined (ANDROID_BRCM_P2P_PATCH)
+	}
+#endif
+#if (defined (CONFIG_AP) || defined(HOSTAPD)) && defined (ANDROID_QCOM_P2P_PATCH)
 	}
 #endif
 	wpa_supplicant_event(drv->ctx, EVENT_ASSOC, &event);
@@ -798,7 +818,7 @@ static void mlme_event_deauth_disassoc(struct wpa_driver_nl80211_data *drv,
 		reason_code = le_to_host16(mgmt->u.deauth.reason_code);
 
 	if (type == EVENT_DISASSOC) {
-#ifdef ANDROID_BRCM_P2P_PATCH
+#if (defined (ANDROID_BRCM_P2P_PATCH) || defined(ANDROID_QCOM_P2P_PATCH))
 		if (drv->nlmode == NL80211_IFTYPE_AP ||
 			drv->nlmode == NL80211_IFTYPE_P2P_GO) {
 			event.disassoc_info.addr = mgmt->sa;
@@ -812,7 +832,7 @@ static void mlme_event_deauth_disassoc(struct wpa_driver_nl80211_data *drv,
 				mgmt->u.disassoc.variable;
 		}
 	} else {
-#ifdef ANDROID_BRCM_P2P_PATCH
+#if (defined (ANDROID_BRCM_P2P_PATCH) || defined(ANDROID_QCOM_P2P_PATCH))
 		if (drv->nlmode == NL80211_IFTYPE_AP ||
 			drv->nlmode == NL80211_IFTYPE_P2P_GO) {
 		event.deauth_info.addr = mgmt->sa;
