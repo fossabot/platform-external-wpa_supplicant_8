@@ -3296,8 +3296,7 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 
 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
 		return -1;
-
-#ifdef ANDROID_BRCM_P2P_PATCH
+#if (defined (ANDROID_BRCM_P2P_PATCH) || defined(ANDROID_QCOM_P2P_PATCH))
 	/* Make sure we are not running find during connection establishment */
 	wpa_printf(MSG_DEBUG, "P2P: Stopping P2P FIND, if any");
 	wpas_p2p_stop_find(wpa_s);
