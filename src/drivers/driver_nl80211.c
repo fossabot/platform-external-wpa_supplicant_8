@@ -1432,7 +1432,7 @@ static int process_event(struct nl_msg *msg, void *arg)
 			data.disassoc_info.reason_code =
 				nla_get_u16(tb[NL80211_ATTR_REASON_CODE]);
 #ifdef ANDROID
-			if (data.disassoc_info.reason_code == WLAN_REASON_UNSPECIFIED)
+			if (data.disassoc_info.reason_code == WLAN_REASON_DISASSOC_LOW_ACK)
 				wpa_msg(drv->ctx, MSG_INFO,
 					WPA_EVENT_DRIVER_STATE "HANGED");
 #endif
