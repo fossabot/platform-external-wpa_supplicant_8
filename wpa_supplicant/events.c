@@ -2047,7 +2047,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 					wpa_printf(MSG_DEBUG, "Non-AP: Couln't Ignore Probe request %d", wpa_s->p2p_group_interface);
 			}
 			#endif
-				wpas_p2p_probe_req_rx(wpa_s, src, ie, ie_len);
+				wpas_p2p_probe_req_rx(wpa_s, src, mgmt->da,
+						      mgmt->bssid, ie, ie_len);
 				break;
 			}
 #endif /* CONFIG_P2P */
@@ -2098,6 +2099,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		if (wpa_s->ap_iface) {
 			hostapd_probe_req_rx(wpa_s->ap_iface->bss[0],
 					     data->rx_probe_req.sa,
+					     data->rx_probe_req.da,
+					     data->rx_probe_req.bssid,
 					     data->rx_probe_req.ie,
 					     data->rx_probe_req.ie_len);
 			break;
@@ -2105,6 +2108,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 #endif /* CONFIG_AP */
 #ifdef CONFIG_P2P
 		wpas_p2p_probe_req_rx(wpa_s, data->rx_probe_req.sa,
+				      data->rx_probe_req.da,
+				      data->rx_probe_req.bssid,
 				      data->rx_probe_req.ie,
 				      data->rx_probe_req.ie_len);
 #endif /* CONFIG_P2P */

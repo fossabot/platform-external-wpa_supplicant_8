@@ -41,7 +41,8 @@ static int hostapd_wps_upnp_init(struct hostapd_data *hapd,
 static void hostapd_wps_upnp_deinit(struct hostapd_data *hapd);
 #endif /* CONFIG_WPS_UPNP */
 
-static int hostapd_wps_probe_req_rx(void *ctx, const u8 *addr,
+static int hostapd_wps_probe_req_rx(void *ctx, const u8 *addr, const u8 *da,
+				    const u8 *bssid,
 				    const u8 *ie, size_t ie_len);
 static void hostapd_wps_ap_pin_timeout(void *eloop_data, void *user_ctx);
 
@@ -140,7 +141,8 @@ static int hostapd_wps_set_ie_cb(void *ctx, struct wpabuf *beacon_ie,
 	hapd->wps_beacon_ie = beacon_ie;
 	wpabuf_free(hapd->wps_probe_resp_ie);
 	hapd->wps_probe_resp_ie = probe_resp_ie;
-	ieee802_11_set_beacon(hapd);
+	if (hapd->beacon_set_done)
+	    ieee802_11_set_beacon(hapd);
 	return hostapd_set_ap_wps_ie(hapd);
 }
 
@@ -1076,7 +1078,8 @@ error:
 #endif /* CONFIG_WPS_OOB */
 
 
-static int hostapd_wps_probe_req_rx(void *ctx, const u8 *addr,
+static int hostapd_wps_probe_req_rx(void *ctx, const u8 *addr, const u8 *da,
+				    const u8 *bssid,
 				    const u8 *ie, size_t ie_len)
 {
 	struct hostapd_data *hapd = ctx;
@@ -1175,7 +1178,7 @@ static int hostapd_rx_req_put_wlan_response(
 	}
 #endif /* CONFIG_WPS_STRICT */
 
-	if (!sta) {
+	if (!sta || !(sta->flags & WLAN_STA_WPS)) {
 		wpa_printf(MSG_DEBUG, "WPS UPnP: No matching STA found");
 		return 0;
 	}

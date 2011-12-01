@@ -1046,12 +1046,14 @@ void p2p_group_formation_failed(struct p2p_data *p2p);
  * p2p_probe_req_rx - Report reception of a Probe Request frame
  * @p2p: P2P module context from p2p_init()
  * @addr: Source MAC address
+ * @dst: Destination MAC address if available or %NULL
+ * @bssid: BSSID if available or %NULL
  * @ie: Information elements from the Probe Request frame body
  * @ie_len: Length of ie buffer in octets
  * Returns: 0 to indicate the frame was not processed or 1 if it was
  */
-int p2p_probe_req_rx(struct p2p_data *p2p, const u8 *addr, const u8 *ie,
-		     size_t ie_len);
+int p2p_probe_req_rx(struct p2p_data *p2p, const u8 *addr, const u8 *dst,
+		     const u8 *bssid, const u8 *ie, size_t ie_len);
 
 /**
  * p2p_rx_action - Report received Action frame
@@ -1527,6 +1529,8 @@ int p2p_add_wps_vendor_extension(struct p2p_data *p2p,
  */
 int p2p_set_oper_channel(struct p2p_data *p2p, u8 op_reg_class, u8 op_channel,
 			 int cfg_op_channel);
+
+int supp_rates_11b_only(struct ieee802_11_elems *elems);
 
 /**
 * p2p_in_progress - Check whether a P2P operation is progress

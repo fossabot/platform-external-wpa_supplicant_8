@@ -1432,7 +1432,7 @@ static int process_event(struct nl_msg *msg, void *arg)
 			data.disassoc_info.reason_code =
 				nla_get_u16(tb[NL80211_ATTR_REASON_CODE]);
 #ifdef ANDROID
-			if (data.disassoc_info.reason_code == WLAN_REASON_DISASSOC_LOW_ACK)
+			if (data.disassoc_info.reason_code == WLAN_REASON_UNSPECIFIED)
 				wpa_msg(drv->ctx, MSG_INFO,
 					WPA_EVENT_DRIVER_STATE "HANGED");
 #endif
@@ -4775,7 +4775,8 @@ static int wpa_driver_nl80211_connect(
 	NLA_PUT_U32(msg, NL80211_ATTR_AUTH_TYPE, type);
 
 skip_auth_type:
-	if (params->wpa_ie && params->wpa_ie_len) {
+	if (params->wpa_ie && params->wpa_ie_len &&
+	    params->key_mgmt_suite != KEY_MGMT_WPS) {
 		enum nl80211_wpa_versions ver;
 
 		if (params->wpa_ie[0] == WLAN_EID_RSN)

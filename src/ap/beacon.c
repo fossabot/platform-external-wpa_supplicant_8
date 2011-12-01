@@ -218,7 +218,8 @@ void handle_probe_req(struct hostapd_data *hapd,
 #ifndef ANDROID_BRCM_P2P_PATCH
 	for (i = 0; hapd->probereq_cb && i < hapd->num_probereq_cb; i++)
 		if (hapd->probereq_cb[i].cb(hapd->probereq_cb[i].ctx,
-					    mgmt->sa, ie, ie_len) > 0)
+					    mgmt->sa, mgmt->da, mgmt->bssid,
+					    ie, ie_len) > 0)
 			return;
 #endif
 	if (!hapd->iconf->send_probe_response)
@@ -241,6 +242,16 @@ void handle_probe_req(struct hostapd_data *hapd,
 	}
 
 #ifdef CONFIG_P2P
+	if (hapd->p2p) {
+		if (supp_rates_11b_only(&elems)) {
+			wpa_printf(MSG_DEBUG, "STA " MACSTR " sent probe request "
+			   "with 11b rates only",
+			   MAC2STR(mgmt->sa));
+			/* Indicates support for 11b rates only */
+			return;
+		}
+	}
+
 	if (hapd->p2p && elems.wps_ie) {
 		struct wpabuf *wps;
 		wps = ieee802_11_vendor_ie_concat(ie, ie_len, WPS_DEV_OUI_WFA);
@@ -403,6 +414,7 @@ void ieee802_11_set_beacon(struct hostapd_data *hapd)
 	if ((hapd->conf->p2p & (P2P_ENABLED | P2P_GROUP_OWNER)) == P2P_ENABLED)
 		goto no_beacon;
 #endif /* CONFIG_P2P */
+	hapd->beacon_set_done = 1;
 
 #define BEACON_HEAD_BUF_SIZE 256
 #define BEACON_TAIL_BUF_SIZE 512
