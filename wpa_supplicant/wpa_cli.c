@@ -1,6 +1,7 @@
 /*
  * WPA Supplicant - command line interface for wpa_supplicant daemon
  * Copyright (c) 2004-2011, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -283,6 +284,28 @@ static int wpa_ctrl_command(struct wpa_ctrl *ctrl, char *cmd)
 	return _wpa_ctrl_command(ctrl, cmd, 1);
 }
 
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+static int
+wpa_cli_cmd_seamless_roaming(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[32];
+	int res;
+
+	if (argc != 1) {
+		printf("Invalid command: needs one argument\n");
+		return -1;
+	}
+
+	res = os_snprintf(cmd, sizeof(cmd), "SEAMLESS_ROAMING %s", argv[0]);
+	if (res < 0 || (size_t) res >= sizeof(cmd) - 1) {
+		printf("Invalid command\n");
+		return -1;
+	}
+	return wpa_ctrl_command(ctrl, cmd);
+}
+#endif
+#endif
 
 static int wpa_cli_cmd_status(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
@@ -2390,6 +2413,13 @@ struct wpa_cli_cmd {
 };
 
 static struct wpa_cli_cmd wpa_cli_commands[] = {
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	{ "seamless_roaming", wpa_cli_cmd_seamless_roaming,
+	  cli_cmd_flag_none,
+	  "<0/1> = disable/enable seamless roaming function" },
+#endif
+#endif
 	{ "status", wpa_cli_cmd_status,
 	  cli_cmd_flag_none,
 	  "[verbose] = get current WPA/EAPOL/EAP status" },

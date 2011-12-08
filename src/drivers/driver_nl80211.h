@@ -5,6 +5,7 @@
  * Copyright (c) 2005-2006, Devicescape Software, Inc.
  * Copyright (c) 2007, Johannes Berg <johannes@sipsolutions.net>
  * Copyright (c) 2009-2010, Atheros Communications
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -48,6 +49,17 @@
 #endif
 #ifdef ANDROID
 #define WPA_EVENT_DRIVER_STATE		"CTRL-EVENT-DRIVER-STATE "
+#ifdef SEAMLESS_ROAMING
+#define NL80211_SEAMLESS_ROAM_SCAN_TIMEOUT (6)
+#define NL80211_SEAMLESS_ROAMING_TIMEOUT (6)
+#define NL80211_SEAMLESS_LOW_RSSI_THRESHOLD (-80)
+#define NL80211_SEAMLESS_LOW_RSSI_SCAN_INTERVAL (20)
+#define NL80211_SEAMLESS_RSSI_ROAMING_THRESHOLD (10)
+enum {
+	NL80211_SEAMLESS_ROAM_MODE_IM = 1,
+	NL80211_SEAMLESS_ROAM_MODE_BG = 2,
+};
+#endif
 #endif
 
 #ifdef CONFIG_LIBNL20
@@ -152,6 +164,18 @@ struct wpa_driver_nl80211_data {
 	int last_freq;
 	int last_freq_ht;
 #endif /* HOSTAPD */
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	int flag_roaming; /* in process of roaming */
+	int flag_roam_scan; /* in process of roaming scan */
+	int flag_roam_state; /* STA is in roaming state */
+	int flag_disconnect_state;  /* roaming state due to lost link */
+	int latest_rssi_val; /* latest rssi value */
+	int roam_scan_data; /* user_data for eloop function */
+	int roam_timeout_data; /* user_data for eloop function */
+	int scan_timeout_data; /* user_data for eloop function */
+#endif
+#endif
 };
 
 #endif

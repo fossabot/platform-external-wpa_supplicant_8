@@ -132,6 +132,9 @@ endif
 OBJS += src/utils/$(CONFIG_ELOOP).c
 OBJS_c += src/utils/$(CONFIG_ELOOP).c
 
+ifdef CONFIG_SEAMLESS_ROAMING
+L_CFLAGS += -DSEAMLESS_ROAMING
+endif
 
 ifdef CONFIG_EAPOL_TEST
 L_CFLAGS += -Werror -DEAPOL_TEST
