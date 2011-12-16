@@ -1,6 +1,7 @@
 /*
  * WPA Supplicant / Control interface (shared code for all backends)
  * Copyright (c) 2004-2010, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -303,7 +304,7 @@ static int wpa_supplicant_ctrl_iface_wps_pbc(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_AP
 	u8 *_p2p_dev_addr = NULL;
 #endif /* CONFIG_AP */
-#ifdef ANDROID_BRCM_P2P_PATCH	
+#ifdef ANDROID_BRCM_P2P_PATCH
 	struct wpa_supplicant *iface;
 #endif
 	if (cmd == NULL || os_strcmp(cmd, "any") == 0) {
@@ -791,7 +792,7 @@ static int wpa_supplicant_ctrl_iface_status(struct wpa_supplicant *wpa_s,
 	int res, verbose, ret;
 
 #if defined(ANDROID_BRCM_P2P_PATCH) && defined(CONFIG_P2P)
-	/* We have to send status command to p2p interface if p2p_interface is started 
+	/* We have to send status command to p2p interface if p2p_interface is started
 	 * otherwise we can send it to primary interface
 	*/
 	struct wpa_supplicant* ifs;
@@ -2378,9 +2379,9 @@ static int p2p_get_passphrase(struct wpa_supplicant *wpa_s, char *buf,
 
 #ifdef ANDROID_BRCM_P2P_PATCH
 	struct wpa_supplicant *ifs = NULL;
-	
+
 	for (ifs = wpa_s->global->ifaces; ifs; ifs = ifs->next) {
-		if((ifs->ap_iface) && 
+		if((ifs->ap_iface) &&
 			(ifs->p2p_group_interface == P2P_GROUP_INTERFACE_GO)) {
 			ssid = ifs->current_ssid;
 		}
@@ -3360,7 +3361,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			reply_len = -1;
 	} else if (os_strncmp(buf, "P2P_PRESENCE_REQ ", 17) == 0) {
 	#if defined(ANDROID_BRCM_P2P_PATCH) && defined(CONFIG_P2P)
-		/* We have to send presence command to p2p interface if p2p_interface is started 
+		/* We have to send presence command to p2p interface if p2p_interface is started
 		 * otherwise we can send it to primary interface
 		*/
 		struct wpa_supplicant* ifs;
@@ -3521,6 +3522,23 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 	} else if (os_strncmp(buf, "DRIVER ", 7) == 0) {
 		reply_len = wpa_supplicant_driver_cmd(wpa_s, buf + 7, reply,
 						      reply_size);
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	} else if (os_strncmp(buf, "SEAMLESS_ROAMING ", 17) == 0) {
+		int en;
+
+		en = atoi(buf+17);
+		if (en) {
+			wpa_s->en_roaming = 1;
+			os_memcpy(reply, "ENABLE\n", 7);
+			reply_len = 7;
+		} else {
+			wpa_s->en_roaming = 0;
+			os_memcpy(reply, "DISABLE\n", 8);
+			reply_len = 8;
+		}
+#endif
+#endif
 	} else {
 		os_memcpy(reply, "UNKNOWN COMMAND\n", 16);
 		reply_len = 16;

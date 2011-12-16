@@ -1,6 +1,7 @@
 /*
  * wpa_supplicant - Internal definitions
  * Copyright (c) 2003-2010, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2011, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -36,6 +37,7 @@ struct scan_info;
 struct wpa_bss;
 struct wpa_scan_results;
 struct hostapd_hw_modes;
+struct wpa_scan_res;
 
 /*
  * Forward declarations of private structures used within the ctrl_iface
@@ -561,6 +563,11 @@ struct wpa_supplicant {
 	int best_24_freq;
 	int best_5_freq;
 	int best_overall_freq;
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	int en_roaming;
+#endif
+#endif
 };
 
 
@@ -644,7 +651,13 @@ void wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 #endif /* ANDROID_BRCM_P2P_PATCH */
 			    struct wpa_bss *selected,
 			    struct wpa_ssid *ssid);
-
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+struct wpa_ssid *wpa_scan_res_match(struct wpa_supplicant *wpa_s,
+					    int i, struct wpa_scan_res *bss,
+					    struct wpa_ssid *group);
+#endif
+#endif
 /* eap_register.c */
 int eap_register_methods(void);
 

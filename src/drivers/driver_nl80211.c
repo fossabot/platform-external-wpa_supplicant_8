@@ -18,7 +18,13 @@
  */
 
 #include "driver_nl80211.h"
-
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+#include "wpa_supplicant_i.h"
+#include "bss.h"
+#include "scan.h"
+#endif
+#endif
 #ifdef CONFIG_LIBNL20
 /* libnl 2.0 compatibility code */
 #define nl_handle nl_sock
@@ -110,6 +116,147 @@ static int have_ifidx(struct wpa_driver_nl80211_data *drv, int ifidx)
 #ifdef ANDROID
 extern int wpa_driver_nl80211_driver_cmd(void *priv, char *cmd, char *buf,
 					 size_t buf_len);
+#ifdef SEAMLESS_ROAMING
+struct wpa_scan_results *roam_scan_res;
+static struct wpa_scan_results *
+nl80211_get_scan_results(struct wpa_driver_nl80211_data *drv);
+static int wpa_driver_nl80211_disassociate(void *priv, const u8 *addr,
+					   int reason_code);
+static void roaming_scan_handler(void *eloop_ctx, void *timeout_ctx);
+
+static void seamless_roaming_disconnect(struct wpa_driver_nl80211_data *drv)
+{
+	drv->flag_roaming = 0;
+	drv->flag_roam_scan = 0;
+	drv->flag_roam_state = 0;
+	drv->flag_disconnect_state = 0;
+	drv->associated = 0;
+	wpa_supplicant_event(drv->ctx, EVENT_DISASSOC, NULL);
+}
+
+static void roaming_timeout_handler(void *eloop_ctx, void *timeout_ctx)
+{
+	struct wpa_driver_nl80211_data *drv = eloop_ctx;
+
+	if (drv->flag_roaming) {
+		drv->flag_roaming = 0;
+		if (drv->flag_disconnect_state)
+			seamless_roaming_disconnect(drv);
+	}
+}
+
+static void roaming_scan_timeout_handler(void *eloop_ctx, void *timeout_ctx)
+{
+	struct wpa_driver_nl80211_data *drv = eloop_ctx;
+	if (drv->flag_roam_scan)
+		drv->flag_roam_scan = 0;
+}
+
+static int
+roam_to_target_ap(struct wpa_driver_nl80211_data *drv,
+		struct wpa_bss *roam_bss, u8 *bssid)
+{
+	struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+	struct wpa_bss *bss = roam_bss;
+	struct wpa_ssid *ssid = wpa_s->current_ssid;
+
+	drv->flag_roaming = 1;
+	if (!ssid) {
+		wpa_printf(MSG_DEBUG,
+			"No network configuration known for the target AP");
+		return -1;
+	}
+	wpa_s->reassociate = 1;
+	wpa_supplicant_connect(wpa_s, bss, ssid);
+	eloop_register_timeout(NL80211_SEAMLESS_ROAMING_TIMEOUT, 0,
+			roaming_timeout_handler, (void *)drv,
+			(void *)drv->roam_timeout_data);
+	return 0;
+}
+
+static void find_better_ap(struct wpa_driver_nl80211_data *drv, int mode)
+{
+	struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+	struct wpa_bss *roam_bss = NULL;
+	unsigned int i;
+	struct wpa_ssid *selected_ssid;
+	struct i802_bss *bss;
+	bss = &drv->first_bss;
+
+	if (!roam_scan_res)
+		return;
+	for (i = 0; i < roam_scan_res->num; i++) {
+		struct wpa_scan_res *bss = roam_scan_res->res[i];
+		const u8 *ie, *ssid;
+		u8 ssid_len;
+		struct wpa_bss *selected_bss;
+
+		selected_ssid =
+			wpa_scan_res_match(wpa_s, i, bss, wpa_s->current_ssid);
+		if (!selected_ssid)
+			continue;
+		ie = wpa_scan_get_ie(bss, WLAN_EID_SSID);
+		ssid = ie ? ie + 2 : (u8 *) "";
+		ssid_len = ie ? ie[1] : 0;
+		selected_bss = wpa_bss_get(wpa_s, bss->bssid, ssid, ssid_len);
+		if (os_memcmp(wpa_s->bssid, bss->bssid, ETH_ALEN) == 0)
+			continue;
+		switch (mode) {
+		case NL80211_SEAMLESS_ROAM_MODE_BG:
+			if (!((drv->latest_rssi_val+NL80211_SEAMLESS_RSSI_ROAMING_THRESHOLD)
+							< selected_bss->level))
+				break;
+		case NL80211_SEAMLESS_ROAM_MODE_IM:
+			if ((roam_bss == NULL || (roam_bss->level < selected_bss->level))) {
+				roam_bss = selected_bss;
+			}
+			break;
+		default:
+			return;
+		}
+	}
+	if (roam_bss) {
+		wpa_driver_nl80211_disassociate((void *)bss, (u8 *)wpa_s->bssid, 3);
+		roam_to_target_ap(drv, roam_bss, roam_bss->bssid);
+	} else {
+		if (drv->flag_disconnect_state)
+			seamless_roaming_disconnect(drv);
+		else {
+			eloop_cancel_timeout(roaming_timeout_handler, (void *)drv,
+						(void *)drv->roam_timeout_data);
+			eloop_cancel_timeout(roaming_scan_handler, (void *)drv,
+						(void *)drv->roam_scan_data);
+			drv->flag_roaming = 0;
+			drv->flag_roam_scan = 0;
+			drv->flag_roam_state = 0;
+			drv->flag_disconnect_state = 0;
+		}
+	}
+}
+
+static int req_roaming_scan(struct wpa_driver_nl80211_data *drv)
+{
+	struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+
+	drv->flag_roam_scan = 1;
+	wpa_supplicant_req_scan(wpa_s, 0, 0);
+	return 0;
+}
+
+static void roaming_scan_handler(void *eloop_ctx, void *timeout_ctx)
+{
+	struct wpa_driver_nl80211_data *drv = eloop_ctx;
+
+	if (req_roaming_scan(drv) == 0)
+		eloop_register_timeout(NL80211_SEAMLESS_ROAM_SCAN_TIMEOUT, 0,
+					roaming_scan_timeout_handler, (void *)drv,
+					(void *)drv->scan_timeout_data);
+	if (!drv->flag_disconnect_state)
+		eloop_register_timeout(NL80211_SEAMLESS_LOW_RSSI_SCAN_INTERVAL, 0,
+					roaming_scan_handler, (void *)drv,
+					(void *)drv->roam_scan_data);
+}
+#endif
 #endif
 
 static int i802_set_freq(void *priv, struct hostapd_freq_params *freq);
@@ -566,7 +713,7 @@ static void mlme_event_assoc(struct wpa_driver_nl80211_data *drv,
 		event.assoc_info.req_ies_len = len - 24 - sizeof(mgmt->u.assoc_req);
 		event.assoc_info.addr = mgmt->sa;
 	} else {
-#endif	
+#endif
 #if (defined (CONFIG_AP) || defined (HOSTAPD) ) && defined (ANDROID_QCOM_P2P_PATCH)
 	if (drv->nlmode == NL80211_IFTYPE_AP || drv->nlmode == NL80211_IFTYPE_P2P_GO) {
 		if (len < 24 + sizeof(mgmt->u.assoc_req)) {
@@ -1380,6 +1527,33 @@ static int process_event(struct nl_msg *msg, void *arg)
 		break;
 	case NL80211_CMD_NEW_SCAN_RESULTS:
 		wpa_printf(MSG_DEBUG, "nl80211: New scan results available");
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+		if (drv->flag_roam_scan) {
+			struct wpa_scan_res *bss;
+			struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+			unsigned int i;
+
+			drv->flag_roam_scan = 0;
+			eloop_cancel_timeout(roaming_scan_timeout_handler, (void *)drv,
+						(void *)drv->scan_timeout_data);
+			if (roam_scan_res)
+				wpa_scan_results_free(roam_scan_res);
+			roam_scan_res = nl80211_get_scan_results(drv);
+			if (roam_scan_res == NULL)
+				break;
+			wpa_bss_update_start(wpa_s);
+			for (i = 0; i < roam_scan_res->num; i++)
+				wpa_bss_update_scan_res(wpa_s, roam_scan_res->res[i]);
+			wpa_bss_update_end(wpa_s, NULL, 1);
+			if (!drv->flag_disconnect_state)
+				find_better_ap(drv, NL80211_SEAMLESS_ROAM_MODE_BG);
+			else
+				find_better_ap(drv, NL80211_SEAMLESS_ROAM_MODE_IM);
+			break;
+		}
+#endif
+#endif
 		drv->scan_complete_events = 1;
 		eloop_cancel_timeout(wpa_driver_nl80211_scan_timeout, drv,
 				     drv->ctx);
@@ -1410,6 +1584,17 @@ static int process_event(struct nl_msg *msg, void *arg)
 		break;
 	case NL80211_CMD_CONNECT:
 	case NL80211_CMD_ROAM:
+#ifdef SEAMLESS_ROAMING
+		if (drv->flag_roaming || drv->flag_roam_state) {
+			eloop_cancel_timeout(roaming_timeout_handler, (void *)drv,
+						(void *)drv->roam_timeout_data);
+			eloop_cancel_timeout(roaming_scan_handler, (void *)drv,
+						(void *)drv->roam_scan_data);
+			drv->flag_roaming = 0;
+			drv->flag_roam_state = 0;
+			drv->flag_disconnect_state = 0;
+		}
+#endif
 		mlme_event_connect(drv, gnlh->cmd,
 				   tb[NL80211_ATTR_STATUS_CODE],
 				   tb[NL80211_ATTR_MAC],
@@ -1426,6 +1611,29 @@ static int process_event(struct nl_msg *msg, void *arg)
 				   "event when using userspace SME");
 			break;
 		}
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+		{
+			struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+
+			if (wpa_s->en_roaming) {
+				if (drv->flag_roaming || drv->flag_roam_state)
+					break;
+				if (!drv->flag_disconnect_state && !drv->flag_roam_state) {
+					drv->flag_roam_state = 1;
+					drv->flag_disconnect_state = 1;
+					eloop_register_timeout(0, 20, roaming_scan_handler, (void *)drv,
+								(void *)drv->roam_scan_data);
+					break;
+				}
+				drv->flag_roaming = 0;
+				drv->flag_roam_scan = 0;
+				drv->flag_roam_state = 0;
+				drv->flag_disconnect_state = 0;
+			}
+		}
+#endif
+#endif
 		drv->associated = 0;
 		os_memset(&data, 0, sizeof(data));
 		if (tb[NL80211_ATTR_REASON_CODE]) {
@@ -2002,7 +2210,21 @@ static void * wpa_driver_nl80211_init(void *ctx, const char *ifname,
 		wpa_printf(MSG_DEBUG, "nl80211: RFKILL status not available");
 		os_free(rcfg);
 	}
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	{
+		struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
 
+		drv->flag_roaming = 0;
+		drv->flag_roam_scan = 0;
+		drv->flag_roam_state = 0;
+		drv->flag_disconnect_state = 0;
+		drv->latest_rssi_val = 0;
+		wpa_s->en_roaming = 1;
+		roam_scan_res = NULL;
+	}
+#endif
+#endif
 	if (wpa_driver_nl80211_finish_drv_init(drv))
 		goto failed;
 
@@ -2695,6 +2917,7 @@ static void wpa_driver_nl80211_check_bss_status(
 }
 
 
+#ifndef SEAMLESS_ROAMING
 static void wpa_scan_results_free(struct wpa_scan_results *res)
 {
 	size_t i;
@@ -2707,7 +2930,7 @@ static void wpa_scan_results_free(struct wpa_scan_results *res)
 	os_free(res->res);
 	os_free(res);
 }
-
+#endif
 
 static struct wpa_scan_results *
 nl80211_get_scan_results(struct wpa_driver_nl80211_data *drv)
@@ -6398,7 +6621,7 @@ static int wpa_driver_nl80211_probe_req_report(void *priv, int report)
 			   drv->nlmode);
 		goto done;
 	}
-	
+
 	if (nl80211_register_frame(drv, drv->nl_handle_preq,
 			   (WLAN_FC_TYPE_MGMT << 2) |
 			   (WLAN_FC_STYPE_ASSOC_REQ << 4),
@@ -6419,7 +6642,7 @@ static int wpa_driver_nl80211_probe_req_report(void *priv, int report)
 			   NULL, 0) < 0) {
 		goto out_err3;
 	}
-	
+
 	if (nl80211_register_frame(drv, drv->nl_handle_preq,
 					   (WLAN_FC_TYPE_MGMT << 2) |
 					   (WLAN_FC_STYPE_DEAUTH << 4),
@@ -6622,7 +6845,30 @@ static int nl80211_signal_poll(void *priv, struct wpa_signal_info *si)
 	res = nl80211_get_link_signal(drv, si);
 	if (res != 0)
 		return res;
-
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	drv->latest_rssi_val = si->current_signal;
+	if (!drv->flag_disconnect_state) {
+		if (!drv->flag_roam_state &&
+				(drv->latest_rssi_val <
+					NL80211_SEAMLESS_LOW_RSSI_THRESHOLD)) {
+			drv->flag_roam_state = 1;
+			eloop_register_timeout(NL80211_SEAMLESS_LOW_RSSI_SCAN_INTERVAL,
+				0, roaming_scan_handler, (void *)drv,
+				(void *)drv->roam_scan_data);
+		} else if (drv->flag_roam_state &&
+						(drv->latest_rssi_val >=
+							NL80211_SEAMLESS_LOW_RSSI_THRESHOLD)) {
+			drv->flag_roam_state = 0;
+			eloop_cancel_timeout(roaming_scan_handler,
+				(void *)drv, (void *)drv->roam_scan_data);
+			if (drv->flag_roam_scan)
+				eloop_cancel_timeout(roaming_scan_timeout_handler,
+					(void *)drv, (void *)drv->scan_timeout_data);
+		}
+	}
+#endif
+#endif
 	return nl80211_get_link_noise(drv, si);
 }
 
