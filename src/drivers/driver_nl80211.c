@@ -283,6 +283,7 @@ struct nl80211_bss_info_arg {
 	struct wpa_driver_nl80211_data *drv;
 	struct wpa_scan_results *res;
 	unsigned int assoc_freq;
+	unsigned char assoc_bssid[ETH_ALEN];
 };
 
 static int bss_info_handler(struct nl_msg *msg, void *arg);
@@ -823,6 +824,54 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 	wpa_supplicant_event(drv->ctx, EVENT_ASSOC, &event);
 }
 
+static void mlme_event_disconnect(struct wpa_driver_nl80211_data *drv,
+                                 struct nlattr *reason, struct nlattr *addr)
+{
+	union wpa_event_data data;
+	if (drv->capa.flags & WPA_DRIVER_FLAGS_SME) {
+		/*
+		 * Avoid reporting two disassociation events that could
+		 * confuse the core code.
+		 */
+		wpa_printf(MSG_DEBUG, "nl80211: Ignore disconnect "
+		           "event when using userspace SME");
+		return;
+	}
+#ifdef ANDROID
+#ifdef SEAMLESS_ROAMING
+	{
+		struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
+
+		if (wpa_s->en_roaming) {
+			if (drv->flag_roaming || drv->flag_roam_state)
+				return;
+			if (!drv->flag_disconnect_state && !drv->flag_roam_state) {
+				drv->flag_roam_state = 1;
+				drv->flag_disconnect_state = 1;
+				eloop_register_timeout(0, 20, roaming_scan_handler, (void *)drv,
+							(void *)drv->roam_scan_data);
+				return;
+			}
+			drv->flag_roaming = 0;
+			drv->flag_roam_scan = 0;
+			drv->flag_roam_state = 0;
+			drv->flag_disconnect_state = 0;
+		}
+	}
+#endif
+#endif
+
+	drv->associated = 0;
+	os_memset(&data, 0, sizeof(data));
+	if (reason){
+		data.disassoc_info.reason_code = nla_get_u16(reason);
+#ifdef ANDROID
+	if (data.disassoc_info.reason_code == WLAN_REASON_DISASSOC_LOW_ACK)
+		wpa_msg(drv->ctx, MSG_INFO, WPA_EVENT_DRIVER_STATE "HANGED");
+#endif
+       }
+       wpa_supplicant_event(drv->ctx, EVENT_DISASSOC, &data);
+}
 
 static void mlme_timeout_event(struct wpa_driver_nl80211_data *drv,
 			       enum nl80211_commands cmd, struct nlattr *addr)
@@ -1602,50 +1651,8 @@ static int process_event(struct nl_msg *msg, void *arg)
 				   tb[NL80211_ATTR_RESP_IE]);
 		break;
 	case NL80211_CMD_DISCONNECT:
-		if (drv->capa.flags & WPA_DRIVER_FLAGS_SME) {
-			/*
-			 * Avoid reporting two disassociation events that could
-			 * confuse the core code.
-			 */
-			wpa_printf(MSG_DEBUG, "nl80211: Ignore disconnect "
-				   "event when using userspace SME");
-			break;
-		}
-#ifdef ANDROID
-#ifdef SEAMLESS_ROAMING
-		{
-			struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
-
-			if (wpa_s->en_roaming) {
-				if (drv->flag_roaming || drv->flag_roam_state)
-					break;
-				if (!drv->flag_disconnect_state && !drv->flag_roam_state) {
-					drv->flag_roam_state = 1;
-					drv->flag_disconnect_state = 1;
-					eloop_register_timeout(0, 20, roaming_scan_handler, (void *)drv,
-								(void *)drv->roam_scan_data);
-					break;
-				}
-				drv->flag_roaming = 0;
-				drv->flag_roam_scan = 0;
-				drv->flag_roam_state = 0;
-				drv->flag_disconnect_state = 0;
-			}
-		}
-#endif
-#endif
-		drv->associated = 0;
-		os_memset(&data, 0, sizeof(data));
-		if (tb[NL80211_ATTR_REASON_CODE]) {
-			data.disassoc_info.reason_code =
-				nla_get_u16(tb[NL80211_ATTR_REASON_CODE]);
-#ifdef ANDROID
-			if (data.disassoc_info.reason_code == WLAN_REASON_DISASSOC_LOW_ACK)
-				wpa_msg(drv->ctx, MSG_INFO,
-					WPA_EVENT_DRIVER_STATE "HANGED");
-#endif
-		}
-		wpa_supplicant_event(drv->ctx, EVENT_DISASSOC, &data);
+		mlme_event_disconnect(drv, tb[NL80211_ATTR_REASON_CODE],
+					tb[NL80211_ATTR_MAC]);
 		break;
 	case NL80211_CMD_MICHAEL_MIC_FAILURE:
 		mlme_event_michael_mic_failure(drv, tb);
@@ -2734,6 +2741,13 @@ static int bss_info_handler(struct nl_msg *msg, void *arg)
 				nla_get_u32(bss[NL80211_BSS_FREQUENCY]);
 			wpa_printf(MSG_DEBUG, "nl80211: Associated on %u MHz",
 				   _arg->assoc_freq);
+		}
+		if (status == NL80211_BSS_STATUS_ASSOCIATED &&
+		    bss[NL80211_BSS_BSSID]) {
+			os_memcpy(_arg->assoc_bssid,
+			          nla_data(bss[NL80211_BSS_BSSID]), ETH_ALEN);
+			wpa_printf(MSG_DEBUG, "nl80211: Associated with "
+			           MACSTR, MAC2STR(_arg->assoc_bssid));
 		}
 	}
 	if (!res)
@@ -4927,6 +4941,54 @@ nla_put_failure:
 	return ret;
 }
 
+static unsigned int nl80211_get_assoc_bssid(struct wpa_driver_nl80211_data *drv,
+                                           u8 *bssid)
+{
+       struct nl_msg *msg;
+       int ret;
+       struct nl80211_bss_info_arg arg;
+
+       os_memset(&arg, 0, sizeof(arg));
+       msg = nlmsg_alloc();
+       if (!msg)
+               goto nla_put_failure;
+
+       genlmsg_put(msg, 0, 0, genl_family_get_id(drv->nl80211), 0, NLM_F_DUMP,
+                   NL80211_CMD_GET_SCAN, 0);
+       NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+
+       arg.drv = drv;
+       ret = send_and_recv_msgs(drv, msg, bss_info_handler, &arg);
+
+       msg = NULL;
+       if (ret == 0) {
+               if (is_zero_ether_addr(arg.assoc_bssid))
+                       return -ENOTCONN;
+               os_memcpy(bssid, arg.assoc_bssid, ETH_ALEN);
+               return 0;
+       }
+       wpa_printf(MSG_DEBUG, "nl80211: Scan result fetch failed: ret=%d "
+                  "(%s)", ret, strerror(-ret));
+nla_put_failure:
+       nlmsg_free(msg);
+       return drv->assoc_freq;
+}
+
+static int nl80211_disconnect(struct wpa_driver_nl80211_data *drv,
+                             const u8 *bssid)
+{
+      unsigned char addr[ETH_ALEN];
+      if (bssid == NULL) {
+              int res = nl80211_get_assoc_bssid(drv, addr);
+              if (res)
+                      return res;
+              bssid = addr;
+      }
+
+      return wpa_driver_nl80211_disconnect(drv, bssid,
+                                           WLAN_REASON_PREV_AUTH_NOT_VALID);
+
+}
 
 static int wpa_driver_nl80211_connect(
 	struct wpa_driver_nl80211_data *drv,
@@ -5078,6 +5140,14 @@ skip_auth_type:
 	if (ret) {
 		wpa_printf(MSG_DEBUG, "nl80211: MLME connect failed: ret=%d "
 			   "(%s)", ret, strerror(-ret));
+                /*
+                 * cfg80211 does not currently accept new connection if we are
+                 * already connected. As a workaround, force disconnection and
+                 * try again once the driver indicates it completed
+                 * disconnection.
+                 */
+               if (ret == -EALREADY)
+                       nl80211_disconnect(drv, params->bssid);
 		goto nla_put_failure;
 	}
 	ret = 0;

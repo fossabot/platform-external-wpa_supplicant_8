@@ -1920,6 +1920,10 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 				data->assoc_reject.status_code);
 		if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME)
 			sme_event_assoc_reject(wpa_s, data);
+		else if (data->assoc_reject.bssid) {
+			wpa_supplicant_mark_disassoc(wpa_s);
+			wpas_connection_failed(wpa_s, data->assoc_reject.bssid);
+		}
 		break;
 	case EVENT_AUTH_TIMED_OUT:
 		if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SME)
