@@ -504,6 +504,7 @@ struct wpa_config {
 	 *	<Ki>:<OPc>:<SQN> format
 	 */
 	char *home_milenage;
+<<<<<<< HEAD
 #ifdef ANDROID_P2P
 	/**
 	 * prioritize - Prioritize an Interface
@@ -513,6 +514,16 @@ struct wpa_config {
 	 */
 	char *prioritize;
 #endif
+=======
+
+	/**
+	 * home_domain - Home service provider FQDN
+	 *
+	 * This is used to compare against the Domain Name List to figure out
+	 * whether the AP is operated by the Home SP.
+	 */
+	char *home_domain;
+>>>>>>> 00bf219... Interworking: Add support for home vs. visited SP determination
 };
 
 
