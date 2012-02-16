@@ -1871,6 +1871,7 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->home_ca_cert);
 	os_free(config->home_imsi);
 	os_free(config->home_milenage);
+<<<<<<< HEAD
 #ifdef ANDROID_P2P
 	os_free(config->prioritize);
 #endif
@@ -1890,6 +1891,9 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->tdls_persistent_group_reinvoke);
 #endif
         os_free(config->p2p_pref_chan);
+=======
+	os_free(config->home_domain);
+>>>>>>> 00bf219... Interworking: Add support for home vs. visited SP determination
 	os_free(config);
 }
 
@@ -2717,6 +2721,7 @@ static const struct global_parse_data global_fields[] = {
 	{ STR(home_ca_cert), 0 },
 	{ STR(home_imsi), 0 },
 	{ STR(home_milenage), 0 },
+	{ STR(home_domain), 0 },
 	{ INT_RANGE(interworking, 0, 1), 0 },
 	{ FUNC(hessid), 0 },
 	{ INT_RANGE(access_network_type, 0, 15), 0 },
