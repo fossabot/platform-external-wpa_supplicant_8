@@ -453,6 +453,9 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 
 	free_hw_features(wpa_s);
 
+	os_free(wpa_s->bssid_filter);
+	wpa_s->bssid_filter = NULL;
+
 	wpabuf_free(wpa_s->last_gas_resp);
 }
 
