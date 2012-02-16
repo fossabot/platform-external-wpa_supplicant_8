@@ -1820,6 +1820,19 @@ void wpa_config_free_ssid(struct wpa_ssid *ssid)
 }
 
 
+void wpa_config_free_cred(struct wpa_cred *cred)
+{
+	os_free(cred->realm);
+	os_free(cred->username);
+	os_free(cred->password);
+	os_free(cred->ca_cert);
+	os_free(cred->imsi);
+	os_free(cred->milenage);
+	os_free(cred->domain);
+	os_free(cred);
+}
+
+
 /**
  * wpa_config_free - Free configuration data
  * @config: Configuration data from wpa_config_read()
@@ -1833,12 +1846,20 @@ void wpa_config_free(struct wpa_config *config)
 	struct wpa_config_blob *blob, *prevblob;
 #endif /* CONFIG_NO_CONFIG_BLOBS */
 	struct wpa_ssid *ssid, *prev = NULL;
+	struct wpa_cred *cred, *cprev;
 
 	ssid = config->ssid;
 	while (ssid) {
 		prev = ssid;
 		ssid = ssid->next;
 		wpa_config_free_ssid(prev);
+	}
+
+	cred = config->cred;
+	while (cred) {
+		cprev = cred;
+		cred = cred->next;
+		wpa_config_free_cred(cprev);
 	}
 
 #ifndef CONFIG_NO_CONFIG_BLOBS
@@ -1865,6 +1886,7 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->config_methods);
 	os_free(config->p2p_ssid_postfix);
 	os_free(config->pssid);
+<<<<<<< HEAD
 	os_free(config->home_realm);
 	os_free(config->home_username);
 	os_free(config->home_password);
@@ -1891,6 +1913,8 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->tdls_persistent_group_reinvoke);
 #endif
         os_free(config->p2p_pref_chan);
+=======
+>>>>>>> 1bb7b8e... Interworking: Add support for multiple credentials
 	os_free(config);
 }
 
@@ -2259,6 +2283,67 @@ void wpa_config_update_psk(struct wpa_ssid *ssid)
 			ssid->psk, PMK_LEN);
 	ssid->psk_set = 1;
 #endif /* CONFIG_NO_PBKDF2 */
+}
+
+
+int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
+			const char *value, int line)
+{
+	char *val;
+	size_t len;
+
+	val = wpa_config_parse_string(value, &len);
+	if (val == NULL)
+		return -1;
+
+	if (os_strcmp(var, "realm") == 0) {
+		os_free(cred->realm);
+		cred->realm = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "username") == 0) {
+		os_free(cred->username);
+		cred->username = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "password") == 0) {
+		os_free(cred->password);
+		cred->password = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "ca_cert") == 0) {
+		os_free(cred->ca_cert);
+		cred->ca_cert = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "imsi") == 0) {
+		os_free(cred->imsi);
+		cred->imsi = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "milenage") == 0) {
+		os_free(cred->milenage);
+		cred->milenage = val;
+		return 0;
+	}
+
+	if (os_strcmp(var, "domain") == 0) {
+		os_free(cred->domain);
+		cred->domain = val;
+		return 0;
+	}
+
+	if (line) {
+		wpa_printf(MSG_ERROR, "Line %d: unknown cred field '%s'.",
+			   line, var);
+	}
+
+	return -1;
 }
 
 
@@ -2712,13 +2797,6 @@ static const struct global_parse_data global_fields[] = {
 	{ INT_RANGE(filter_ssids, 0, 1), 0 },
 	{ INT(max_num_sta), 0 },
 	{ INT_RANGE(disassoc_low_ack, 0, 1), 0 },
-	{ STR(home_realm), 0 },
-	{ STR(home_username), 0 },
-	{ STR(home_password), 0 },
-	{ STR(home_ca_cert), 0 },
-	{ STR(home_imsi), 0 },
-	{ STR(home_milenage), 0 },
-	{ STR(home_domain), 0 },
 	{ INT_RANGE(interworking, 0, 1), 0 },
 	{ FUNC(hessid), 0 },
 	{ INT_RANGE(access_network_type, 0, 15), 0 },
