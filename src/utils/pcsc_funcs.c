@@ -1308,3 +1308,9 @@ int scard_umts_auth(struct scard_data *scard, const unsigned char *_rand,
 	wpa_printf(MSG_DEBUG, "SCARD: Unrecognized response");
 	return -1;
 }
+
+
+int scard_supports_umts(struct scard_data *scard)
+{
+	return scard->sim_type == SCARD_USIM;
+}
