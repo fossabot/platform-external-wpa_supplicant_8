@@ -156,6 +156,12 @@ struct hostapd_config * hostapd_config_defaults(void)
 
 	conf->ht_capab = HT_CAP_INFO_SMPS_DISABLED;
 
+	conf->ieee80211n = 1;
+
+	/* Enable ieee80211d and set US as default country */
+	conf->ieee80211d = 1;
+	os_memcpy(conf->country, "US ", 3);
+
 	return conf;
 }
 
