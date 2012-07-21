@@ -495,8 +495,9 @@ struct wpa_supplicant {
 		P2P_GROUP_REMOVAL_IDLE_TIMEOUT,
 		P2P_GROUP_REMOVAL_UNAVAILABLE,
 #ifdef ANDROID_P2P
-		P2P_GROUP_REMOVAL_FREQ_CONFLICT
+		P2P_GROUP_REMOVAL_FREQ_CONFLICT,
 #endif
+		P2P_GROUP_REMOVAL_GO_ENDING_SESSION
 	} removal_reason;
 
 	unsigned int p2p_cb_on_scan_complete:1;
