@@ -11,6 +11,9 @@
 
 #include "utils/list.h"
 #include "p2p.h"
+#ifdef CONFIG_WFD
+#include "wfd/wfd.h"
+#endif
 
 enum p2p_go_state {
 	UNKNOWN_GO,
@@ -28,6 +31,10 @@ struct p2p_device {
 	enum p2p_wps_method wps_method;
 
 	struct p2p_peer_info info;
+
+#ifdef CONFIG_WFD
+	struct wfd_peer_info wfd_info;
+#endif
 
 	/*
 	 * If the peer was discovered based on an interface address (e.g., GO
@@ -431,6 +438,13 @@ struct p2p_data {
 	 * in IDLE state.
 	 */
 	int pd_retries;
+
+#ifdef CONFIG_WFD
+	/**
+	* wfd - WFD module data
+	*/
+	struct wfd_data *wfd;
+#endif
 };
 
 /**

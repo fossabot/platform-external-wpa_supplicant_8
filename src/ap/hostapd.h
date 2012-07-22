@@ -164,6 +164,10 @@ struct hostapd_data {
 	int noa_start;
 	int noa_duration;
 #endif /* CONFIG_P2P */
+
+#ifdef CONFIG_WFD
+	struct wpabuf *wfd_assoc_resp_ie;
+#endif
 };
 
 

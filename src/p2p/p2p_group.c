@@ -184,6 +184,10 @@ static struct wpabuf * p2p_group_build_beacon_ie(struct p2p_group *group)
 	p2p_group_add_noa(ie, group->noa);
 	p2p_buf_update_ie_hdr(ie, len);
 
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(group->p2p->cfg->cb_ctx, group->p2p->wfd, ie);
+#endif
+
 	return ie;
 }
 
@@ -217,9 +221,28 @@ static struct wpabuf * p2p_group_build_probe_resp_ie(struct p2p_group *group)
 		     (u8 *) wpabuf_put(ie, 0) - group_info - 3);
 
 	p2p_buf_update_ie_hdr(ie, len);
+
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(group->p2p->cfg->cb_ctx, group->p2p->wfd, ie);
+#endif
+
 	return ie;
 }
 
+static struct wpabuf * p2p_group_build_assoc_resp_ie(struct p2p_group *group)
+{
+	struct wpabuf *ie;
+
+	ie = wpabuf_alloc(100);
+	if (ie == NULL)
+		return NULL;
+
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(group->p2p->cfg->cb_ctx, group->p2p->wfd, ie);
+#endif
+
+	return ie;
+}
 
 static void p2p_group_update_ies(struct p2p_group *group)
 {

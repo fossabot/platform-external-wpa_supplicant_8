@@ -244,6 +244,14 @@ L_CFLAGS += -DCONFIG_P2P_STRICT
 endif
 endif
 
+ifdef CONFIG_WFD
+OBJS += wfd_supplicant.c
+OBJS += src/wfd/wfd.c
+OBJS += src/wfd/wfd_parse.c
+OBJS += src/wfd/wfd_build.c
+L_CFLAGS += -DCONFIG_WFD
+endif
+
 ifdef CONFIG_INTERWORKING
 OBJS += interworking.c
 L_CFLAGS += -DCONFIG_INTERWORKING

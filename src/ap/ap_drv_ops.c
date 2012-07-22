@@ -109,6 +109,15 @@ int hostapd_build_ap_extra_ies(struct hostapd_data *hapd,
 	}
 #endif /* CONFIG_P2P */
 
+#ifdef CONFIG_WFD
+	if (hapd->wfd_assoc_resp_ie) {
+		if (wpabuf_resize(&assocresp, wpabuf_len(hapd->wfd_assoc_resp_ie)) <
+		    0)
+			goto fail;
+		wpabuf_put_buf(assocresp, hapd->wfd_assoc_resp_ie);
+	}
+#endif /* CONFIG_P2P */
+
 #ifdef CONFIG_P2P_MANAGER
 	if (hapd->conf->p2p & P2P_MANAGE) {
 		if (wpabuf_resize(&beacon, 100) == 0) {

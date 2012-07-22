@@ -227,6 +227,9 @@ struct wpa_global {
 	} conc_pref;
 #endif
 	int cross_connection;
+#ifdef CONFIG_WFD
+	struct wfd_data *wfd;
+#endif
 };
 
 

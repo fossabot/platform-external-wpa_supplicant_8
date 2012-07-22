@@ -708,6 +708,15 @@ int p2p_add_device(struct p2p_data *p2p, const u8 *addr, int freq, int level,
 
 	p2p_parse_free(&msg);
 
+#ifdef CONFIG_WFD
+	if (wfd_add_peer_info(p2p->cfg->msg_ctx,
+				&dev->wfd_info, ies, ies_len)) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+				"P2P: Failed to add WFD peer info for a device entry");
+		return -1;
+	}
+#endif
+
 	if (p2p_pending_sd_req(p2p, dev))
 		dev->flags |= P2P_DEV_SD_SCHEDULE;
 
@@ -1837,6 +1846,10 @@ struct wpabuf * p2p_build_probe_resp_ies(struct p2p_data *p2p)
 	p2p_buf_add_device_info(buf, p2p, NULL);
 	p2p_buf_update_ie_hdr(buf, len);
 
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, buf);
+#endif
+
 	return buf;
 }
 
@@ -2128,6 +2141,10 @@ int p2p_assoc_req_ie(struct p2p_data *p2p, const u8 *bssid, u8 *buf,
 	p2p_buf_add_device_info(tmp, p2p, peer);
 	p2p_buf_update_ie_hdr(tmp, lpos);
 
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, tmp);
+#endif
+
 	tmplen = wpabuf_len(tmp);
 	if (tmplen > len)
 		res = -1;
@@ -2152,6 +2169,11 @@ int p2p_scan_result_text(const u8 *ies, size_t ies_len, char *buf, char *end)
 
 	ret = p2p_attr_text(p2p_ie, buf, end);
 	wpabuf_free(p2p_ie);
+
+#ifdef CONFIG_WFD
+	ret += wfd_scan_result_text(ies, ies_len, buf + ret, end);
+#endif
+
 	return ret;
 }
 
@@ -2718,6 +2740,10 @@ void p2p_scan_ie(struct p2p_data *p2p, struct wpabuf *ies, const u8 *dev_id)
 					      p2p->ext_listen_interval);
 	/* TODO: p2p_buf_add_operating_channel() if GO */
 	p2p_buf_update_ie_hdr(ies, len);
+
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, ies);
+#endif
 }
 
 
@@ -3392,6 +3418,51 @@ int p2p_get_peer_info_txt(const struct p2p_peer_info *info,
 		pos += res;
 	}
 
+#if CONFIG_WFD
+	if (dev->wfd_info.wfd_supported) {
+		res = os_snprintf(pos, end - pos,
+				  "wfd_device_type=%s\n"
+				  "wfd_coupled_sink_supported_by_source=%c\n"
+				  "wfd_coupled_sink_supported_by_sink=%c\n"
+				  "wfd_available_for_session=%c\n"
+				  "wfd_service_discovery_supported=%c\n"
+				  "wfd_preferred_connectivity=%s\n"
+				  "wfd_content_protection_supported=%c\n"
+				  "wfd_time_sync_supported=%c\n"
+				  "wfd_session_management_control_port=%u\n"
+				  "wfd_device_maximum_throughput=%u\n",
+				  wfd_device_type_text(
+						dev->wfd_info.device_type
+							),
+				  dev->wfd_info.coupled_sink_supported_by_source
+							? 'y' : 'n',
+				  dev->wfd_info.coupled_sink_supported_by_sink
+							? 'y' : 'n',
+				  dev->wfd_info.available_for_session
+							? 'y' : 'n',
+				  dev->wfd_info.service_discovery_supported
+							? 'y' : 'n',
+				  wfd_preferred_connectivity_text(
+					dev->wfd_info.preferred_connectivity),
+				  dev->wfd_info.content_protection_supported
+							? 'y' : 'n',
+				  dev->wfd_info.time_sync_supported ? 'y' : 'n',
+				  dev->wfd_info.session_mgmt_ctrl_port,
+				  dev->wfd_info.device_max_throughput);
+		if (res < 0 || res >= end - pos)
+			return pos - buf;
+		pos += res;
+		if (dev->wfd_info.is_associated_with_ap) {
+			res = os_snprintf(pos, end - pos,
+			  "wfd_address_of_ap=" MACSTR "\n",
+			  MAC2STR(dev->wfd_info.associated_bssid));
+		if (res < 0 || res >= end - pos)
+			return pos - buf;
+		pos += res;
+	}
+	}
+#endif
+
 	return pos - buf;
 }
 
@@ -3979,3 +4050,12 @@ int p2p_in_progress(struct p2p_data *p2p)
 		return 0;
 	return p2p->state != P2P_IDLE && p2p->state != P2P_PROVISIONING;
 }
+
+#ifdef CONFIG_WFD
+void p2p_set_wfd_data(struct p2p_data *p2p, void *wfd)
+{
+	if (p2p == NULL)
+		return;
+	p2p->wfd = wfd;
+}
+#endif

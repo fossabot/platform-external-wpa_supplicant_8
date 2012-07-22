@@ -3395,6 +3395,10 @@ static void wpas_p2p_ie_update(void *ctx, struct wpabuf *beacon_ies,
 		}
 		wpabuf_free(hapd->p2p_probe_resp_ie);
 		hapd->p2p_probe_resp_ie = proberesp_ies;
+#ifdef CONFIG_WFD
+//		wpabuf_free(hapd->wfd_assoc_resp_ie);
+//		hapd->wfd_assoc_resp_ie = assocresp_ies;
+#endif
 	} else {
 		wpabuf_free(beacon_ies);
 		wpabuf_free(proberesp_ies);

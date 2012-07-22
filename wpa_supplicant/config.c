@@ -14,6 +14,9 @@
 #include "rsn_supp/wpa.h"
 #include "eap_peer/eap.h"
 #include "config.h"
+#ifdef CONFIG_WFD
+#include "wfd_supplicant.h"
+#endif
 
 
 #if !defined(CONFIG_CTRL_IFACE) && defined(CONFIG_NO_CONFIG_WRITE)
@@ -1870,6 +1873,21 @@ void wpa_config_free(struct wpa_config *config)
 #ifdef ANDROID_P2P
 	os_free(config->prioritize);
 #endif
+#ifdef CONFIG_WFD
+	os_free(config->wfd_enable);
+	os_free(config->wfd_device_type);
+	os_free(config->wfd_coupled_sink_supported_by_source);
+	os_free(config->wfd_coupled_sink_supported_by_sink);
+	os_free(config->wfd_available_for_session);
+	os_free(config->wfd_service_discovery_supported);
+	os_free(config->wfd_preferred_connectivity);
+	os_free(config->wfd_content_protection_supported);
+	os_free(config->wfd_time_sync_supported);
+	os_free(config->primarysink_audio_notsupported);
+	os_free(config->source_audio_only_supported);
+	os_free(config->tdls_persistent_group_intended);
+	os_free(config->tdls_persistent_group_reinvoke);
+#endif
 	os_free(config);
 }
 
@@ -2347,6 +2365,11 @@ struct wpa_config * wpa_config_alloc_empty(const char *ctrl_interface,
 	config->max_num_sta = DEFAULT_MAX_NUM_STA;
 	config->access_network_type = DEFAULT_ACCESS_NETWORK_TYPE;
 
+#ifdef CONFIG_WFD
+	config->wfd_session_mgmt_ctrl_port = WFD_DEFAULT_SESSION_MGMT_CTRL_PORT;
+	config->wfd_device_max_throughput = WFD_DEFAULT_MAX_THROUGHPUT;
+#endif
+
 	if (ctrl_interface)
 		config->ctrl_interface = os_strdup(ctrl_interface);
 	if (driver_param)
@@ -2644,7 +2667,24 @@ static const struct global_parse_data global_fields[] = {
 	{ STR(home_milenage), 0 },
 	{ INT_RANGE(interworking, 0, 1), 0 },
 	{ FUNC(hessid), 0 },
-	{ INT_RANGE(access_network_type, 0, 15), 0 }
+	{ INT_RANGE(access_network_type, 0, 15), 0 },
+#ifdef CONFIG_WFD
+	{ STR_RANGE(wfd_enable, 1, 1), 0 },
+	{ STR_RANGE(wfd_device_type, 6, 19), 0 },
+	{ STR_RANGE(wfd_coupled_sink_supported_by_source, 1, 1), 0 },
+	{ STR_RANGE(wfd_coupled_sink_supported_by_sink, 1, 1), 0 },
+	{ STR_RANGE(wfd_available_for_session, 1, 1), 0 },
+	{ STR_RANGE(wfd_service_discovery_supported, 1, 1), 0 },
+	{ STR_RANGE(wfd_preferred_connectivity, 3, 4), 0 },
+	{ STR_RANGE(wfd_content_protection_supported, 1, 1), 0 },
+	{ STR_RANGE(wfd_time_sync_supported, 1, 1), 0 },
+	{ STR_RANGE(primarysink_audio_notsupported, 1, 1), 0 },
+	{ STR_RANGE(source_audio_only_supported, 1, 1), 0 },
+	{ STR_RANGE(tdls_persistent_group_intended, 1, 1), 0 },
+	{ STR_RANGE(tdls_persistent_group_reinvoke, 1, 1), 0 },
+	{ INT(wfd_session_mgmt_ctrl_port), 0 },
+	{ INT(wfd_device_max_throughput), 0 }
+#endif
 };
 
 #undef FUNC

@@ -451,6 +451,26 @@ struct wpa_config {
 	 */
 	u8 hessid[ETH_ALEN];
 
+#ifdef CONFIG_WFD
+	/**
+	* WFD configuration items
+	*/
+	char *wfd_enable;
+	char *wfd_device_type;
+	char *wfd_coupled_sink_supported_by_source;
+	char *wfd_coupled_sink_supported_by_sink;
+	char *wfd_available_for_session;
+	char *wfd_service_discovery_supported;
+	char *wfd_preferred_connectivity;
+	char *wfd_content_protection_supported;
+	char *wfd_time_sync_supported;
+	char *primarysink_audio_notsupported;
+	char *source_audio_only_supported;
+	char *tdls_persistent_group_intended;
+	char *tdls_persistent_group_reinvoke;
+	int wfd_session_mgmt_ctrl_port;
+	int wfd_device_max_throughput;
+#endif
 	/**
 	 * home_realm - Home Realm for Interworking
 	 */

@@ -227,6 +227,14 @@ CFLAGS += -DCONFIG_P2P_STRICT
 endif
 endif
 
+ifdef CONFIG_WFD
+OBJS += wfd_supplicant.o
+OBJS += ./src/wfd/wfd.o
+OBJS += ./src/wfd/wfd_parse.o
+OBJS += ./src/wfd/wfd_build.o
+CFLAGS += -DCONFIG_WFD
+endif
+
 ifdef CONFIG_INTERWORKING
 OBJS += interworking.o
 CFLAGS += -DCONFIG_INTERWORKING

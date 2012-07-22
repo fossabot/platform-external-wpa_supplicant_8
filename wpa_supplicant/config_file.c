@@ -692,6 +692,50 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 	if (config->p2p_group_idle)
 		fprintf(f, "p2p_group_idle=%u\n", config->p2p_group_idle);
 #endif /* CONFIG_P2P */
+#ifdef CONFIG_WFD
+	if (config->wfd_enable)
+		fprintf(f, "wfd_enable=%s\n",
+			config->wfd_enable);
+	if (config->wfd_device_type)
+		fprintf(f, "wfd_device_type=%s\n", config->wfd_device_type);
+	if (config->wfd_coupled_sink_supported_by_source)
+		fprintf(f, "wfd_coupled_sink_supported_by_source=%s\n",
+		config->wfd_coupled_sink_supported_by_source);
+	if (config->wfd_coupled_sink_supported_by_sink)
+		fprintf(f, "wfd_coupled_sink_supported_by_sink=%s\n",
+			config->wfd_coupled_sink_supported_by_sink);
+	if (config->wfd_available_for_session)
+		fprintf(f, "wfd_available_for_session=%s\n",
+			config->wfd_available_for_session);
+	if (config->wfd_service_discovery_supported)
+		fprintf(f, "wfd_service_discovery_supported=%s\n",
+		config->wfd_service_discovery_supported);
+	if (config->wfd_preferred_connectivity)
+		fprintf(f, "wfd_preferred_connectivity=%s\n",
+		config->wfd_preferred_connectivity);
+	if (config->wfd_content_protection_supported)
+		fprintf(f, "wfd_content_protection_supported=%s\n",
+			config->wfd_content_protection_supported);
+	if (config->wfd_time_sync_supported)
+		fprintf(f, "wfd_time_sync_supported=%s\n",
+			config->wfd_time_sync_supported);
+	if (config->primarysink_audio_notsupported)
+		fprintf(f, "wfd_primarysink_audio_notsupported=%s\n",
+			config->primarysink_audio_notsupported);
+	if (config->source_audio_only_supported)
+		fprintf(f, "wfd_source_audio_only_supported=%s\n",
+			config->source_audio_only_supported);
+	if (config->tdls_persistent_group_intended)
+		fprintf(f, "wfd_tdls_persistent_group_intended=%s\n",
+			config->tdls_persistent_group_intended);
+	if (config->tdls_persistent_group_reinvoke)
+		fprintf(f, "wfd_tdls_persistent_group_reinvoke=%s\n",
+			config->tdls_persistent_group_reinvoke);
+	fprintf(f, "wfd_session_mgmt_ctrl_port=%u\n",
+			config->wfd_session_mgmt_ctrl_port);
+	fprintf(f, "wfd_device_max_throughput=%u\n",
+			config->wfd_device_max_throughput);
+#endif
 	if (config->country[0] && config->country[1]) {
 		fprintf(f, "country=%c%c\n",
 			config->country[0], config->country[1]);

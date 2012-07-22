@@ -49,6 +49,9 @@
 #include <cutils/properties.h>
 #endif
 
+#ifdef CONFIG_WFD
+#include "wfd_supplicant.h"
+#endif
 const char *wpa_supplicant_version =
 "wpa_supplicant v" VERSION_STR "\n"
 "Copyright (c) 2003-2012, Jouni Malinen <j@w1.fi> and contributors";
@@ -2589,6 +2592,13 @@ next_driver:
 	}
 #endif /* CONFIG_P2P */
 
+#ifdef CONFIG_WFD
+	if (wpas_wfd_init(wpa_s->global, wpa_s) < 0) {
+		wpa_msg(wpa_s, MSG_ERROR, "Failed to init WFD");
+		return -1;
+	}
+#endif /* CONFIG_WFD */
+
 	if (wpa_bss_init(wpa_s) < 0)
 		return -1;
 
@@ -2950,6 +2960,10 @@ void wpa_supplicant_deinit(struct wpa_global *global)
 	wpas_p2p_deinit_global(global);
 #endif /* CONFIG_P2P */
 
+#ifdef CONFIG_WFD
+	wpas_wfd_deinit_global(global);
+#endif /* CONFIG_WFD */
+
 	while (global->ifaces)
 		wpa_supplicant_remove_iface(global, global->ifaces, 1);
 
@@ -3009,6 +3023,10 @@ void wpa_supplicant_update_config(struct wpa_supplicant *wpa_s)
 #ifdef CONFIG_P2P
 	wpas_p2p_update_config(wpa_s);
 #endif /* CONFIG_P2P */
+
+#ifdef CONFIG_WFD
+	wpas_wfd_update_config(wpa_s);
+#endif /* CONFIG_WFD */
 
 	wpa_s->conf->changed_parameters = 0;
 }

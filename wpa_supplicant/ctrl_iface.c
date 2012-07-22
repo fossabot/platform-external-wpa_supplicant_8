@@ -35,6 +35,9 @@
 #include "interworking.h"
 #include "blacklist.h"
 #include "wpas_glue.h"
+#ifdef CONFIG_WFD
+#include "wfd_supplicant.h"
+#endif
 
 extern struct wpa_driver_ops *wpa_drivers[];
 
@@ -3539,6 +3542,189 @@ static int wpa_supplicant_driver_cmd(struct wpa_supplicant *wpa_s, char *cmd,
 	return ret;
 }
 #endif
+#ifdef CONFIG_WFD
+static int wfd_ctrl_set(struct wpa_supplicant *wpa_s, char *cmd)
+{
+	char *param;
+	struct wfd_config *cfg;
+
+	if (wpa_s->global->wfd == NULL)
+		return -1;
+
+	param = os_strchr(cmd, ' ');
+	if (param == NULL)
+		return -1;
+	*param++ = '\0';
+
+	cfg = wfd_get_config(wpa_s->global->wfd);
+	if (os_strcmp(cmd, "enable") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->enabled)) {
+			wpa_printf(MSG_ERROR,
+				   "CTRL_IFACE: Invalid WFD_SET enable value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_enable);
+		wpa_s->conf->wfd_enable = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "device_type") == 0) {
+		if (wpas_wfd_device_type_str2bin(param, &cfg->device_type)) {
+			wpa_printf(MSG_ERROR,
+					   "CTRL_IFACE: Invalid WFD_SET device_type value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_device_type);
+		wpa_s->conf->wfd_device_type = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "coupled_sink_supported_by_source") == 0) {
+		if (wpas_wfd_y_n_str2bin(
+			param, &cfg->coupled_sink_supported_by_source)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+				"coupled_sink_supported_by_source value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_coupled_sink_supported_by_source);
+		wpa_s->conf->wfd_coupled_sink_supported_by_source =
+							os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "coupled_sink_supported_by_sink") == 0) {
+		if (wpas_wfd_y_n_str2bin(
+			 param, &cfg->coupled_sink_supported_by_sink)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+				     "coupled_sink_supported_by_sink value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_coupled_sink_supported_by_sink);
+		wpa_s->conf->wfd_coupled_sink_supported_by_sink =
+							os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "available_for_session") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->available_for_session)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "available_for_session value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_available_for_session);
+		wpa_s->conf->wfd_available_for_session = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "service_discovery_supported") == 0) {
+		if (wpas_wfd_y_n_str2bin(param,
+			&cfg->service_discovery_supported)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "service_discovery_supported value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_service_discovery_supported);
+		wpa_s->conf->wfd_service_discovery_supported = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "preferred_connectivity") == 0) {
+		if (wpas_wfd_preferred_connectivity_str2bin(
+			param, &cfg->preferred_connectivity)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "preferred_connectivity value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_preferred_connectivity);
+		wpa_s->conf->wfd_preferred_connectivity = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "content_protection_supported") == 0) {
+		if (wpas_wfd_y_n_str2bin(param,
+				&cfg->content_protection_supported)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					"content_protection_supported value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_content_protection_supported);
+		wpa_s->conf->wfd_content_protection_supported =
+							os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "time_sync_supported") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->time_sync_supported)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "time_sync_supported value");
+			return -1;
+		}
+		os_free(wpa_s->conf->wfd_time_sync_supported);
+		wpa_s->conf->wfd_time_sync_supported = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "primarysink_audio_notsupported") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->primarysink_audio_notsupported)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "primarysink_audio_notsupported value");
+			return -1;
+		}
+		os_free(wpa_s->conf->primarysink_audio_notsupported);
+		wpa_s->conf->primarysink_audio_notsupported = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "source_audio_only_supported") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->source_audio_only_supported)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "source_audio_only_supported value");
+			return -1;
+		}
+		os_free(wpa_s->conf->source_audio_only_supported);
+		wpa_s->conf->source_audio_only_supported = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "tdls_persistent_group_intended") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->tdls_persistent_group_intended)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "tdls_persistent_group_intended value");
+			return -1;
+		}
+		os_free(wpa_s->conf->tdls_persistent_group_intended);
+		wpa_s->conf->tdls_persistent_group_intended = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "tdls_persistent_group_reinvoke") == 0) {
+		if (wpas_wfd_y_n_str2bin(param, &cfg->tdls_persistent_group_reinvoke)) {
+			wpa_printf(MSG_ERROR, "CTRL_IFACE: Invalid WFD_SET "
+					   "tdls_persistent_group_reinvoke value");
+			return -1;
+		}
+		os_free(wpa_s->conf->tdls_persistent_group_reinvoke);
+		wpa_s->conf->tdls_persistent_group_reinvoke = os_strdup(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "session_mgmt_ctrl_port") == 0) {
+		cfg->session_mgmt_ctrl_port = atoi(param);
+		wpa_s->conf->wfd_session_mgmt_ctrl_port = atoi(param);
+		return 0;
+	}
+
+	if (os_strcmp(cmd, "device_max_throughput") == 0) {
+		cfg->device_max_throughput = atoi(param);
+		wpa_s->conf->wfd_device_max_throughput = atoi(param);
+		return 0;
+	}
+
+	wpa_printf(MSG_DEBUG, "CTRL_IFACE: Unknown WFD_SET field value '%s'",
+		   cmd);
+	return -1;
+}
+#endif
 
 char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 					 char *buf, size_t *resp_len)
@@ -3966,6 +4152,11 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 	} else if (os_strncmp(buf, "DRIVER ", 7) == 0) {
 		reply_len = wpa_supplicant_driver_cmd(wpa_s, buf + 7, reply,
 						      reply_size);
+#endif
+#ifdef CONFIG_WFD
+	} else if (os_strncmp(buf, "WFD_SET ", 8) == 0) {
+		if (wfd_ctrl_set(wpa_s, buf + 8) < 0)
+			reply_len = -1;
 #endif
 	} else if (os_strcmp(buf, "REAUTHENTICATE") == 0) {
 		eapol_sm_request_reauth(wpa_s->eapol);

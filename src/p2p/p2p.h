@@ -1639,4 +1639,13 @@ int p2p_other_scan_completed(struct p2p_data *p2p);
 
 const char * p2p_wps_method_text(enum p2p_wps_method method);
 
+#ifdef CONFIG_WFD
+/**
+ * p2p_set_wfd_data - Store WFD module context for use by P2P
+ * @p2p: P2P module context from p2p_init()
+ * @wfd: WFD module context from wfd_init()
+ */
+void p2p_set_wfd_data(struct p2p_data *p2p, void *wfd);
+#endif
+
 #endif /* P2P_H */

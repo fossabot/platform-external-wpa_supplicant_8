@@ -175,6 +175,10 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
 	/* WPS IE with Device Password ID attribute */
 	p2p_build_wps_ie(p2p, buf, p2p_wps_method_pw_id(peer->wps_method), 0);
 
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, buf);
+#endif
+
 	return buf;
 }
 
@@ -288,6 +292,10 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
 	p2p_build_wps_ie(p2p, buf,
 			 p2p_wps_method_pw_id(peer ? peer->wps_method :
 					      WPS_NOT_READY), 0);
+
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, buf);
+#endif
 
 	return buf;
 }
@@ -703,6 +711,10 @@ static struct wpabuf * p2p_build_go_neg_conf(struct p2p_data *p2p,
 				     p2p->ssid_len);
 	}
 	p2p_buf_update_ie_hdr(buf, len);
+
+#ifdef CONFIG_WFD
+	wfd_add_wfd_ie(p2p->cfg->cb_ctx, p2p->wfd, buf);
+#endif
 
 	return buf;
 }
