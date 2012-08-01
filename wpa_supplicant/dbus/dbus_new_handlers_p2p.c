@@ -508,8 +508,8 @@ DBusMessage * wpas_dbus_handler_p2p_connect(DBusMessage *message,
 		goto inv_args;
 
 	new_pin = wpas_p2p_connect(wpa_s, addr, pin, wps_method,
-				   persistent_group, join, authorize_only,
-				   go_intent, freq);
+				   persistent_group, 0, join, authorize_only,
+				   go_intent, freq, -1);
 
 	if (new_pin >= 0) {
 		char npin[9];
@@ -692,7 +692,8 @@ DBusMessage * wpas_dbus_handler_p2p_prov_disc_req(DBusMessage *message,
 	    os_strcmp(config_method, "pushbutton"))
 		return wpas_dbus_error_invalid_args(message, NULL);
 
-	if (wpas_p2p_prov_disc(wpa_s, peer_addr, config_method, 0) < 0)
+	if (wpas_p2p_prov_disc(wpa_s, peer_addr, config_method,
+			       WPAS_P2P_PD_FOR_GO_NEG) < 0)
 		return wpas_dbus_error_unknown_error(message,
 				"Failed to send provision discovery request");
 
