@@ -97,6 +97,7 @@ struct p2p_device {
 #define P2P_DEV_PD_FOR_JOIN BIT(14)
 #define P2P_DEV_REPORTED_ONCE BIT(15)
 #define P2P_DEV_PREFER_PERSISTENT_RECONN BIT(16)
+#define P2P_DEV_PD_BEFORE_GO_NEG BIT(17)
 	unsigned int flags;
 
 	int status; /* enum p2p_status_code */
@@ -674,7 +675,7 @@ struct p2p_device * p2p_add_dev_from_go_neg_req(struct p2p_data *p2p,
 void p2p_add_dev_info(struct p2p_data *p2p, const u8 *addr,
 		      struct p2p_device *dev, struct p2p_message *msg);
 int p2p_add_device(struct p2p_data *p2p, const u8 *addr, int freq, int level,
-		   const u8 *ies, size_t ies_len);
+		   const u8 *ies, size_t ies_len, int scan_res);
 struct p2p_device * p2p_get_device(struct p2p_data *p2p, const u8 *addr);
 struct p2p_device * p2p_get_device_interface(struct p2p_data *p2p,
 					     const u8 *addr);

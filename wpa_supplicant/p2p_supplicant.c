@@ -2594,7 +2594,8 @@ static int wpas_p2p_start_go_neg(struct wpa_supplicant *wpa_s,
 	return p2p_connect(wpa_s->global->p2p, peer_addr, wps_method,
 			   go_intent, own_interface_addr, force_freq,
 			   persistent_group, ssid ? ssid->ssid : NULL,
-			   ssid ? ssid->ssid_len : 0);
+			   ssid ? ssid->ssid_len : 0,
+			   wpa_s->p2p_pd_before_go_neg);
 }
 
 
@@ -2732,7 +2733,8 @@ static void wpas_p2p_scan_res_join(struct wpa_supplicant *wpa_s,
 					 wpa_s->p2p_persistent_group, 0, 0, 0,
 					 wpa_s->p2p_go_intent,
 					 wpa_s->p2p_connect_freq,
-					 wpa_s->p2p_persistent_id);
+					 wpa_s->p2p_persistent_id,
+					 wpa_s->p2p_pd_before_go_neg);
 			return;
 		}
 
@@ -3007,6 +3009,8 @@ static int wpas_p2p_join_start(struct wpa_supplicant *wpa_s)
  * @freq: Frequency for the group or 0 for auto-selection
  * @persistent_id: Persistent group credentials to use for forcing GO
  *	parameters or -1 to generate new values (SSID/passphrase)
+ * @pd: Whether to send Provision Discovery prior to GO Negotiation as an
+ *	interoperability workaround when initiating group formation
  * Returns: 0 or new PIN (if pin was %NULL) on success, -1 on unspecified
  *	failure, -2 on failure due to channel not currently available,
  *	-3 if forced channel is not supported
@@ -3014,7 +3018,7 @@ static int wpas_p2p_join_start(struct wpa_supplicant *wpa_s)
 int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 		     const char *pin, enum p2p_wps_method wps_method,
 		     int persistent_group, int auto_join, int join, int auth,
-		     int go_intent, int freq, int persistent_id)
+		     int go_intent, int freq, int persistent_id, int pd)
 {
 	int force_freq = 0, oper_freq = 0;
 	u8 bssid[ETH_ALEN];
@@ -3045,6 +3049,7 @@ int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 	wpa_s->p2p_go_intent = go_intent;
 	wpa_s->p2p_connect_freq = freq;
 	wpa_s->p2p_fallback_to_go_neg = 0;
+	wpa_s->p2p_pd_before_go_neg = !!pd;
 
 	if (pin)
 		os_strlcpy(wpa_s->p2p_pin, pin, sizeof(wpa_s->p2p_pin));
@@ -3700,6 +3705,7 @@ int wpas_p2p_prov_disc(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 {
 	u16 config_methods;
 
+	wpa_s->p2p_fallback_to_go_neg = 0;
 	wpa_s->pending_pd_use = NORMAL_PD;
 	if (os_strncmp(config_method, "display", 7) == 0)
 		config_methods = WPS_CONFIG_DISPLAY;
@@ -4750,24 +4756,30 @@ static void wpas_p2p_fallback_to_go_neg(struct wpa_supplicant *wpa_s,
 										int group_added)
 {
 	struct wpa_supplicant *group = wpa_s;
+	eloop_cancel_timeout(wpas_p2p_pd_before_join_timeout, wpa_s, NULL);
 	if (wpa_s->global->p2p_group_formation)
 		group = wpa_s->global->p2p_group_formation;
-		wpa_s = wpa_s->parent;
-		if (group_added)
-			wpas_p2p_group_delete(group, 1);
-		wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Fall back to GO Negotiation");
-		wpas_p2p_connect(wpa_s, wpa_s->pending_join_dev_addr, wpa_s->p2p_pin,
-						 wpa_s->p2p_wps_method, wpa_s->p2p_persistent_group, 0,
-						 0, 0, wpa_s->p2p_go_intent, wpa_s->p2p_connect_freq,
-						 wpa_s->p2p_persistent_id);
+	wpa_s = wpa_s->parent;
+	offchannel_send_action_done(wpa_s);
+	if (group_added)
+		wpas_p2p_group_delete(group, 1);
+	wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Fall back to GO Negotiation");
+	wpas_p2p_connect(wpa_s, wpa_s->pending_join_dev_addr, wpa_s->p2p_pin,
+			 wpa_s->p2p_wps_method, wpa_s->p2p_persistent_group, 0,
+			 0, 0, wpa_s->p2p_go_intent, wpa_s->p2p_connect_freq,
+			 wpa_s->p2p_persistent_id,
+			 wpa_s->p2p_pd_before_go_neg);
 }
 
 
 int wpas_p2p_scan_no_go_seen(struct wpa_supplicant *wpa_s)
 {
 	if (!wpa_s->p2p_fallback_to_go_neg ||
-		wpa_s->p2p_in_provisioning <= 5)
-			return 0;
+	    wpa_s->p2p_in_provisioning <= 5)
+		return 0;
+
+	if (wpas_p2p_peer_go(wpa_s, wpa_s->pending_join_dev_addr) > 0)
+		return 0; /* peer operating as a GO */
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "P2P: GO not found for p2p_connect-auto - "
 			"fallback to GO Negotiation");
