@@ -39,6 +39,8 @@
  */
 #define P2P_MAX_JOIN_SCAN_ATTEMPTS 10
 
+#define P2P_AUTO_PD_SCAN_ATTEMPTS 5
+
 #ifndef P2P_MAX_CLIENT_IDLE
 /*
  * How many seconds to try to reconnect to the GO when connection in P2P client
@@ -67,6 +69,7 @@ static struct wpa_supplicant *
 wpas_p2p_get_group_iface(struct wpa_supplicant *wpa_s, int addr_allocated,
 			 int go);
 static int wpas_p2p_join_start(struct wpa_supplicant *wpa_s);
+static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq);
 static void wpas_p2p_join_scan(void *eloop_ctx, void *timeout_ctx);
 static int wpas_p2p_join(struct wpa_supplicant *wpa_s, const u8 *iface_addr,
 			 const u8 *dev_addr, enum p2p_wps_method wps_method,
@@ -2705,23 +2708,43 @@ static void wpas_p2p_scan_res_join(struct wpa_supplicant *wpa_s,
 	if (wpa_s->p2p_auto_pd) {
 		int join = wpas_p2p_peer_go(wpa_s,
 					    wpa_s->pending_join_dev_addr);
+		if (join == 0 &&
+		    wpa_s->auto_pd_scan_retry < P2P_AUTO_PD_SCAN_ATTEMPTS) {
+			wpa_s->auto_pd_scan_retry++;
+			bss = wpa_bss_get_bssid(wpa_s,
+						wpa_s->pending_join_dev_addr);
+			if (bss) {
+				freq = bss->freq;
+				wpa_printf(MSG_DEBUG, "P2P: Scan retry %d for "
+					   "the peer " MACSTR " at %d MHz",
+					   wpa_s->auto_pd_scan_retry,
+					   MAC2STR(wpa_s->
+						   pending_join_dev_addr),
+					   freq);
+				wpas_p2p_join_scan_req(wpa_s, freq);
+				return;
+			}
+		}
+
 		if (join < 0)
 			join = 0;
+
 		wpa_s->p2p_auto_pd = 0;
 		wpa_s->pending_pd_use = join ? AUTO_PD_JOIN : AUTO_PD_GO_NEG;
 		wpa_printf(MSG_DEBUG, "P2P: Auto PD with " MACSTR " join=%d",
 			   MAC2STR(wpa_s->pending_join_dev_addr), join);
 		if (p2p_prov_disc_req(wpa_s->global->p2p,
-				  wpa_s->pending_join_dev_addr,
-				  wpa_s->pending_pd_config_methods, join,
-				  0) < 0) {
+				      wpa_s->pending_join_dev_addr,
+				      wpa_s->pending_pd_config_methods, join,
+				      0) < 0) {
 			wpa_s->p2p_auto_pd = 0;
 			wpa_msg(wpa_s, MSG_INFO, P2P_EVENT_PROV_DISC_FAILURE
-					" p2p_dev_addr=" MACSTR " status=N/A",
-					MAC2STR(wpa_s->pending_join_dev_addr));
+				" p2p_dev_addr=" MACSTR " status=N/A",
+				MAC2STR(wpa_s->pending_join_dev_addr));
 		}
 		return;
 	}
+
 	if (wpa_s->p2p_auto_join) {
 		int join = wpas_p2p_peer_go(wpa_s,
 					    wpa_s->pending_join_dev_addr);
@@ -2859,13 +2882,13 @@ start:
 }
 
 
-static void wpas_p2p_join_scan(void *eloop_ctx, void *timeout_ctx)
+static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq)
 {
-	struct wpa_supplicant *wpa_s = eloop_ctx;
 	int ret;
 	struct wpa_driver_scan_params params;
 	struct wpabuf *wps_ie, *ies;
 	size_t ielen;
+	int freqs[2] = { 0, 0 };
 
 	os_memset(&params, 0, sizeof(params));
 
@@ -2897,6 +2920,10 @@ static void wpas_p2p_join_scan(void *eloop_ctx, void *timeout_ctx)
 	params.p2p_probe = 1;
 	params.extra_ies = wpabuf_head(ies);
 	params.extra_ies_len = wpabuf_len(ies);
+	if (freq > 0) {
+		freqs[0] = freq;
+		params.freqs = freqs;
+	}
 
 	/*
 	 * Run a scan to update BSS table and start Provision Discovery once
@@ -2915,6 +2942,13 @@ static void wpas_p2p_join_scan(void *eloop_ctx, void *timeout_ctx)
 		eloop_register_timeout(1, 0, wpas_p2p_join_scan, wpa_s, NULL);
 		wpas_p2p_check_join_scan_limit(wpa_s);
 	}
+}
+
+
+static void wpas_p2p_join_scan(void *eloop_ctx, void *timeout_ctx)
+{
+	struct wpa_supplicant *wpa_s = eloop_ctx;
+	wpas_p2p_join_scan_req(wpa_s, 0);
 }
 
 
@@ -3603,8 +3637,7 @@ static void wpas_p2p_idle_update(void *ctx, int idle)
 
 
 struct p2p_group * wpas_p2p_group_init(struct wpa_supplicant *wpa_s,
-				       int persistent_group,
-				       int group_formation)
+				       struct wpa_ssid *ssid)
 {
 	struct p2p_group *group;
 	struct p2p_group_config *cfg;
@@ -3618,9 +3651,9 @@ struct p2p_group * wpas_p2p_group_init(struct wpa_supplicant *wpa_s,
 	if (cfg == NULL)
 		return NULL;
 
-	if (persistent_group && wpa_s->conf->persistent_reconnect)
+	if (ssid->p2p_persistent_group && wpa_s->conf->persistent_reconnect)
 		cfg->persistent_group = 2;
-	else if (persistent_group)
+	else if (ssid->p2p_persistent_group)
 		cfg->persistent_group = 1;
 	os_memcpy(cfg->interface_addr, wpa_s->own_addr, ETH_ALEN);
 	if (wpa_s->max_stations &&
@@ -3628,6 +3661,8 @@ struct p2p_group * wpas_p2p_group_init(struct wpa_supplicant *wpa_s,
 		cfg->max_clients = wpa_s->max_stations;
 	else
 		cfg->max_clients = wpa_s->conf->max_num_sta;
+	os_memcpy(cfg->ssid, ssid->ssid, ssid->ssid_len);
+	cfg->ssid_len = ssid->ssid_len;
 	cfg->cb_ctx = wpa_s;
 	cfg->ie_update = wpas_p2p_ie_update;
 	cfg->idle_update = wpas_p2p_idle_update;
@@ -3635,7 +3670,7 @@ struct p2p_group * wpas_p2p_group_init(struct wpa_supplicant *wpa_s,
 	group = p2p_group_init(wpa_s->global->p2p, cfg);
 	if (group == NULL)
 		os_free(cfg);
-	if (!group_formation)
+	if (ssid->mode != WPAS_MODE_P2P_GROUP_FORMATION)
 		p2p_group_notif_formation_done(group);
 	wpa_s->p2p_group = group;
 	return group;
@@ -3725,6 +3760,7 @@ int wpas_p2p_prov_disc(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
 		wpa_s->p2p_auto_pd = 1;
 		wpa_s->p2p_auto_join = 0;
 		wpa_s->pending_pd_before_join = 0;
+		wpa_s->auto_pd_scan_retry = 0;
 		wpas_p2p_stop_find(wpa_s);
 		wpa_s->p2p_join_scan_count = 0;
 		os_get_time(&wpa_s->p2p_auto_started);

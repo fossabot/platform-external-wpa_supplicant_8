@@ -572,6 +572,8 @@ const u8 * p2p_group_get_interface_addr(struct p2p_group *group);
 u8 p2p_group_presence_req(struct p2p_group *group,
 			  const u8 *client_interface_addr,
 			  const u8 *noa, size_t noa_len);
+int p2p_group_is_group_id_match(struct p2p_group *group, const u8 *group_id,
+				size_t group_id_len);
 
 
 void p2p_buf_add_action_hdr(struct wpabuf *buf, u8 subtype, u8 dialog_token);
@@ -690,5 +692,6 @@ void p2p_build_ssid(struct p2p_data *p2p, u8 *ssid, size_t *ssid_len);
 int p2p_send_action(struct p2p_data *p2p, unsigned int freq, const u8 *dst,
 		    const u8 *src, const u8 *bssid, const u8 *buf,
 		    size_t len, unsigned int wait_time);
+void p2p_stop_listen_for_freq(struct p2p_data *p2p, int freq);
 
 #endif /* P2P_I_H */

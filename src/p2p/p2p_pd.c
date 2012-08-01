@@ -16,8 +16,8 @@
 
 
 /*
- * Number of retries to attempt for provision discovery requests during IDLE
- * state in case the peer is not listening.
+ * Number of retries to attempt for provision discovery requests
+ * in case the peer is not listening.
  */
 #define MAX_PROV_DISC_REQ_RETRIES 10
 
@@ -132,6 +132,21 @@ void p2p_process_prov_disc_req(struct p2p_data *p2p, const u8 *sa,
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Unsupported "
 			"Config Methods in Provision Discovery Request");
 		goto out;
+	}
+
+	if (msg.group_id) {
+		size_t i;
+		for (i = 0; i < p2p->num_groups; i++) {
+			if (p2p_group_is_group_id_match(p2p->groups[i],
+							msg.group_id,
+							msg.group_id_len))
+				break;
+		}
+		if (i == p2p->num_groups) {
+			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: PD "
+				"request for unknown P2P Group ID - reject");
+			goto out;
+		}
 	}
 
 	if (dev)
@@ -336,7 +351,10 @@ int p2p_send_prov_disc_req(struct p2p_data *p2p, struct p2p_device *dev,
 	if (req == NULL)
 		return -1;
 
+	if (p2p->state != P2P_IDLE)
+		p2p_stop_listen_for_freq(p2p, freq);
 	p2p->pending_action_state = P2P_PENDING_PD;
+	p2p_set_timeout(p2p, 0, 300000);
 	if (p2p_send_action(p2p, freq, dev->info.p2p_device_addr,
 			    p2p->cfg->dev_addr, dev->info.p2p_device_addr,
 			    wpabuf_head(req), wpabuf_len(req), 200) < 0) {
@@ -398,8 +416,7 @@ int p2p_prov_disc_req(struct p2p_data *p2p, const u8 *peer_addr,
 	 */
 	p2p->user_initiated_pd = !join;
 
-	/* Also set some retries to attempt in case of IDLE state */
-	if (p2p->user_initiated_pd && p2p->state == P2P_IDLE)
+	if (p2p->user_initiated_pd)
 		p2p->pd_retries = MAX_PROV_DISC_REQ_RETRIES;
 
 	return p2p_send_prov_disc_req(p2p, dev, join, force_freq);
