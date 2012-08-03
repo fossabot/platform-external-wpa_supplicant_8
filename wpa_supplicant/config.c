@@ -2317,6 +2317,14 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 		return 0;
 	}
 
+	if (os_strcmp(var, "password") == 0 &&
+	    os_strncmp(value, "ext:", 4) == 0) {
+		os_free(cred->password);
+		cred->password = os_strdup(value);
+		cred->ext_password = 1;
+		return 0;
+	}
+
 	val = wpa_config_parse_string(value, &len);
 	if (val == NULL) {
 		wpa_printf(MSG_ERROR, "Line %d: invalid field '%s' string "
@@ -2339,6 +2347,7 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 	if (os_strcmp(var, "password") == 0) {
 		os_free(cred->password);
 		cred->password = val;
+		cred->ext_password = 0;
 		return 0;
 	}
 
