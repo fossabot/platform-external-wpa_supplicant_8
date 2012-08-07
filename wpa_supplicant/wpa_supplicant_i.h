@@ -511,6 +511,7 @@ struct wpa_supplicant {
 	unsigned int p2p_persistent_group:1;
 	unsigned int p2p_fallback_to_go_neg:1;
 	unsigned int p2p_pd_before_go_neg:1;
+	unsigned int p2p_block_concurrent_scan:1;
 
 	int p2p_persistent_id;
 	int p2p_go_intent;
@@ -637,6 +638,9 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s);
 int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 			   struct wpa_bss *selected,
 			   struct wpa_ssid *ssid);
+int wpas_p2p_concurrent_scan_blocked(struct wpa_supplicant *wpa_s);
+void wpas_p2p_block_concurrent_scan(struct wpa_supplicant *wpa_s);
+void wpas_p2p_unblock_concurrent_scan(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_stop_countermeasures(void *eloop_ctx, void *sock_ctx);
 void wpa_supplicant_delayed_mic_error_report(void *eloop_ctx, void *sock_ctx);
 

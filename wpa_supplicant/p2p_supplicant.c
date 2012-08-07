@@ -579,6 +579,7 @@ static void wpas_group_formation_completed(struct wpa_supplicant *wpa_s,
 	wpa_s->p2p_in_provisioning = 0;
 
 	if (!success) {
+		wpas_p2p_unblock_concurrent_scan(wpa_s);
 		wpa_msg(wpa_s->parent, MSG_INFO,
 			P2P_EVENT_GROUP_FORMATION_FAILURE);
 		wpas_p2p_group_delete(wpa_s, 0);
@@ -2632,6 +2633,7 @@ static void wpas_p2p_check_join_scan_limit(struct wpa_supplicant *wpa_s)
 			   " for join operationg - stop join attempt",
 			   MAC2STR(wpa_s->pending_join_iface_addr));
 		eloop_cancel_timeout(wpas_p2p_join_scan, wpa_s, NULL);
+		wpas_p2p_unblock_concurrent_scan(wpa_s);
 		if (wpa_s->p2p_auto_pd) {
 			wpa_s->p2p_auto_pd = 0;
 			wpa_msg(wpa_s, MSG_INFO, P2P_EVENT_PROV_DISC_FAILURE
@@ -2844,6 +2846,7 @@ static void wpas_p2p_scan_res_join(struct wpa_supplicant *wpa_s,
 		u16 method;
 
 		if (wpas_check_freq_conflict(wpa_s, freq) > 0) {
+			wpas_p2p_unblock_concurrent_scan(wpa_s);
 			wpa_msg(wpa_s->parent, MSG_INFO,
 				P2P_EVENT_GROUP_FORMATION_FAILURE
 				"reason=FREQ_CONFLICT");
@@ -4163,6 +4166,7 @@ void wpas_p2p_completed(struct wpa_supplicant *wpa_s)
 
 	freq = wpa_s->current_bss ? wpa_s->current_bss->freq :
 		(int) wpa_s->assoc_freq;
+	wpas_p2p_unblock_concurrent_scan(wpa_s);
 	if (ssid->passphrase == NULL && ssid->psk_set) {
 		char psk[65];
 		wpa_snprintf_hex(psk, sizeof(psk), ssid->psk, 32);
@@ -4823,6 +4827,7 @@ void wpas_p2p_notify_ap_sta_authorized(struct wpa_supplicant *wpa_s,
 {
 	if (addr == NULL)
 		return;
+	wpas_p2p_unblock_concurrent_scan(wpa_s);
 	wpas_p2p_add_persistent_group_client(wpa_s, addr);
 }
 
@@ -4905,4 +4910,41 @@ int wpas_p2p_handle_frequency_conflicts(struct wpa_supplicant *wpa_s, int freq)
 	}
 	return 0;
 }
+
+int wpas_p2p_concurrent_scan_blocked(struct wpa_supplicant *wpa_s)
+{
+	struct wpa_supplicant *iface = NULL;
+	for (iface = wpa_s->global->ifaces; iface; iface = iface->next) {
+		if (iface->p2p_block_concurrent_scan) {
+			wpa_printf(MSG_DEBUG, "P2P: P2P Connection in "
+				"progress on %s,defer SCAN", iface->ifname);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void wpas_p2p_block_concurrent_scan_timeout(void *eloop_ctx,
+                                             void *timeout_ctx)
+{
+	struct wpa_supplicant *wpa_s = eloop_ctx;
+	wpa_printf(MSG_DEBUG,
+		   "P2P: wpas_p2p_block_concurrent_scan_timeout");
+	wpa_s->p2p_block_concurrent_scan = 0;
+}
+
+void wpas_p2p_block_concurrent_scan(struct wpa_supplicant *wpa_s)
+{
+	wpa_s->p2p_block_concurrent_scan = 1;
+	eloop_register_timeout(2*60, 0, wpas_p2p_block_concurrent_scan_timeout,
+			       wpa_s,NULL);
+}
+
+void wpas_p2p_unblock_concurrent_scan(struct wpa_supplicant *wpa_s)
+{
+	wpa_s->p2p_block_concurrent_scan = 0;
+	eloop_cancel_timeout(wpas_p2p_block_concurrent_scan_timeout,
+			     wpa_s , NULL);
+}
+
 #endif
