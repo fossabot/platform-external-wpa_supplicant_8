@@ -2161,6 +2161,16 @@ static int wpas_p2p_default_channels(struct wpa_supplicant *wpa_s,
 	chan->reg_class[cla].channel[3] = 161;
 	cla++;
 
+	/* Operating class 125 - 5 GHz, channels 149,153,157,161,165 */
+	chan->reg_class[cla].reg_class = 125;
+	chan->reg_class[cla].channels = 5;
+	chan->reg_class[cla].channel[0] = 149;
+	chan->reg_class[cla].channel[1] = 153;
+	chan->reg_class[cla].channel[2] = 157;
+	chan->reg_class[cla].channel[3] = 161;
+	chan->reg_class[cla].channel[4] = 165;
+	cla++;
+
 	chan->reg_classes = cla;
 	return 0;
 }
@@ -2224,6 +2234,7 @@ static int wpas_p2p_setup_channels(struct wpa_supplicant *wpa_s,
 #endif
 		{ HOSTAPD_MODE_IEEE80211A, 115, 36, 48, 4, BW20 },
 		{ HOSTAPD_MODE_IEEE80211A, 124, 149, 161, 4, BW20 },
+		{ HOSTAPD_MODE_IEEE80211A, 125, 149, 165, 4, BW20 },
 		{ HOSTAPD_MODE_IEEE80211A, 116, 36, 44, 8, BW40PLUS },
 		{ HOSTAPD_MODE_IEEE80211A, 117, 40, 48, 8, BW40MINUS },
 		{ HOSTAPD_MODE_IEEE80211A, 126, 149, 157, 8, BW40PLUS },
@@ -3375,8 +3386,27 @@ static int wpas_p2p_init_go_params(struct wpa_supplicant *wpa_s,
 		params->freq = 2407 + 5 * wpa_s->conf->p2p_oper_channel;
 		wpa_printf(MSG_DEBUG, "P2P: Set GO freq based on configured "
 			   "frequency %d MHz", params->freq);
-	} else if (wpa_s->conf->p2p_oper_reg_class == 115 ||
-		   wpa_s->conf->p2p_oper_reg_class == 124) {
+	} else if (((wpa_s->conf->p2p_oper_reg_class == 115) &&
+			(wpa_s->conf->p2p_oper_channel >= 36) &&
+			(wpa_s->conf->p2p_oper_channel <= 48)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 124) &&
+			 (wpa_s->conf->p2p_oper_channel >= 149) &&
+			 (wpa_s->conf->p2p_oper_channel <= 161)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 125) &&
+			 (wpa_s->conf->p2p_oper_channel >= 149) &&
+			 (wpa_s->conf->p2p_oper_channel <= 165)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 116) &&
+			 (wpa_s->conf->p2p_oper_channel >= 36) &&
+			 (wpa_s->conf->p2p_oper_channel <= 44)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 117) &&
+			 (wpa_s->conf->p2p_oper_channel >= 40) &&
+			 (wpa_s->conf->p2p_oper_channel <= 48)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 126) &&
+			 (wpa_s->conf->p2p_oper_channel >= 149) &&
+			 (wpa_s->conf->p2p_oper_channel <= 157)) ||
+			((wpa_s->conf->p2p_oper_reg_class == 127) &&
+			 (wpa_s->conf->p2p_oper_channel >= 153) &&
+			 (wpa_s->conf->p2p_oper_channel <= 161))) {
 		params->freq = 5000 + 5 * wpa_s->conf->p2p_oper_channel;
 		wpa_printf(MSG_DEBUG, "P2P: Set GO freq based on configured "
 			   "frequency %d MHz", params->freq);

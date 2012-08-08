@@ -72,8 +72,11 @@ static int p2p_channel_to_freq_j4(int reg_class, int channel)
 			return -1;
 		return 5000 + 5 * channel;
 	case 124: /* channels 149,153,157,161 */
-	case 125: /* channels 149,153,157,161,165,169 */
 		if (channel < 149 || channel > 161)
+			return -1;
+		return 5000 + 5 * channel;
+	case 125: /* channels 149,153,157,161,165,169 */
+		if (channel < 149 || channel > 165)
 			return -1;
 		return 5000 + 5 * channel;
 	case 116: /* channels 36,44; 40 MHz; indoor only */
@@ -113,7 +116,7 @@ int p2p_channel_to_freq(const char *country, int reg_class, int channel)
 		return 5000 + 5 * channel;
 	case 3: /* US/3 = 5 GHz, channels 149,153,157,161 */
 	case 5: /* US/5 = 5 GHz, channels 149,153,157,161 */
-		if (channel < 149 || channel > 161)
+		if (channel < 149 || channel > 165)
 			return -1;
 		return 5000 + 5 * channel;
 	case 4: /* EU/4 = 2.407 GHz, channels 1..13 */
