@@ -2508,6 +2508,7 @@ void wpas_p2p_deinit(struct wpa_supplicant *wpa_s)
 
 	os_free(wpa_s->go_params);
 	wpa_s->go_params = NULL;
+	wpas_p2p_unblock_concurrent_scan(wpa_s);
 	eloop_cancel_timeout(wpas_p2p_group_formation_timeout, wpa_s, NULL);
 	eloop_cancel_timeout(wpas_p2p_join_scan, wpa_s, NULL);
 	eloop_cancel_timeout(wpas_p2p_pd_before_join_timeout, wpa_s, NULL);
@@ -4716,6 +4717,7 @@ int wpas_p2p_cancel(struct wpa_supplicant *wpa_s)
 				   "formation found - cancelling",
 				   wpa_s->ifname);
 			found = 1;
+			wpas_p2p_unblock_concurrent_scan(wpa_s);
 			eloop_cancel_timeout(wpas_p2p_group_formation_timeout,
 					     wpa_s->parent, NULL);
 			wpas_p2p_group_delete(wpa_s, 0);
@@ -4811,6 +4813,7 @@ void wpas_p2p_network_removed(struct wpa_supplicant *wpa_s,
 				 wpa_s->parent, NULL) > 0) {
 		wpa_printf(MSG_DEBUG, "P2P: Canceled group formation due to "
 			   "P2P group network getting removed");
+		wpas_p2p_unblock_concurrent_scan(wpa_s);
 #ifdef ANDROID_P2P
 		/* Give time for any Pending WPS Frame exchange */
 		eloop_register_timeout(5, 0, wpas_p2p_group_formation_timeout,
