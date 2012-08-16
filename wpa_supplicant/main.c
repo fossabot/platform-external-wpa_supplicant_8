@@ -269,9 +269,10 @@ int main(int argc, char *argv[])
 			exitcode = -1;
 	}
 
-	if (exitcode == 0)
+	if (exitcode == 0) {
+		property_set("wifi.wpa_supp_ready", "1");
 		exitcode = wpa_supplicant_run(global);
-
+        }
 	wpa_supplicant_deinit(global);
 
 out:
