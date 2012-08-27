@@ -44,6 +44,7 @@
 #ifdef ANDROID_P2P
 #define CFG_CHANGED_IFACE_PRIORITY BIT(13)
 #endif
+#define CFG_CHANGED_P2P_PREF_CHAN BIT(14)
 
 /**
  * struct wpa_config - wpa_supplicant configuration data
@@ -359,6 +360,8 @@ struct wpa_config {
 	char *p2p_ssid_postfix;
 	int persistent_reconnect;
 	int p2p_intra_bss;
+	unsigned int num_p2p_pref_chan;
+	struct p2p_channel *p2p_pref_chan;
 
 #define MAX_WPS_VENDOR_EXT 10
 	/**
