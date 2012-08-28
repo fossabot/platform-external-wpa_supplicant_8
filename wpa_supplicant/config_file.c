@@ -878,6 +878,27 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 		fprintf(f, "access_network_type=%d\n",
 			config->access_network_type);
 #endif /* CONFIG_INTERWORKING */
+<<<<<<< HEAD
+=======
+	if (config->pbc_in_m1)
+		fprintf(f, "pbc_in_m1=%u\n", config->pbc_in_m1);
+	if (config->wps_nfc_dev_pw_id)
+		fprintf(f, "wps_nfc_dev_pw_id=%d\n",
+			config->wps_nfc_dev_pw_id);
+	write_global_bin(f, "wps_nfc_dh_pubkey", config->wps_nfc_dh_pubkey);
+	write_global_bin(f, "wps_nfc_dh_privkey", config->wps_nfc_dh_privkey);
+	write_global_bin(f, "wps_nfc_dev_pw", config->wps_nfc_dev_pw);
+
+	if (config->ext_password_backend)
+		fprintf(f, "ext_password_backend=%s\n",
+			config->ext_password_backend);
+	if (config->p2p_go_max_inactivity != DEFAULT_P2P_GO_MAX_INACTIVITY)
+		fprintf(f, "p2p_go_max_inactivity=%d\n",
+			config->p2p_go_max_inactivity);
+	if (config->auto_interworking)
+		fprintf(f, "auto_interworking=%d\n",
+			config->auto_interworking);
+>>>>>>> 4d5bda5... Interworking: Add optional use of network selection on normal scans
 }
 
 #endif /* CONFIG_NO_CONFIG_WRITE */

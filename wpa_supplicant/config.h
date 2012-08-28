@@ -694,8 +694,70 @@ struct wpa_config {
 	 * parameter) to allow Windows 7 to use PBC instead of PIN (e.g., from
 	 * a label in the AP).
 	 */
+<<<<<<< HEAD
 	char *prioritize;
 #endif
+=======
+	int pbc_in_m1;
+
+	/**
+	 * autoscan - Automatic scan parameters or %NULL if none
+	 *
+	 * This is an optional set of parameters for automatic scanning
+	 * within an interface in following format:
+	 * <autoscan module name>:<module parameters>
+	 */
+	char *autoscan;
+
+	/**
+	 * wps_nfc_dev_pw_id - NFC Device Password ID for password token
+	 */
+	int wps_nfc_dev_pw_id;
+
+	/**
+	 * wps_nfc_dh_pubkey - NFC DH Public Key for password token
+	 */
+	struct wpabuf *wps_nfc_dh_pubkey;
+
+	/**
+	 * wps_nfc_dh_pubkey - NFC DH Private Key for password token
+	 */
+	struct wpabuf *wps_nfc_dh_privkey;
+
+	/**
+	 * wps_nfc_dh_pubkey - NFC Device Password for password token
+	 */
+	struct wpabuf *wps_nfc_dev_pw;
+
+	/**
+	 * ext_password_backend - External password backend or %NULL if none
+	 *
+	 * format: <backend name>[:<optional backend parameters>]
+	 */
+	char *ext_password_backend;
+
+	/*
+	 * p2p_go_max_inactivity - Timeout in seconds to detect STA inactivity
+	 *
+	 * This timeout value is used in P2P GO mode to clean up
+	 * inactive stations.
+	 * By default: 300 seconds.
+	 */
+	int p2p_go_max_inactivity;
+
+	struct hostapd_wmm_ac_params wmm_ac_params[4];
+
+	/**
+	 * auto_interworking - Whether to use network selection automatically
+	 *
+	 * 0 = do not automatically go through Interworking network selection
+	 *     (i.e., require explicit interworking_select command for this)
+	 * 1 = perform Interworking network selection if one or more
+	 *     credentials have been configured and scan did not find a
+	 *     matching network block
+	 */
+	int auto_interworking;
+>>>>>>> 4d5bda5... Interworking: Add optional use of network selection on normal scans
 };
 
 
