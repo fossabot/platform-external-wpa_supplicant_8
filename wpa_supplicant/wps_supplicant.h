@@ -10,6 +10,7 @@
 #define WPS_SUPPLICANT_H
 
 struct wpa_scan_res;
+struct wpa_scan_results;
 
 #ifdef CONFIG_WPS
 
@@ -62,6 +63,9 @@ int wpas_wps_er_config(struct wpa_supplicant *wpa_s, const char *uuid,
 int wpas_wps_terminate_pending(struct wpa_supplicant *wpa_s);
 int wpas_wps_in_progress(struct wpa_supplicant *wpa_s);
 void wpas_wps_update_config(struct wpa_supplicant *wpa_s);
+void wpas_wps_update_ap_info(struct wpa_supplicant *wpa_s,
+			     struct wpa_scan_results *scan_res);
+void wpas_wps_notify_assoc(struct wpa_supplicant *wpa_s, const u8 *bssid);
 
 #else /* CONFIG_WPS */
 
@@ -112,6 +116,15 @@ static inline void wpas_wps_notify_scan_results(struct wpa_supplicant *wpa_s)
 static inline int wpas_wps_searching(struct wpa_supplicant *wpa_s)
 {
 	return 0;
+}
+static inline void wpas_wps_update_ap_info(struct wpa_supplicant *wpa_s,
+					   struct wpa_scan_results *scan_res)
+{
+}
+
+static inline void wpas_wps_notify_assoc(struct wpa_supplicant *wpa_s,
+					 const u8 *bssid)
+{
 }
 
 #endif /* CONFIG_WPS */
