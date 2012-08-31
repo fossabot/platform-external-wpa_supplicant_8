@@ -244,12 +244,19 @@ L_CFLAGS += -DCONFIG_P2P_STRICT
 endif
 endif
 
+<<<<<<< HEAD
 ifdef CONFIG_WFD
 OBJS += wfd_supplicant.c
 OBJS += src/wfd/wfd.c
 OBJS += src/wfd/wfd_parse.c
 OBJS += src/wfd/wfd_build.c
 L_CFLAGS += -DCONFIG_WFD
+=======
+ifdef CONFIG_HS20
+OBJS += hs20_supplicant.c
+L_CFLAGS += -DCONFIG_HS20
+CONFIG_INTERWORKING=y
+>>>>>>> 43323e4... Android: Include Hotspot 2.0 support in the default build
 endif
 
 ifdef CONFIG_INTERWORKING
@@ -753,6 +760,12 @@ ifdef CONFIG_WPS
 L_CFLAGS += -DEAP_SERVER_WSC
 OBJS += src/ap/wps_hostapd.c
 OBJS += src/eap_server/eap_server_wsc.c
+endif
+ifdef CONFIG_INTERWORKING
+OBJS += src/ap/gas_serv.c
+endif
+ifdef CONFIG_HS20
+OBJS += src/ap/hs20.c
 endif
 endif
 
