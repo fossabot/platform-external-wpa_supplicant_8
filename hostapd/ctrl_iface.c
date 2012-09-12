@@ -1078,7 +1078,7 @@ int hostapd_ctrl_iface_init(struct hostapd_data *hapd)
 				 NULL);
 	hapd->msg_ctx = hapd;
 	wpa_msg_register_cb(hostapd_ctrl_iface_msg_cb);
-
+	property_set("wifi.hostapd", "1");
 	return 0;
 
 fail:
@@ -1124,6 +1124,7 @@ void hostapd_ctrl_iface_deinit(struct hostapd_data *hapd)
 		dst = dst->next;
 		os_free(prev);
 	}
+	property_set("wifi.hostapd", "0");
 }
 
 
