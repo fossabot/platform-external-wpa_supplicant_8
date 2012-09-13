@@ -2746,9 +2746,7 @@ static void wpas_p2p_scan_res_join(struct wpa_supplicant *wpa_s,
 	struct wpa_bss *bss;
 	int freq;
 	u8 iface_addr[ETH_ALEN];
-#ifdef ANDROID_P2P	
-	int shared_freq = 0;
-#endif
+
 	eloop_cancel_timeout(wpas_p2p_join_scan, wpa_s, NULL);
 
 	if (wpa_s->global->p2p_disabled)
