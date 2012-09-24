@@ -502,12 +502,6 @@ static int wpa_cli_cmd(struct wpa_ctrl *ctrl, const char *cmd, int min_args,
 }
 
 
-static int wpa_cli_cmd_ifname(struct wpa_ctrl *ctrl, int argc, char *argv[])
-{
-	return wpa_ctrl_command(ctrl, "IFNAME");
-}
-
-
 static int wpa_cli_cmd_status(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
 	if (argc > 0 && os_strcmp(argv[0], "verbose") == 0)
@@ -746,52 +740,6 @@ static int wpa_cli_cmd_wps_oob(struct wpa_ctrl *ctrl, int argc, char *argv[])
 #endif /* CONFIG_WPS_OOB */
 
 
-<<<<<<< HEAD
-=======
-#ifdef CONFIG_WPS_NFC
-
-static int wpa_cli_cmd_wps_nfc(struct wpa_ctrl *ctrl, int argc, char *argv[])
-{
-	return wpa_cli_cmd(ctrl, "WPS_NFC", 0, argc, argv);
-}
-
-
-static int wpa_cli_cmd_wps_nfc_token(struct wpa_ctrl *ctrl, int argc,
-				     char *argv[])
-{
-	return wpa_cli_cmd(ctrl, "WPS_NFC_TOKEN", 1, argc, argv);
-}
-
-
-static int wpa_cli_cmd_wps_nfc_tag_read(struct wpa_ctrl *ctrl, int argc,
-					char *argv[])
-{
-	int ret;
-	char *buf;
-	size_t buflen;
-
-	if (argc != 1) {
-		printf("Invalid 'wps_nfc_tag_read' command - one argument "
-		       "is required.\n");
-		return -1;
-	}
-
-	buflen = 18 + os_strlen(argv[0]);
-	buf = os_malloc(buflen);
-	if (buf == NULL)
-		return -1;
-	os_snprintf(buf, buflen, "WPS_NFC_TAG_READ %s", argv[0]);
-
-	ret = wpa_ctrl_command(ctrl, buf);
-	os_free(buf);
-
-	return ret;
-}
-
-#endif /* CONFIG_WPS_NFC */
-
-
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 static int wpa_cli_cmd_wps_reg(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
 	char cmd[256];
@@ -974,26 +922,6 @@ static int wpa_cli_cmd_wps_er_config(struct wpa_ctrl *ctrl, int argc,
 }
 
 
-<<<<<<< HEAD
-=======
-#ifdef CONFIG_WPS_NFC
-static int wpa_cli_cmd_wps_er_nfc_config_token(struct wpa_ctrl *ctrl, int argc,
-					       char *argv[])
-{
-	if (argc != 2) {
-		printf("Invalid WPS_ER_NFC_CONFIG_TOKEN command: need two "
-		       "arguments:\n"
-		       "- WPS/NDEF: token format\n"
-		       "- UUID: specify which AP to use\n");
-		return -1;
-	}
-
-	return wpa_cli_cmd(ctrl, "WPS_ER_NFC_CONFIG_TOKEN", 2, argc, argv);
-}
-#endif /* CONFIG_WPS_NFC */
-
-
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 static int wpa_cli_cmd_ibss_rsn(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
 	return wpa_cli_cmd(ctrl, "IBSS_RSN", 1, argc, argv);
@@ -1246,25 +1174,7 @@ static int wpa_cli_cmd_select_network(struct wpa_ctrl *ctrl, int argc,
 static int wpa_cli_cmd_enable_network(struct wpa_ctrl *ctrl, int argc,
 				      char *argv[])
 {
-<<<<<<< HEAD
-	char cmd[32];
-	int res;
-
-	if (argc < 1) {
-		printf("Invalid ENABLE_NETWORK command: needs one argument "
-		       "(network id)\n");
-		return -1;
-	}
-
-	res = os_snprintf(cmd, sizeof(cmd), "ENABLE_NETWORK %s", argv[0]);
-	if (res < 0 || (size_t) res >= sizeof(cmd))
-		return -1;
-	cmd[sizeof(cmd) - 1] = '\0';
-
-	return wpa_ctrl_command(ctrl, cmd);
-=======
 	return wpa_cli_cmd(ctrl, "ENABLE_NETWORK", 1, argc, argv);
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 }
 
 
@@ -1414,27 +1324,7 @@ static int wpa_cli_cmd_scan_results(struct wpa_ctrl *ctrl, int argc,
 
 static int wpa_cli_cmd_bss(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
-<<<<<<< HEAD
-	char cmd[64];
-	int res;
-
-	if (argc < 1) {
-		printf("Invalid BSS command: need at least one argument"
-		       "(index or BSSID)\n");
-		return -1;
-	}
-
-	res = os_snprintf(cmd, sizeof(cmd), "BSS %s\t%s\t%s", argv[0],
-			  argc > 1 ? argv[1] : "", argc > 2 ? argv[2] : "");
-
-	if (res < 0 || (size_t) res >= sizeof(cmd))
-		return -1;
-	cmd[sizeof(cmd) - 1] = '\0';
-
-	return wpa_ctrl_command(ctrl, cmd);
-=======
 	return wpa_cli_cmd(ctrl, "BSS", 1, argc, argv);
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 }
 
 
@@ -1614,23 +1504,6 @@ static int wpa_cli_cmd_all_sta(struct wpa_ctrl *ctrl, int argc, char *argv[])
 
 	return -1;
 }
-<<<<<<< HEAD
-=======
-
-
-static int wpa_cli_cmd_deauthenticate(struct wpa_ctrl *ctrl, int argc,
-				      char *argv[])
-{
-	return wpa_cli_cmd(ctrl, "DEAUTHENTICATE", 1, argc, argv);
-}
-
-
-static int wpa_cli_cmd_disassociate(struct wpa_ctrl *ctrl, int argc,
-				    char *argv[])
-{
-	return wpa_cli_cmd(ctrl, "DISASSOCIATE", 1, argc, argv);
-}
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 #endif /* CONFIG_AP */
 
 
@@ -2154,7 +2027,6 @@ static int wpa_cli_cmd_reauthenticate(struct wpa_ctrl *ctrl, int argc,
 #ifdef ANDROID
 static int wpa_cli_cmd_driver(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
-<<<<<<< HEAD
 	char cmd[256];
 	int i;
 	int len;
@@ -2170,12 +2042,6 @@ static int wpa_cli_cmd_driver(struct wpa_ctrl *ctrl, int argc, char *argv[])
 	cmd[sizeof(cmd) - 1] = '\0';
 	printf("%s: %s\n", __func__, cmd);
 	return wpa_ctrl_command(ctrl, cmd);
-=======
-	if (argc == 0)
-		return wpa_ctrl_command(ctrl, "AUTOSCAN ");
-
-	return wpa_cli_cmd(ctrl, "AUTOSCAN", 0, argc, argv);
->>>>>>> 87c7ba8... wpa_cli: Use helper functions to implement commands
 }
 #endif
 
