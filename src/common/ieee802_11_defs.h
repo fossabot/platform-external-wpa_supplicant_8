@@ -636,11 +636,8 @@ struct ieee80211_ht_operation {
 #define WPS_IE_VENDOR_TYPE 0x0050f204
 #define OUI_WFA 0x506f9a
 #define P2P_IE_VENDOR_TYPE 0x506f9a09
-<<<<<<< HEAD
-#define WFD_IE_VENDOR_TYPE 0x506f9a0a
-=======
 #define HS20_IE_VENDOR_TYPE 0x506f9a10
->>>>>>> 64855b9... HS 2.0: Indicate Hotspot 2.0 in BSS table and status
+#define WFD_IE_VENDOR_TYPE 0x506f9a0a
 
 #define WMM_OUI_TYPE 2
 #define WMM_OUI_SUBTYPE_INFORMATION_ELEMENT 0
