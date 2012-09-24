@@ -652,6 +652,17 @@ struct wpa_config {
 	 */
 	int hs20;
 
+	/**
+	 * auto_interworking - Whether to use network selection automatically
+	 *
+	 * 0 = do not automatically go through Interworking network selection
+	 *     (i.e., require explicit interworking_select command for this)
+	 * 1 = perform Interworking network selection if one or more
+	 *     credentials have been configured and scan did not find a
+	 *     matching network block
+	 */
+	int auto_interworking;
+
 #ifdef CONFIG_WFD
 	/**
 	* WFD configuration items
@@ -679,85 +690,9 @@ struct wpa_config {
 	 * Interface name of the interface that needs to be proritized; Useful
 	 * for resolving conflicts in connection. up to 16 octets encoded in
 	 * UTF-8
-
-	/**
-	 * pbc_in_m1 - AP mode WPS probing workaround for PBC with Windows 7
-	 *
-	 * Windows 7 uses incorrect way of figuring out AP's WPS capabilities
-	 * by acting as a Registrar and using M1 from the AP. The config
-	 * methods attribute in that message is supposed to indicate only the
-	 * configuration method supported by the AP in Enrollee role, i.e., to
-	 * add an external Registrar. For that case, PBC shall not be used and
-	 * as such, the PushButton config method is removed from M1 by default.
-	 * If pbc_in_m1=1 is included in the configuration file, the PushButton
-	 * config method is left in M1 (if included in config_methods
-	 * parameter) to allow Windows 7 to use PBC instead of PIN (e.g., from
-	 * a label in the AP).
 	 */
-<<<<<<< HEAD
 	char *prioritize;
 #endif
-=======
-	int pbc_in_m1;
-
-	/**
-	 * autoscan - Automatic scan parameters or %NULL if none
-	 *
-	 * This is an optional set of parameters for automatic scanning
-	 * within an interface in following format:
-	 * <autoscan module name>:<module parameters>
-	 */
-	char *autoscan;
-
-	/**
-	 * wps_nfc_dev_pw_id - NFC Device Password ID for password token
-	 */
-	int wps_nfc_dev_pw_id;
-
-	/**
-	 * wps_nfc_dh_pubkey - NFC DH Public Key for password token
-	 */
-	struct wpabuf *wps_nfc_dh_pubkey;
-
-	/**
-	 * wps_nfc_dh_pubkey - NFC DH Private Key for password token
-	 */
-	struct wpabuf *wps_nfc_dh_privkey;
-
-	/**
-	 * wps_nfc_dh_pubkey - NFC Device Password for password token
-	 */
-	struct wpabuf *wps_nfc_dev_pw;
-
-	/**
-	 * ext_password_backend - External password backend or %NULL if none
-	 *
-	 * format: <backend name>[:<optional backend parameters>]
-	 */
-	char *ext_password_backend;
-
-	/*
-	 * p2p_go_max_inactivity - Timeout in seconds to detect STA inactivity
-	 *
-	 * This timeout value is used in P2P GO mode to clean up
-	 * inactive stations.
-	 * By default: 300 seconds.
-	 */
-	int p2p_go_max_inactivity;
-
-	struct hostapd_wmm_ac_params wmm_ac_params[4];
-
-	/**
-	 * auto_interworking - Whether to use network selection automatically
-	 *
-	 * 0 = do not automatically go through Interworking network selection
-	 *     (i.e., require explicit interworking_select command for this)
-	 * 1 = perform Interworking network selection if one or more
-	 *     credentials have been configured and scan did not find a
-	 *     matching network block
-	 */
-	int auto_interworking;
->>>>>>> 4d5bda5... Interworking: Add optional use of network selection on normal scans
 };
 
 
