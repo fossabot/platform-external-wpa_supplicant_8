@@ -2401,11 +2401,11 @@ static struct wpa_cli_cmd wpa_cli_commands[] = {
 	  "<BSSID> = connect using Interworking credentials" },
 	{ "anqp_get", wpa_cli_cmd_anqp_get, cli_cmd_flag_none,
 	  "<addr> <info id>[,<info id>]... = request ANQP information" },
-	{ "gas_request", wpa_cli_cmd_gas_request, wpa_cli_complete_bss,
+	{ "gas_request", wpa_cli_cmd_gas_request,
 	  cli_cmd_flag_none,
 	  "<addr> <AdvProtoID> [QueryReq] = GAS request" },
 	{ "gas_response_get", wpa_cli_cmd_gas_response_get,
-	  wpa_cli_complete_bss, cli_cmd_flag_none,
+	  cli_cmd_flag_none,
 	  "<addr> <dialog token> [start,len] = Fetch last GAS response" },
 #endif /* CONFIG_INTERWORKING */
 #ifdef CONFIG_HS20
