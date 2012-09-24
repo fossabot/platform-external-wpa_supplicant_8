@@ -571,18 +571,10 @@ struct wpa_supplicant {
 	} hw;
 
 	int pno;
-<<<<<<< HEAD
-=======
-
-	/* WLAN_REASON_* reason codes. Negative if locally generated. */
-	int disconnect_reason;
-
-	struct ext_password_data *ext_pw;
 
 	struct wpabuf *last_gas_resp;
 	u8 last_gas_addr[ETH_ALEN];
 	u8 last_gas_dialog_token;
->>>>>>> b1f1229... Add generic GAS request mechanism
 };
 
 
