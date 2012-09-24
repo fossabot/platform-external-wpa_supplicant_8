@@ -521,7 +521,6 @@ struct wpa_config {
 	 * Homogeneous ESS. This is used only if interworking is enabled.
 	 */
 	u8 hessid[ETH_ALEN];
-<<<<<<< HEAD
 
 #ifdef CONFIG_WFD
 	/**
@@ -543,44 +542,6 @@ struct wpa_config {
 	int wfd_session_mgmt_ctrl_port;
 	int wfd_device_max_throughput;
 #endif
-	/**
-	 * home_realm - Home Realm for Interworking
-	 */
-	char *home_realm;
-
-	/**
-	 * home_username - Username for Interworking network selection
-	 */
-	char *home_username;
-
-	/**
-	 * home_password - Password for Interworking network selection
-	 */
-	char *home_password;
-
-	/**
-	 * home_ca_cert - CA certificate for Interworking network selection
-	 */
-	char *home_ca_cert;
-
-	/**
-	 * home_imsi - IMSI in <MCC> | <MNC> | '-' | <MSIN> format
-	 */
-	char *home_imsi;
-
-	/**
-	 * home_milenage - Milenage parameters for SIM/USIM simulator in
-	 *	<Ki>:<OPc>:<SQN> format
-	 */
-	char *home_milenage;
-
-	/**
-	 * home_domain - Home service provider FQDN
-	 *
-	 * This is used to compare against the Domain Name List to figure out
-	 * whether the AP is operated by the Home SP.
-	 */
-	char *home_domain;
 
 #ifdef ANDROID_P2P
 	/**
@@ -591,8 +552,6 @@ struct wpa_config {
 	 */
 	char *prioritize;
 #endif
-=======
->>>>>>> 1bb7b8e... Interworking: Add support for multiple credentials
 };
 
 
