@@ -49,11 +49,7 @@ int scard_umts_auth(struct scard_data *scard, const unsigned char *_rand,
 		    const unsigned char *autn,
 		    unsigned char *res, size_t *res_len,
 		    unsigned char *ik, unsigned char *ck, unsigned char *auts);
-<<<<<<< HEAD
-=======
-int scard_get_pin_retry_counter(struct scard_data *scard);
 int scard_supports_umts(struct scard_data *scard);
->>>>>>> 7f41c92... Interworking: Use EAP-AKA if USIM is used
 
 #else /* PCSC_FUNCS */
 
@@ -63,11 +59,7 @@ int scard_supports_umts(struct scard_data *scard);
 #define scard_get_imsi(s, i, l) -1
 #define scard_gsm_auth(s, r, s2, k) -1
 #define scard_umts_auth(s, r, a, r2, rl, i, c, a2) -1
-<<<<<<< HEAD
-=======
-#define scard_get_pin_retry_counter(s) -1
 #define scard_supports_umts(s) 0
->>>>>>> 7f41c92... Interworking: Use EAP-AKA if USIM is used
 
 #endif /* PCSC_FUNCS */
 
