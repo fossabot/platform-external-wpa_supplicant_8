@@ -1871,7 +1871,7 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->home_ca_cert);
 	os_free(config->home_imsi);
 	os_free(config->home_milenage);
-<<<<<<< HEAD
+	os_free(config->home_domain);
 #ifdef ANDROID_P2P
 	os_free(config->prioritize);
 #endif
@@ -1891,9 +1891,6 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->tdls_persistent_group_reinvoke);
 #endif
         os_free(config->p2p_pref_chan);
-=======
-	os_free(config->home_domain);
->>>>>>> 00bf219... Interworking: Add support for home vs. visited SP determination
 	os_free(config);
 }
 
