@@ -1886,14 +1886,6 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->config_methods);
 	os_free(config->p2p_ssid_postfix);
 	os_free(config->pssid);
-<<<<<<< HEAD
-	os_free(config->home_realm);
-	os_free(config->home_username);
-	os_free(config->home_password);
-	os_free(config->home_ca_cert);
-	os_free(config->home_imsi);
-	os_free(config->home_milenage);
-	os_free(config->home_domain);
 #ifdef ANDROID_P2P
 	os_free(config->prioritize);
 #endif
@@ -1913,8 +1905,6 @@ void wpa_config_free(struct wpa_config *config)
 	os_free(config->tdls_persistent_group_reinvoke);
 #endif
         os_free(config->p2p_pref_chan);
-=======
->>>>>>> 1bb7b8e... Interworking: Add support for multiple credentials
 	os_free(config);
 }
 
