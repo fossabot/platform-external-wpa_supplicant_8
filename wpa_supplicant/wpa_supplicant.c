@@ -45,13 +45,10 @@
 #include "bss.h"
 #include "scan.h"
 #include "offchannel.h"
-<<<<<<< HEAD
+#include "hs20_supplicant.h"
 #ifdef ANDROID
 #include <cutils/properties.h>
 #endif
-=======
-#include "hs20_supplicant.h"
->>>>>>> cb41832... HS 2.0: Add HS 2.0 Indication element into (Re)Association Request
 
 #ifdef CONFIG_WFD
 #include "wfd_supplicant.h"
