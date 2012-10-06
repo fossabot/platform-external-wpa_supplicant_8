@@ -456,8 +456,6 @@ static int wpa_ctrl_command(struct wpa_ctrl *ctrl, char *cmd)
 }
 
 
-<<<<<<< HEAD
-=======
 static int write_cmd(char *buf, size_t buflen, const char *cmd, int argc,
 		     char *argv[])
 {
@@ -510,7 +508,6 @@ static int wpa_cli_cmd_ifname(struct wpa_ctrl *ctrl, int argc, char *argv[])
 }
 
 
->>>>>>> 0076869... wpa_cli: Add helper functions for building and executing commands
 static int wpa_cli_cmd_status(struct wpa_ctrl *ctrl, int argc, char *argv[])
 {
 	if (argc > 0 && os_strcmp(argv[0], "verbose") == 0)
