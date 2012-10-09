@@ -452,6 +452,19 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpa_s->gas = NULL;
 
 	free_hw_features(wpa_s);
+<<<<<<< HEAD
+=======
+
+	os_free(wpa_s->bssid_filter);
+	wpa_s->bssid_filter = NULL;
+
+	wnm_bss_keep_alive_deinit(wpa_s);
+
+	ext_password_deinit(wpa_s->ext_pw);
+	wpa_s->ext_pw = NULL;
+
+	wpabuf_free(wpa_s->last_gas_resp);
+>>>>>>> b1f1229... Add generic GAS request mechanism
 }
 
 
