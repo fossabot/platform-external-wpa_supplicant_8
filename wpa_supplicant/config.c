@@ -2956,6 +2956,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT_RANGE(interworking, 0, 1), 0 },
 	{ FUNC(hessid), 0 },
 	{ INT_RANGE(access_network_type, 0, 15), 0 },
+<<<<<<< HEAD
 #ifdef CONFIG_WFD
 	{ STR_RANGE(wfd_enable, 1, 1), 0 },
 	{ STR_RANGE(wfd_device_type, 6, 19), 0 },
@@ -2973,6 +2974,17 @@ static const struct global_parse_data global_fields[] = {
 	{ INT(wfd_session_mgmt_ctrl_port), 0 },
 	{ INT(wfd_device_max_throughput), 0 }
 #endif
+=======
+	{ INT_RANGE(pbc_in_m1, 0, 1), 0 },
+	{ STR(autoscan), 0 },
+	{ INT_RANGE(wps_nfc_dev_pw_id, 0x10, 0xffff), 0 },
+	{ BIN(wps_nfc_dh_pubkey), 0 },
+	{ BIN(wps_nfc_dh_privkey), 0 },
+	{ BIN(wps_nfc_dev_pw), 0 },
+	{ STR(ext_password_backend), CFG_CHANGED_EXT_PW_BACKEND },
+	{ INT(p2p_go_max_inactivity), 0 },
+	{ INT_RANGE(auto_interworking, 0, 1), 0 },
+>>>>>>> 4d5bda5... Interworking: Add optional use of network selection on normal scans
 };
 
 #undef FUNC
