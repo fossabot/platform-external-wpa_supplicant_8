@@ -4113,6 +4113,16 @@ static int wpa_supplicant_driver_cmd(struct wpa_supplicant *wpa_s, char *cmd,
 				     char *buf, size_t buflen)
 {
 	int ret;
+	int state;
+
+	if (os_strncasecmp(cmd, "SETSUSPENDMODE ", 15) == 0) {
+		state = atoi(cmd + 15);
+		if(state) {
+			wpas_notify_suspend(wpa_s->global);
+		}else {
+			wpas_notify_resume(wpa_s->global);
+		}
+	}
 
 	ret = wpa_drv_driver_cmd(wpa_s, cmd, buf, buflen);
 	if (ret == 0)
