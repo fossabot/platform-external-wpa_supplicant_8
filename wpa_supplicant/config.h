@@ -601,6 +601,7 @@ struct wpa_config {
 	 */
 	u8 hessid[ETH_ALEN];
 
+<<<<<<< HEAD
 #ifdef CONFIG_WFD
 	/**
 	* WFD configuration items
@@ -628,6 +629,26 @@ struct wpa_config {
 	 * Interface name of the interface that needs to be proritized; Useful
 	 * for resolving conflicts in connection. up to 16 octets encoded in
 	 * UTF-8
+=======
+	/**
+	 * hs20 - Hotspot 2.0
+	 */
+	int hs20;
+
+	/**
+	 * pbc_in_m1 - AP mode WPS probing workaround for PBC with Windows 7
+	 *
+	 * Windows 7 uses incorrect way of figuring out AP's WPS capabilities
+	 * by acting as a Registrar and using M1 from the AP. The config
+	 * methods attribute in that message is supposed to indicate only the
+	 * configuration method supported by the AP in Enrollee role, i.e., to
+	 * add an external Registrar. For that case, PBC shall not be used and
+	 * as such, the PushButton config method is removed from M1 by default.
+	 * If pbc_in_m1=1 is included in the configuration file, the PushButton
+	 * config method is left in M1 (if included in config_methods
+	 * parameter) to allow Windows 7 to use PBC instead of PIN (e.g., from
+	 * a label in the AP).
+>>>>>>> 66aadbd... HS 2.0: Add runtime configuration of Hotspot 2.0 station
 	 */
 	char *prioritize;
 #endif
