@@ -251,6 +251,11 @@ struct wps_ap_info {
 	struct os_time last_attempt;
 };
 
+struct wpa_ssid_value {
+	u8 ssid[32];
+	size_t ssid_len;
+};
+
 /**
  * struct wpa_supplicant - Internal data for wpa_supplicant interface
  *
@@ -306,6 +311,11 @@ struct wpa_supplicant {
 
 	u8 *bssid_filter;
 	size_t bssid_filter_count;
+
+	u8 *disallow_aps_bssid;
+	size_t disallow_aps_bssid_count;
+	struct wpa_ssid_value *disallow_aps_ssid;
+	size_t disallow_aps_ssid_count;
 
 	/* previous scan was wildcard when interleaving between
 	 * wildcard scans and specific SSID scan when max_ssids=1 */
@@ -659,6 +669,9 @@ int wpas_driver_bss_selection(struct wpa_supplicant *wpa_s);
 #ifdef ANDROID_P2P
 int wpas_is_p2p_prioritized(struct wpa_supplicant *wpa_s);
 #endif
+int disallowed_bssid(struct wpa_supplicant *wpa_s, const u8 *bssid);
+int disallowed_ssid(struct wpa_supplicant *wpa_s, const u8 *ssid,
+		    size_t ssid_len);
 
 /* events.c */
 void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s);
