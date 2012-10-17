@@ -1948,6 +1948,20 @@ static void nl80211_del_station_event(struct wpa_driver_nl80211_data *drv,
 	wpa_printf(MSG_DEBUG, "nl80211: Delete station " MACSTR,
 		   MAC2STR(addr));
 
+#if defined(ANDROID) && !defined(HOSTAPD)
+	if (is_broadcast_ether_addr(addr)) {
+	/* driver is asking supplicant to stop, this probably means driver has
+	* encountered errors that requires supplicant and framework to
+	* re-initialize. As part of the framework re-initialization it will
+	* re-start supplicant */
+	wpa_printf(MSG_DEBUG," %s: Send driver HANGED event "
+						"in case of SSR", __func__);
+	wpa_msg(drv->ctx, MSG_INFO,
+				WPA_EVENT_DRIVER_STATE "HANGED");
+	return;
+	}
+#endif
+
 	if (is_ap_interface(drv->nlmode) && drv->device_ap_sme) {
 		drv_event_disassoc(drv->ctx, addr);
 		return;
