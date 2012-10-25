@@ -513,6 +513,10 @@ struct wpa_config {
 	 */
 	char *prioritize;
 #endif
+	/**
+	 * p2p_disabled - Whether P2P operations are disabled for this interface
+	 */
+	int p2p_disabled;
 };
 
 
