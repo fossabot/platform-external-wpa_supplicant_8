@@ -396,6 +396,7 @@ void wpas_notify_resume(struct wpa_global *global)
 
 	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
 		wpa_drv_resume(wpa_s);
+		wpa_blacklist_clear(wpa_s);
 		if (wpa_s->wpa_state == WPA_DISCONNECTED)
 			wpa_supplicant_req_scan(wpa_s, 0, 100000);
 	}
