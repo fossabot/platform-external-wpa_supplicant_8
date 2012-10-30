@@ -675,9 +675,29 @@ void wpa_supplicant_mark_disassoc(struct wpa_supplicant *wpa_s);
 int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 			   struct wpa_bss *selected,
 			   struct wpa_ssid *ssid);
+
+#ifdef ANDROID_P2P
 int wpas_p2p_concurrent_scan_blocked(struct wpa_supplicant *wpa_s);
 void wpas_p2p_block_concurrent_scan(struct wpa_supplicant *wpa_s);
 void wpas_p2p_unblock_concurrent_scan(struct wpa_supplicant *wpa_s);
+#else /* ANDROID_P2P */
+static inline int
+wpas_p2p_concurrent_scan_blocked(struct wpa_supplicant *wpa_s)
+{
+	return 0;
+}
+
+static inline void
+wpas_p2p_block_concurrent_scan(struct wpa_supplicant *wpa_s)
+{
+}
+
+static inline void
+wpas_p2p_unblock_concurrent_scan(struct wpa_supplicant *wpa_s)
+{
+}
+#endif /* ANDROID_P2P */
+
 void wpa_supplicant_stop_countermeasures(void *eloop_ctx, void *sock_ctx);
 void wpa_supplicant_delayed_mic_error_report(void *eloop_ctx, void *sock_ctx);
 
