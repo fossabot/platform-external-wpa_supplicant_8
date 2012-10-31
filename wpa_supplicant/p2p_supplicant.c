@@ -3893,7 +3893,7 @@ static void wpas_p2p_clear_pending_action_tx(struct wpa_supplicant *wpa_s)
 int wpas_p2p_find(struct wpa_supplicant *wpa_s, unsigned int timeout,
 		  enum p2p_discovery_type type,
 		  unsigned int num_req_dev_types, const u8 *req_dev_types,
-		  const u8 *dev_id)
+		  const u8 *dev_id, unsigned int search_delay)
 {
 	wpas_p2p_clear_pending_action_tx(wpa_s);
 	wpa_s->p2p_long_listen = 0;
@@ -3908,7 +3908,8 @@ int wpas_p2p_find(struct wpa_supplicant *wpa_s, unsigned int timeout,
 	wpa_supplicant_cancel_sched_scan(wpa_s);
 
 	return p2p_find(wpa_s->global->p2p, timeout, type,
-			num_req_dev_types, req_dev_types, dev_id);
+			num_req_dev_types, req_dev_types, dev_id,
+			search_delay);
 }
 
 
