@@ -244,7 +244,7 @@ static struct wpa_supplicant * wpas_get_p2p_group(struct wpa_supplicant *wpa_s,
 }
 
 
-static void wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
+static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 {
 	struct wpa_ssid *ssid;
 	char *gtype;
@@ -263,6 +263,16 @@ static void wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 			     (ssid->key_mgmt & WPA_KEY_MGMT_WPS)))
 				break;
 			ssid = ssid->next;
+		}
+		if (ssid == NULL) {
+			/*
+			 * Reset wpa_s->removal_reason to the default unknown
+			 * state.
+			 */
+			wpa_s->removal_reason = P2P_GROUP_REMOVAL_UNKNOWN;
+			wpa_printf(MSG_ERROR, "P2P: P2P group interface "
+				   "not found");
+			return -1;
 		}
 	}
 	if (wpa_s->p2p_group_interface == P2P_GROUP_INTERFACE_GO)
@@ -330,7 +340,7 @@ static void wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 		if (wpa_s && ifname)
 			wpa_drv_if_remove(wpa_s, type, ifname);
 		os_free(ifname);
-		return;
+		return 0;
 	}
 
 	wpa_printf(MSG_DEBUG, "P2P: Remove temporary group network");
@@ -360,6 +370,7 @@ static void wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 			   "found");
 	}
 	wpa_supplicant_ap_deinit(wpa_s);
+	return 0;
 }
 
 
@@ -4824,9 +4835,8 @@ int wpas_p2p_disconnect(struct wpa_supplicant *wpa_s)
 		return -1;
 
 	wpa_s->removal_reason = P2P_GROUP_REMOVAL_REQUESTED;
-	wpas_p2p_group_delete(wpa_s, 0);
 
-	return 0;
+	return wpas_p2p_group_delete(wpa_s, 0);
 }
 
 
