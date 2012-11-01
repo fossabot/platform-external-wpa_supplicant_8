@@ -2678,10 +2678,12 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	int go_intent = -1;
 	int freq = 0;
 	int pd;
+	int ht40;
 
 	/* <addr> <"pbc" | "pin" | PIN> [label|display|keypad]
 	 * [persistent|persistent=<network id>]
-	 * [join] [auth] [go_intent=<0..15>] [freq=<in MHz>] [provdisc] */
+	 * [join] [auth] [go_intent=<0..15>] [freq=<in MHz>] [provdisc]
+	 * [ht40] */
 
 	if (hwaddr_aton(cmd, addr))
 		return -1;
@@ -2709,6 +2711,7 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	auth = os_strstr(pos, " auth") != NULL;
 	automatic = os_strstr(pos, " auto") != NULL;
 	pd = os_strstr(pos, " provdisc") != NULL;
+	ht40 = (os_strstr(cmd, " ht40") != NULL);
 
 	pos2 = os_strstr(pos, " go_intent=");
 	if (pos2) {
@@ -2744,7 +2747,8 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	wpas_p2p_block_concurrent_scan(wpa_s);
 	new_pin = wpas_p2p_connect(wpa_s, addr, pin, wps_method,
 				   persistent_group, automatic, join,
-				   auth, go_intent, freq, persistent_id, pd);
+				   auth, go_intent, freq, persistent_id, pd,
+				   ht40);
 	if (new_pin == -2) {
 		os_memcpy(buf, "FAIL-CHANNEL-UNAVAILABLE\n", 25);
 		return 25;
