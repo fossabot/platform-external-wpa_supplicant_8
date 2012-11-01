@@ -64,6 +64,21 @@
 #ifdef ANDROID_P2P
 static int wpas_global_scan_in_progress(struct wpa_supplicant *wpa_s);
 #endif
+
+enum p2p_group_removal_reason {
+	P2P_GROUP_REMOVAL_UNKNOWN,
+	P2P_GROUP_REMOVAL_SILENT,
+	P2P_GROUP_REMOVAL_FORMATION_FAILED,
+	P2P_GROUP_REMOVAL_REQUESTED,
+	P2P_GROUP_REMOVAL_IDLE_TIMEOUT,
+	P2P_GROUP_REMOVAL_UNAVAILABLE,
+#ifdef ANDROID_P2P
+	P2P_GROUP_REMOVAL_FREQ_CONFLICT,
+#endif
+	P2P_GROUP_REMOVAL_GO_ENDING_SESSION
+};
+
+
 static void wpas_p2p_long_listen_timeout(void *eloop_ctx, void *timeout_ctx);
 static struct wpa_supplicant *
 wpas_p2p_get_group_iface(struct wpa_supplicant *wpa_s, int addr_allocated,
@@ -245,7 +260,8 @@ static struct wpa_supplicant * wpas_get_p2p_group(struct wpa_supplicant *wpa_s,
 }
 
 
-static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
+static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s,
+				 enum p2p_group_removal_reason removal_reason)
 {
 	struct wpa_ssid *ssid;
 	char *gtype;
@@ -266,11 +282,6 @@ static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 			ssid = ssid->next;
 		}
 		if (ssid == NULL) {
-			/*
-			 * Reset wpa_s->removal_reason to the default unknown
-			 * state.
-			 */
-			wpa_s->removal_reason = P2P_GROUP_REMOVAL_UNKNOWN;
 			wpa_printf(MSG_ERROR, "P2P: P2P group interface "
 				   "not found");
 			return -1;
@@ -293,9 +304,12 @@ static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 			P2P_EVENT_CROSS_CONNECT_DISABLE "%s %s",
 			wpa_s->ifname, wpa_s->cross_connect_uplink);
 	}
-	switch (wpa_s->removal_reason) {
+	switch (removal_reason) {
 	case P2P_GROUP_REMOVAL_REQUESTED:
 		reason = " reason=REQUESTED";
+		break;
+	case P2P_GROUP_REMOVAL_FORMATION_FAILED:
+		reason = " reason=FORMATION_FAILED";
 		break;
 	case P2P_GROUP_REMOVAL_IDLE_TIMEOUT:
 		reason = " reason=IDLE";
@@ -315,7 +329,7 @@ static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 		reason = "";
 		break;
 	}
-	if (!silent) {
+	if (removal_reason != P2P_GROUP_REMOVAL_SILENT) {
 		wpa_msg(wpa_s->parent, MSG_INFO,
 			P2P_EVENT_GROUP_REMOVED "%s %s%s",
 			wpa_s->ifname, gtype, reason);
@@ -324,7 +338,7 @@ static int wpas_p2p_group_delete(struct wpa_supplicant *wpa_s, int silent)
 	if (eloop_cancel_timeout(wpas_p2p_group_idle_timeout, wpa_s, NULL) > 0)
 		wpa_printf(MSG_DEBUG, "P2P: Cancelled P2P group idle timeout");
 
-	if (!silent && ssid)
+	if (removal_reason != P2P_GROUP_REMOVAL_SILENT && ssid)
 		wpas_notify_p2p_group_removed(wpa_s, ssid, gtype);
 
 	if (wpa_s->p2p_group_interface != NOT_P2P_GROUP_INTERFACE) {
@@ -593,7 +607,8 @@ static void wpas_group_formation_completed(struct wpa_supplicant *wpa_s,
 		wpas_p2p_unblock_concurrent_scan(wpa_s);
 		wpa_msg(wpa_s->parent, MSG_INFO,
 			P2P_EVENT_GROUP_FORMATION_FAILURE);
-		wpas_p2p_group_delete(wpa_s, 0);
+		wpas_p2p_group_delete(wpa_s,
+				      P2P_GROUP_REMOVAL_FORMATION_FAILED);
 		return;
 	}
 
@@ -4312,10 +4327,9 @@ static void wpas_p2p_group_idle_timeout(void *eloop_ctx, void *timeout_ctx)
 		return;
 	}
 
-	wpa_printf(MSG_DEBUG, "P2P: Group idle timeout reached - terminate %d"
-		   "group",wpa_s->conf->p2p_group_idle);
-	wpa_s->removal_reason = P2P_GROUP_REMOVAL_IDLE_TIMEOUT;
-	wpas_p2p_group_delete(wpa_s, 0);
+	wpa_printf(MSG_DEBUG, "P2P: Group idle timeout reached - terminate "
+		   "group");
+	wpas_p2p_group_delete(wpa_s, P2P_GROUP_REMOVAL_IDLE_TIMEOUT);
 }
 
 
@@ -4392,8 +4406,8 @@ void wpas_p2p_deauth_notif(struct wpa_supplicant *wpa_s, const u8 *bssid,
 	    wpa_s->current_ssid->mode == WPAS_MODE_INFRA) {
 		wpa_printf(MSG_DEBUG, "P2P: GO indicated that the P2P Group "
 			   "session is ending");
-		wpa_s->removal_reason = P2P_GROUP_REMOVAL_GO_ENDING_SESSION;
-		wpas_p2p_group_delete(wpa_s, 0);
+		wpas_p2p_group_delete(wpa_s,
+				      P2P_GROUP_REMOVAL_GO_ENDING_SESSION);
 	}
 }
 
@@ -4768,7 +4782,8 @@ int wpas_p2p_cancel(struct wpa_supplicant *wpa_s)
 				wpas_group_formation_completed(wpa_s, 0);
 				break;
 			}
-			wpas_p2p_group_delete(wpa_s, 0);
+			wpas_p2p_group_delete(wpa_s,
+					      P2P_GROUP_REMOVAL_REQUESTED);
 			break;
 		}
 	}
@@ -4789,8 +4804,7 @@ void wpas_p2p_interface_unavailable(struct wpa_supplicant *wpa_s)
 
 	wpa_printf(MSG_DEBUG, "P2P: Remove group due to driver resource not "
 		   "being available anymore");
-	wpa_s->removal_reason = P2P_GROUP_REMOVAL_UNAVAILABLE;
-	wpas_p2p_group_delete(wpa_s, 0);
+	wpas_p2p_group_delete(wpa_s, P2P_GROUP_REMOVAL_UNAVAILABLE);
 }
 
 
@@ -4836,9 +4850,7 @@ int wpas_p2p_disconnect(struct wpa_supplicant *wpa_s)
 	if (wpa_s == NULL)
 		return -1;
 
-	wpa_s->removal_reason = P2P_GROUP_REMOVAL_REQUESTED;
-
-	return wpas_p2p_group_delete(wpa_s, 0);
+	return wpas_p2p_group_delete(wpa_s, P2P_GROUP_REMOVAL_REQUESTED);
 }
 
 
@@ -4923,7 +4935,7 @@ static void wpas_p2p_fallback_to_go_neg(struct wpa_supplicant *wpa_s,
 	wpa_s = wpa_s->parent;
 	offchannel_send_action_done(wpa_s);
 	if (group_added)
-		wpas_p2p_group_delete(group, 1);
+		wpas_p2p_group_delete(group, P2P_GROUP_REMOVAL_SILENT);
 	wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Fall back to GO Negotiation");
 	wpas_p2p_connect(wpa_s, wpa_s->pending_join_dev_addr, wpa_s->p2p_pin,
 			 wpa_s->p2p_wps_method, wpa_s->p2p_persistent_group, 0,
@@ -4978,8 +4990,7 @@ int wpas_p2p_handle_frequency_conflicts(struct wpa_supplicant *wpa_s, int freq)
 				 * P2P connection. So remove the interface */
 				wpa_printf(MSG_DEBUG, "P2P: Removing P2P connection due to Single channel"
 						"concurrent mode frequency conflict");
-				iface->removal_reason = P2P_GROUP_REMOVAL_FREQ_CONFLICT;
-				wpas_p2p_group_delete(iface, 1);
+				wpas_p2p_group_delete(iface, P2P_GROUP_REMOVAL_FREQ_CONFLICT);
 			} else {
 				/* Existing connection has the priority. Disable the newly
                  * selected network and let the application know about it.
