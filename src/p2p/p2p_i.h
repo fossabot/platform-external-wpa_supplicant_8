@@ -445,6 +445,10 @@ struct p2p_data {
 	 */
 	int pd_retries;
 
+	u8 go_timeout;
+	u8 client_timeout;
+
+
 #ifdef CONFIG_WFD
 	/**
 	* wfd - WFD module data
