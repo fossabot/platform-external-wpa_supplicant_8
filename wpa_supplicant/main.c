@@ -270,7 +270,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (exitcode == 0) {
+#ifdef ANDROID
 		property_set("wifi.wpa_supp_ready", "1");
+#endif
 		exitcode = wpa_supplicant_run(global);
         }
 	wpa_supplicant_deinit(global);
