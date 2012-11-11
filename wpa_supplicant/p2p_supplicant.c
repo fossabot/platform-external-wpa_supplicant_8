@@ -97,7 +97,7 @@ static void wpas_p2p_group_formation_timeout(void *eloop_ctx,
 					     void *timeout_ctx);
 static void wpas_p2p_fallback_to_go_neg(struct wpa_supplicant *wpa_s,
 					int group_added);
-
+static int wpas_p2p_stop_find_oper(struct wpa_supplicant *wpa_s);
 
 static void wpas_p2p_scan_res_handler(struct wpa_supplicant *wpa_s,
 				      struct wpa_scan_results *scan_res)
@@ -3952,7 +3952,7 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 
 	/* Make sure we are not running find during connection establishment */
 	wpa_printf(MSG_DEBUG, "P2P: Stop any on-going P2P FIND");
-	wpas_p2p_stop_find(wpa_s);
+	wpas_p2p_stop_find_oper(wpa_s);
 
 	if (freq == 2) {
 		wpa_printf(MSG_DEBUG, "P2P: Request to start GO on 2.4 GHz "
@@ -4084,7 +4084,7 @@ int wpas_p2p_group_add_persistent(struct wpa_supplicant *wpa_s,
 	}
 
 	/* Make sure we are not running find during connection establishment */
-	wpas_p2p_stop_find(wpa_s);
+	wpas_p2p_stop_find_oper(wpa_s);
 
 	wpa_s->p2p_fallback_to_go_neg = 0;
 
@@ -4353,7 +4353,7 @@ int wpas_p2p_find(struct wpa_supplicant *wpa_s, unsigned int timeout,
 }
 
 
-void wpas_p2p_stop_find(struct wpa_supplicant *wpa_s)
+static int wpas_p2p_stop_find_oper(struct wpa_supplicant *wpa_s)
 {
 	wpas_p2p_clear_pending_action_tx(wpa_s);
 	wpa_s->p2p_long_listen = 0;
@@ -4363,12 +4363,20 @@ void wpas_p2p_stop_find(struct wpa_supplicant *wpa_s)
 
 	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_P2P_MGMT) {
 		wpa_drv_p2p_stop_find(wpa_s);
-		return;
+		return 1;
 	}
 
 	if (wpa_s->global->p2p)
 		p2p_stop_find(wpa_s->global->p2p);
 
+	return 0;
+}
+
+
+void wpas_p2p_stop_find(struct wpa_supplicant *wpa_s)
+{
+	if (wpas_p2p_stop_find_oper(wpa_s) > 0)
+		return;
 	wpas_p2p_remove_pending_group_interface(wpa_s);
 }
 
