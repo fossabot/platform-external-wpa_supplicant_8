@@ -1524,6 +1524,7 @@ endif
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
+LOCAL_STATIC_LIBRARIES += lib_driver_cmd_qcwcn
 include $(BUILD_EXECUTABLE)
 
 ########################
