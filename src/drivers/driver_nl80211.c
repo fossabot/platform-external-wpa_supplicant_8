@@ -2045,6 +2045,10 @@ static void nl80211_spurious_frame(struct i802_bss *bss, struct nlattr **tb,
 	wpa_supplicant_event(drv->ctx, EVENT_RX_FROM_UNKNOWN, &event);
 }
 
+#ifdef CONFIG_WIFI_DISC
+static void nl80211_testmode_event(struct wpa_driver_nl80211_data *drv,
+				       struct nlattr *tb);
+#endif
 
 static void do_process_drv_event(struct wpa_driver_nl80211_data *drv,
 				 int cmd, struct nlattr **tb)
@@ -2155,6 +2159,11 @@ static void do_process_drv_event(struct wpa_driver_nl80211_data *drv,
 	case NL80211_CMD_PROBE_CLIENT:
 		nl80211_client_probe_event(drv, tb);
 		break;
+#ifdef CONFIG_WIFI_DISC
+	case NL80211_CMD_TESTMODE:
+		nl80211_testmode_event(drv, tb[NL80211_ATTR_TESTDATA]);
+		break;
+#endif
 	default:
 		wpa_printf(MSG_DEBUG, "nl80211: Ignored unknown event "
 			   "(cmd=%d)", cmd);
@@ -2721,6 +2730,16 @@ static int wpa_driver_nl80211_init_nl_global(struct nl80211_global *global)
 		/* Continue without regulatory events */
 	}
 
+#ifdef CONFIG_WIFI_DISC
+	ret = nl_get_multicast_id(global, "nl80211", "testmode");
+	if (ret >= 0)
+		ret = nl_socket_add_membership(global->nl_event, ret);
+	if (ret < 0) {
+		wpa_printf(MSG_ERROR, "nl80211: Could not add multicast "
+			   "membership for testmode events: %d (%s)",
+			   ret, strerror(-ret));
+	}
+#endif
 	nl_cb_set(global->nl_cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM,
 		  no_seq_check, NULL);
 	nl_cb_set(global->nl_cb, NL_CB_VALID, NL_CB_CUSTOM,
@@ -9159,6 +9178,568 @@ static int wpa_driver_nl80211_set_countermeasures(void *priv,
 }
 #endif /* ANDROID_QCOM_PATCH */
 
+#if defined(CONFIG_WIFI_DISC) || defined(CONFIG_WIFI_KTK)
+enum nl80211_testmode_attr {
+	NL80211_TEST_MODE_ATTR_INVALID  = 0,
+	NL80211_TEST_MODE_ATTR_CMD      = 1,
+	NL80211_TEST_MODE_ATTR_DATA     = 2,
+
+	/* keep last */
+	NL80211_TEST_MODE_ATTR_AFTER_LAST,
+	NL80211_TEST_MODE_ATTR_MAX	= NL80211_TEST_MODE_ATTR_AFTER_LAST - 1
+};
+
+enum nl80211_testmode_cmd {
+	NL80211_TEST_MODE_TCMD          = 0,
+	NL80211_TEST_MODE_WLAN_HB_CMD   = 1,
+	NL80211_TEST_MODE_WIFI_DISC_CMD = 2,
+	NL80211_TEST_MODE_WIFI_KTK_CMD  = 3,
+};
+
+#define NL80211_TEST_MODE_DATA_MAX_LEN		5000
+
+static struct nla_policy ath6kl_tm_policy[NL80211_TEST_MODE_ATTR_MAX + 1] = {
+	[NL80211_TEST_MODE_ATTR_CMD]		= { .type = NLA_U32 },
+	[NL80211_TEST_MODE_ATTR_DATA]		= { .minlen = 0,
+						    .maxlen = NL80211_TEST_MODE_DATA_MAX_LEN,
+						  },
+};
+
+static int nl80211_set_wowlan_magic_pkt(struct i802_bss *bss)
+{
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *wowlan;
+
+	msg = nlmsg_alloc();
+	if (!msg) {
+		return -ENOMEM;
+	}
+
+	nl80211_cmd(drv, msg, 0, NL80211_CMD_SET_WOWLAN);
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+
+	wowlan = nla_nest_start(msg, NL80211_ATTR_WOWLAN_TRIGGERS);
+	if (!wowlan)
+		return -ENOBUFS;
+
+	NLA_PUT_FLAG(msg, NL80211_WOWLAN_TRIG_MAGIC_PKT);
+
+	nla_nest_end(msg, wowlan);
+
+	return send_and_recv_msgs(drv, msg, NULL, NULL);
+nla_put_failure:
+	nlmsg_free(msg);
+	return -ENOBUFS;
+}
+#endif
+
+#ifdef CONFIG_WIFI_DISC
+#define WLAN_WIFI_DISC_MAX_IE_SIZE	200
+
+enum nl80211_wifi_disc_cmd {
+	NL80211_WIFI_DISC_IE        = 0,
+	NL80211_WIFI_DISC_IE_FILTER = 1,
+	NL80211_WIFI_DISC_START     = 2,
+	NL80211_WIFI_DISC_STOP      = 3,
+};
+
+struct wifi_disc_params {
+	u16 cmd;
+
+	union {
+		struct {
+			u16 length;
+			u8 ie[WLAN_WIFI_DISC_MAX_IE_SIZE];
+		} ie_params;
+
+		struct {
+			u16 enable;
+			u16 startPos;
+			u16 length;
+			u8 filter[WLAN_WIFI_DISC_MAX_IE_SIZE];
+		} ie_filter_params;
+
+		struct {
+			u16 channel;
+			u16 dwellTime;
+			u16 sleepTime;
+			u16 random;
+			u16 numPeers;
+			u16 peerTimeout;
+			u16 txPower;
+		} start_params;
+	} params;
+};
+
+static void nl80211_testmode_event(struct wpa_driver_nl80211_data *drv,
+				       struct nlattr *tb)
+{
+	struct nlattr *td[NL80211_TEST_MODE_ATTR_MAX + 1];
+	void *buf;
+	int len;
+	union wpa_event_data event;
+
+	nla_parse(td, NL80211_TEST_MODE_ATTR_MAX, nla_data(tb),
+		  nla_len(tb), ath6kl_tm_policy);
+
+	if (!td[NL80211_TEST_MODE_ATTR_CMD])
+		return;
+
+	switch (nla_get_u32(td[NL80211_TEST_MODE_ATTR_CMD])) {
+	case NL80211_TEST_MODE_WIFI_DISC_CMD:
+		if (!td[NL80211_TEST_MODE_ATTR_DATA]) {
+			wpa_printf(MSG_DEBUG, "no data in testmode event\n");
+			return;
+		}
+		buf = nla_data(td[NL80211_TEST_MODE_ATTR_DATA]);
+		len = nla_len(td[NL80211_TEST_MODE_ATTR_DATA]);
+
+		os_memset(&event, 0, sizeof(event));
+		os_memcpy(&event.disc_peer_event, buf, len);
+
+		wpa_supplicant_event(drv->ctx, EVENT_WIFI_DISC_PEER, &event);
+
+		break;
+	default:
+		break;
+	}
+}
+
+static int nl80211_wifi_disc_cmd(void *priv, char *cmd, char *buf,
+                size_t buf_len)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *nest;
+	struct wifi_disc_params *disc_params;
+	int ret = -1;
+
+	disc_params = os_malloc(sizeof(struct wifi_disc_params));
+
+	if (disc_params == NULL) {
+		return -ENOMEM;
+	}
+
+	msg = nlmsg_alloc();
+	if (!msg) {
+		os_free(disc_params);
+		return -ENOMEM;
+	}
+
+	nl80211_cmd(drv, msg, 0, NL80211_CMD_TESTMODE);
+
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+
+	nest = nla_nest_start(msg, NL80211_ATTR_TESTDATA);
+	if (!nest) {
+		wpa_printf(MSG_ERROR, "failed to nest");
+		ret = -1;
+		goto out_free_msg;
+	}
+
+	if (os_strcasecmp(cmd, "DISC_IE") == 0) {
+		if (buf_len > WLAN_WIFI_DISC_MAX_IE_SIZE) {
+			ret = -E2BIG;
+			goto out_free_msg;
+		}
+
+		disc_params->cmd = NL80211_WIFI_DISC_IE;
+		disc_params->params.ie_params.length = buf_len;
+		os_memcpy(disc_params->params.ie_params.ie, buf, buf_len);
+	}
+	else if (os_strcasecmp(cmd, "DISC_IE_FILTER") == 0) {
+		u16 enable, startPos;
+		char *str = buf;
+		char *p;
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+		    goto out_free_msg;
+		enable = (atoi(p) == 0) ? 0 : 1;
+
+		if (enable == 1) {
+			p = strsep(&str, " ");
+			if (p == NULL)
+			    goto out_free_msg;
+			startPos = atoi(p);
+			disc_params->params.ie_filter_params.startPos = startPos;
+
+			p = strsep(&str, " ");
+			if (p == NULL)
+			    goto out_free_msg;
+			if ((startPos+os_strlen(p)) > WLAN_WIFI_DISC_MAX_IE_SIZE) {
+				ret = -E2BIG;
+				goto out_free_msg;
+			}
+			disc_params->params.ie_filter_params.length = os_strlen(p);
+			os_memcpy(disc_params->params.ie_filter_params.filter, p, os_strlen(p));
+		}
+
+		disc_params->cmd = NL80211_WIFI_DISC_IE_FILTER;
+		disc_params->params.ie_filter_params.enable = enable;
+	}
+	else if (os_strcasecmp(cmd, "DISC_START") == 0) {
+		u16 channel, dwellTime, sleepTime, random, numPeers, peerTimeout, txPower;
+		char *str = buf;
+		char *p;
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		channel = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		dwellTime = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		sleepTime = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		random = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		numPeers = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		peerTimeout = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+			goto out_free_msg;
+		txPower = atoi(p);
+
+		/* Set wowlan magic packet */
+		ret = nl80211_set_wowlan_magic_pkt(bss);
+		if (ret) {
+			goto out_free_msg;
+		}
+
+		disc_params->cmd = NL80211_WIFI_DISC_START;
+		disc_params->params.start_params.channel = channel;
+		disc_params->params.start_params.dwellTime = dwellTime;
+		disc_params->params.start_params.sleepTime = sleepTime;
+		disc_params->params.start_params.random = random;
+		disc_params->params.start_params.numPeers = numPeers;
+		disc_params->params.start_params.peerTimeout = peerTimeout;
+		disc_params->params.start_params.txPower = txPower;
+	}
+	else if (os_strcasecmp(cmd, "DISC_STOP") == 0) {
+		disc_params->cmd = NL80211_WIFI_DISC_STOP;
+	}
+	else {
+		wpa_printf(MSG_INFO, "cmd: %s not suport", cmd);
+		goto out_free_msg;
+	}
+
+	NLA_PUT_U32(msg, NL80211_TEST_MODE_ATTR_CMD, NL80211_TEST_MODE_WIFI_DISC_CMD);
+	NLA_PUT(msg, NL80211_TEST_MODE_ATTR_DATA, sizeof(struct wifi_disc_params), disc_params);
+
+	nla_nest_end(msg, nest);
+
+        ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+
+	os_free(disc_params);
+	return ret;
+
+out_free_msg:
+nla_put_failure:
+
+	os_free(disc_params);
+	nlmsg_free(msg);
+	return ret;
+}
+#endif
+
+#ifdef CONFIG_WIFI_KTK
+#define WLAN_WIFI_KTK_MAX_IE_SIZE	200
+
+enum nl80211_wifi_ktk_cmd {
+	NL80211_WIFI_KTK_IE         = 0,
+	NL80211_WIFI_KTK_IE_FILTER  = 1,
+	NL80211_WIFI_KTK_START      = 2,
+	NL80211_WIFI_KTK_STOP       = 3,
+};
+
+struct wifi_ktk_params {
+	u16 cmd;
+
+	union {
+		struct {
+			u16 length;
+			u8 ie[WLAN_WIFI_KTK_MAX_IE_SIZE];
+		} ie_params;
+
+		struct {
+			u16 enable;
+			u16 startPos;
+			u16 length;
+			u8 filter[WLAN_WIFI_KTK_MAX_IE_SIZE];
+		} ie_filter_params;
+
+		struct {
+			u16 ssid_len;
+			u8 ssid[32];
+			u8 passphrase[16];
+		} start_params;
+	} params;
+};
+
+static int nl80211_channel_to_frequency(int chan, enum nl80211_band band)
+{
+	/* see 802.11 17.3.8.3.2 and Annex J
+	 * there are overlapping channel numbers in 5GHz and 2GHz bands */
+	if (band == NL80211_BAND_5GHZ) {
+		if (chan >= 182 && chan <= 196)
+			return 4000 + chan * 5;
+		else
+			return 5000 + chan * 5;
+	} else { /* NL80211_BAND_2GHZ */
+		if (chan == 14)
+			return 2484;
+		else if (chan < 14)
+			return 2407 + chan * 5;
+		else
+			return 0; /* not supported */
+	}
+}
+
+static int nl80211_wifi_ktk_cmd(void *priv, char *cmd, char *buf,
+                size_t buf_len)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *nest;
+	struct wifi_ktk_params *ktk_params;
+	int ret = -1;
+
+	/* Send out NL80211 TEST_MODE command to driver */
+	ktk_params = os_malloc(sizeof(struct wifi_ktk_params));
+
+	if (ktk_params == NULL) {
+		return -ENOMEM;
+	}
+
+	msg = nlmsg_alloc();
+	if (!msg) {
+		os_free(ktk_params);
+		return -ENOMEM;
+	}
+
+	nl80211_cmd(drv, msg, 0, NL80211_CMD_TESTMODE);
+
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+
+	nest = nla_nest_start(msg, NL80211_ATTR_TESTDATA);
+	if (!nest) {
+		wpa_printf(MSG_ERROR, "failed to nest");
+		ret = -1;
+		goto out_free_msg;
+	}
+
+	if (os_strcasecmp(cmd, "KTK_IE") == 0) {
+		if (buf_len > WLAN_WIFI_KTK_MAX_IE_SIZE) {
+			ret = -E2BIG;
+			goto out_free_msg;
+		}
+
+		ktk_params->cmd = NL80211_WIFI_KTK_IE;
+		ktk_params->params.ie_params.length = buf_len;
+		os_memcpy(ktk_params->params.ie_params.ie, buf, buf_len);
+
+		NLA_PUT_U32(msg, NL80211_TEST_MODE_ATTR_CMD, NL80211_TEST_MODE_WIFI_KTK_CMD);
+		NLA_PUT(msg, NL80211_TEST_MODE_ATTR_DATA, sizeof(struct wifi_ktk_params), ktk_params);
+
+		nla_nest_end(msg, nest);
+		ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+
+		os_free(ktk_params);
+		return ret;
+	}
+	else if (os_strcasecmp(cmd, "KTK_IE_FILTER") == 0) {
+		u16 enable, startPos;
+		char *str = buf;
+		char *p;
+
+		p = strsep(&str, " ");
+		if (p == NULL)
+		    goto out_free_msg;
+		enable = (atoi(p) == 0) ? 0 : 1;
+
+		if (enable == 1) {
+			p = strsep(&str, " ");
+			if (p == NULL)
+			    goto out_free_msg;
+			startPos = atoi(p);
+			ktk_params->params.ie_filter_params.startPos = startPos;
+
+			p = strsep(&str, " ");
+			if (p == NULL)
+			    goto out_free_msg;
+
+			if ((startPos+os_strlen(p)) > WLAN_WIFI_KTK_MAX_IE_SIZE) {
+				ret = -E2BIG;
+				goto out_free_msg;
+			}
+			ktk_params->params.ie_filter_params.length = os_strlen(p);
+			os_memcpy(ktk_params->params.ie_filter_params.filter, p, os_strlen(p));
+		}
+
+		ktk_params->cmd = NL80211_WIFI_KTK_IE_FILTER;
+		ktk_params->params.ie_filter_params.enable = enable;
+
+		NLA_PUT_U32(msg, NL80211_TEST_MODE_ATTR_CMD, NL80211_TEST_MODE_WIFI_KTK_CMD);
+		NLA_PUT(msg, NL80211_TEST_MODE_ATTR_DATA, sizeof(struct wifi_ktk_params), ktk_params);
+
+		nla_nest_end(msg, nest);
+		ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+
+		os_free(ktk_params);
+		return ret;
+	}
+	else if (os_strcasecmp(cmd, "KTK_START") == 0) {
+		struct wpa_driver_associate_params *params;
+		enum nl80211_band band;
+		u16 channel;
+		u8 ssid[32];
+		u8 ssid_len;
+		u8 passphrase[16];
+		char *str = buf;
+		char *p;
+
+		p = strsep(&str, " ");
+		if (p == NULL) {
+			ret = -1;
+			goto out_free_msg;
+		}
+
+		channel = atoi(p);
+
+		p = strsep(&str, " ");
+		if (p == NULL) {
+			ret = -1;
+			goto out_free_msg;
+		}
+
+		if (os_strlen(p) > 32) {
+			ret = -E2BIG;
+			goto out_free_msg;
+		}
+		ssid_len = os_strlen(p);
+		os_memset(ssid, 0, 32);
+		os_memcpy(ssid, p, ssid_len);
+
+		p = strsep(&str, " ");
+		if (p == NULL) {
+			ret = -1;
+			goto out_free_msg;
+		}
+		os_memcpy(passphrase, p, 16);
+
+		/* Set wowlan magic packet */
+		ret = nl80211_set_wowlan_magic_pkt(bss);
+		if (ret) {
+			goto out_free_msg;
+		}
+
+		/* Send ktk start command */
+		ktk_params->cmd = NL80211_WIFI_KTK_START;
+		os_memcpy(ktk_params->params.start_params.ssid, ssid, ssid_len);
+		ktk_params->params.start_params.ssid_len = ssid_len;
+		os_memcpy(ktk_params->params.start_params.passphrase, passphrase, 16);
+
+		NLA_PUT_U32(msg, NL80211_TEST_MODE_ATTR_CMD, NL80211_TEST_MODE_WIFI_KTK_CMD);
+		NLA_PUT(msg, NL80211_TEST_MODE_ATTR_DATA, sizeof(struct wifi_ktk_params), ktk_params);
+
+		nla_nest_end(msg, nest);
+		ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+		if (ret) {
+			goto nla_put_failure;
+		}
+
+		params = os_malloc(sizeof(struct wpa_driver_associate_params));
+		if (params == NULL) {
+			ret =-ENOMEM;
+			goto nla_put_failure;
+		}
+
+		/* Setup associate parameters */
+		os_memset(params, 0 , sizeof(struct wpa_driver_associate_params));
+
+		if (channel <= 14)
+			band = NL80211_BAND_2GHZ;
+		else
+			band = NL80211_BAND_5GHZ;
+
+		params->freq = nl80211_channel_to_frequency(channel, band);
+		params->ssid = ssid;
+		params->ssid_len = ssid_len;
+
+		ret = wpa_driver_nl80211_ibss(drv, params);
+
+		os_free(params);
+		os_free(ktk_params);
+		return ret;
+	}
+	else if (os_strcasecmp(cmd, "KTK_STOP") == 0) {
+		/* Send ktk stop command */
+		ktk_params->cmd = NL80211_WIFI_KTK_STOP;
+
+		NLA_PUT_U32(msg, NL80211_TEST_MODE_ATTR_CMD, NL80211_TEST_MODE_WIFI_KTK_CMD);
+		NLA_PUT(msg, NL80211_TEST_MODE_ATTR_DATA, sizeof(struct wifi_ktk_params), ktk_params);
+
+		nla_nest_end(msg, nest);
+		ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+		if (ret) {
+			goto nla_put_failure;
+		}
+
+		/* Send ibss leave command */
+		if ((ret = nl80211_leave_ibss(drv))) {
+			wpa_printf(MSG_INFO, "nl80211: Stop KTK mode failed");
+			goto nla_put_failure;
+		}
+
+		/* Reset if back to station mode */
+		if (wpa_driver_nl80211_set_mode(&drv->first_bss,
+					NL80211_IFTYPE_STATION)) {
+			wpa_printf(MSG_INFO, "nl80211: Failed to set interface into "
+				   "Managed mode");
+			ret = -1;
+			goto nla_put_failure;
+		}
+
+		wpa_printf(MSG_INFO, "nl80211: Stop KTK mode successfully");
+
+		os_free(ktk_params);
+		return ret;
+	}
+	else {
+		wpa_printf(MSG_INFO, "cmd: %s not suport", cmd);
+		goto out_free_msg;
+	}
+
+out_free_msg:
+	nlmsg_free(msg);
+nla_put_failure:
+	os_free(ktk_params);
+
+	return ret;
+}
+#endif
+
 const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.name = "nl80211",
 	.desc = "Linux nl80211/cfg80211",
@@ -9242,5 +9823,11 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 #endif
 #ifdef ANDROID
 	.driver_cmd = wpa_driver_nl80211_driver_cmd,
+#endif
+#ifdef CONFIG_WIFI_DISC
+	.wifi_disc_cmd = nl80211_wifi_disc_cmd,
+#endif
+#ifdef CONFIG_WIFI_KTK
+	.wifi_ktk_cmd = nl80211_wifi_ktk_cmd,
 #endif
 };

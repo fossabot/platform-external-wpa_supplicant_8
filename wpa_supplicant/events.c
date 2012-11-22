@@ -40,6 +40,9 @@
 #include "scan.h"
 #include "offchannel.h"
 #include "interworking.h"
+#ifdef CONFIG_WIFI_DISC
+#include <time.h>
+#endif
 
 
 static int wpa_supplicant_select_config(struct wpa_supplicant *wpa_s)
@@ -2702,6 +2705,32 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpas_wps_start_pbc(wpa_s, NULL, 0);
 #endif /* CONFIG_WPS */
 		break;
+#ifdef CONFIG_WIFI_DISC
+	case EVENT_WIFI_DISC_PEER:
+	{
+		/* temporarily print out message */
+		struct wmi_disc_peer {
+			int rssi;
+			u8 addr[ETH_ALEN];
+		} __attribute__((packed));
+		struct wmi_disc_peer *peers = (struct wmi_disc_peer *)data->disc_peer_event.peer_data;
+		int i;
+		time_t t;
+		struct tm *tm;
+
+		t = time(NULL);
+		tm = localtime(&t);
+		wpa_msg(wpa_s, MSG_INFO, "EVENT_DISC_PEER num=%d timestamp=%d:%d:%d\n",
+					data->disc_peer_event.peer_num, tm->tm_hour, tm->tm_min, tm->tm_sec);
+		for (i=0; i< data->disc_peer_event.peer_num; i++) {
+			wpa_msg(wpa_s, MSG_INFO, "%d %x:%x:%x:%x:%x:%x rssi=%d \n", i+1,
+				peers[i].addr[0], peers[i].addr[1], peers[i].addr[2], peers[i].addr[3],
+				peers[i].addr[4], peers[i].addr[5], peers[i].rssi);
+		}
+
+		break;
+	}
+#endif /* CONFIG_WIFI_DISC */
 	default:
 		wpa_msg(wpa_s, MSG_INFO, "Unknown event %d", event);
 		break;

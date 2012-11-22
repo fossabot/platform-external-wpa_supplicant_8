@@ -2521,6 +2521,32 @@ struct wpa_driver_ops {
 	 */
 	int (*switch_channel)(void *priv, unsigned int freq);
 #endif
+
+#ifdef CONFIG_WIFI_DISC
+	/**
+	 * wifi_disc_cmd - execute wifi discovery command
+	 * @priv: private driver interface data
+	 * @cmd: command to execute
+	 * @buf: return buffer
+	 * @buf_len: buffer length
+	 *
+	 * Returns: 0 on success, negative (<0) on failure
+	 */
+	int (*wifi_disc_cmd)(void *priv, char *cmd, char *buf, size_t buf_len);
+#endif
+
+#ifdef CONFIG_WIFI_KTK
+	/**
+	 * wifi_ktk_cmd - execute wifi ktk command
+	 * @priv: private driver interface data
+	 * @cmd: command to execute
+	 * @buf: return buffer
+	 * @buf_len: buffer length
+	 *
+	 * Returns: 0 on success, negative (<0) on failure
+	 */
+	int (*wifi_ktk_cmd)(void *priv, char *cmd, char *buf, size_t buf_len);
+#endif
 };
 
 
@@ -2951,7 +2977,12 @@ enum wpa_event_type {
 	/**
 	 * EVENT_EAPOL_TX_STATUS - notify of EAPOL TX status
 	 */
-	EVENT_EAPOL_TX_STATUS
+	EVENT_EAPOL_TX_STATUS,
+
+	/**
+	 * EVENT_DISC_PEER - notify of wifi discovery peer report
+	 */
+	EVENT_WIFI_DISC_PEER,
 };
 
 
@@ -3541,6 +3572,18 @@ union wpa_event_data {
 		int data_len;
 		int ack;
 	} eapol_tx_status;
+
+#ifdef CONFIG_WIFI_DISC
+	/**
+	 * struct disc_peer_event
+	 * @peer_num: peer number
+	 * @peer_data: peer data
+	 */
+	struct disc_peer_event {
+		u8 peer_num;
+		u8 peer_data[1];
+	} disc_peer_event;
+#endif
 };
 
 /**

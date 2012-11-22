@@ -2059,6 +2059,147 @@ static int wpa_cli_cmd_driver(struct wpa_ctrl *ctrl, int argc, char *argv[])
 }
 #endif
 
+#ifdef CONFIG_WIFI_DISC
+static int wpa_cli_cmd_disc_ie(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+
+	if (argc != 1) {
+		printf("Invalid DISC_IE command: needs one argument (cmd)\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "DISC_IE %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_disc_ie_filter(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+
+	if (argc < 1) {
+		printf("Invalid DISC_IE_FILTER command: needs one argument (cmd)\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "DISC_IE_FILTER %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_disc_start(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+
+	if (argc != 7) {
+		printf("Invalid DISC_START command: needs seven argument (cmd)\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "DISC_START %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_disc_stop(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	return wpa_ctrl_command(ctrl, "DISC_STOP ");
+}
+#endif
+
+#ifdef CONFIG_WIFI_KTK
+static int wpa_cli_cmd_ktk_ie(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+
+	if (argc != 1) {
+		printf("Invalid KTK_IE command: needs one argument (cmd)\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "KTK_IE %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_ktk_ie_filter(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+
+	if (argc < 1) {
+		printf("Invalid KTK_IE_FILTER command: needs one argument (cmd)\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "KTK_IE_FILTER %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_ktk_start(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	char cmd[256];
+	int i;
+	int len;
+	int channel;
+
+	if (argc != 3) {
+		printf("Invalid KTK_START command: needs three argument (cmd)\n");
+		return -1;
+	}
+
+	channel = atoi(argv[0]);
+
+	if (channel > 11 || channel < 1) {
+		printf("Invalid KTK_START command: only channel 1 ~ 11 are supported\n");
+		return -1;
+	}
+
+	if (os_strlen(argv[2]) != 16) {
+		printf("Invalid KTK_START command: passphrase's length must be 16 bytes\n");
+		return -1;
+	}
+
+	len = os_snprintf(cmd, sizeof(cmd), "KTK_START %s", argv[0]);
+	for (i=1; i < argc; i++)
+		len += os_snprintf(cmd + len, sizeof(cmd) - len, " %s", argv[i]);
+	cmd[sizeof(cmd) - 1] = '\0';
+
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+static int wpa_cli_cmd_ktk_stop(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	return wpa_ctrl_command(ctrl, "KTK_STOP ");
+}
+#endif
+
 enum wpa_cli_cmd_flags {
 	cli_cmd_flag_none		= 0x00,
 	cli_cmd_flag_sensitive		= 0x01
@@ -2436,6 +2577,34 @@ static struct wpa_cli_cmd wpa_cli_commands[] = {
 	{ "driver", wpa_cli_cmd_driver,
 	  cli_cmd_flag_none,
 	  "<command> = driver private commands" },
+#endif
+#ifdef CONFIG_WIFI_DISC
+	{ "disc_ie", wpa_cli_cmd_disc_ie,
+	  cli_cmd_flag_none,
+	  "<ie> = set discovery probe ie" },
+	{ "disc_ie_filter", wpa_cli_cmd_disc_ie_filter,
+	  cli_cmd_flag_none,
+	  "<0/1> [<startPos> <pattern>] = disable/enable discovery probe ie filter"},
+	{ "disc_start", wpa_cli_cmd_disc_start,
+	  cli_cmd_flag_none,
+	  "<channel> <dwellTime> <sleepTime> <random> <numPeers> <peerTimeout> <txPower> = start discovery mode" },
+	{ "disc_stop", wpa_cli_cmd_disc_stop,
+	  cli_cmd_flag_none,
+	  "= stop discovery mode" },
+#endif
+#ifdef CONFIG_WIFI_KTK
+	{ "ktk_ie", wpa_cli_cmd_ktk_ie,
+	  cli_cmd_flag_none,
+	  "<ie> = set Kindle-to-Kindle probe ie" },
+	{ "ktk_ie_filter", wpa_cli_cmd_ktk_ie_filter,
+	  cli_cmd_flag_none,
+	  "<0/1> [<startPos> <pattern>] = disable/enable Kindle-to-Kindle probe ie filter"},
+	{ "ktk_start", wpa_cli_cmd_ktk_start,
+	  cli_cmd_flag_none,
+	  "<channel> <ssid> <passphrase> = start Kindle-to-Kindle mode" },
+	{ "ktk_stop", wpa_cli_cmd_ktk_stop,
+	  cli_cmd_flag_none,
+	  "= stop Kindle-to-Kindle mode" },
 #endif
 	{ NULL, NULL, cli_cmd_flag_none, NULL }
 };
