@@ -465,6 +465,9 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpa_s->gas = NULL;
 
 	free_hw_features(wpa_s);
+
+	os_free(wpa_s->last_scan_res);
+	wpa_s->last_scan_res = NULL;
 }
 
 
