@@ -251,6 +251,14 @@ ifdef CONFIG_NO_WPA2
 CFLAGS += -DCONFIG_NO_WPA2
 endif
 
+ifdef CONFIG_WIFI_DISC
+CFLAGS += -DCONFIG_WIFI_DISC
+endif
+
+ifdef CONFIG_WIFI_KTK
+CFLAGS += -DCONFIG_WIFI_KTK
+endif
+
 include ../src/drivers/drivers.mak
 ifdef CONFIG_AP
 OBJS_d += $(DRV_BOTH_OBJS)
