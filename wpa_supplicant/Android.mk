@@ -268,6 +268,14 @@ ifdef CONFIG_NO_WPA2
 L_CFLAGS += -DCONFIG_NO_WPA2
 endif
 
+ifdef CONFIG_WIFI_DISC
+L_CFLAGS += -DCONFIG_WIFI_DISC
+endif
+
+ifdef CONFIG_WIFI_KTK
+L_CFLAGS += -DCONFIG_WIFI_KTK
+endif
+
 include $(LOCAL_PATH)/src/drivers/drivers.mk
 
 ifdef CONFIG_AP
