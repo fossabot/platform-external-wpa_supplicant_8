@@ -1039,10 +1039,11 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 #ifdef ANDROID_P2P
 	if (p2p_search_pending(wpa_s->global->p2p) && !wpa_s->global->p2p_disabled &&
 #else
-	if (wpa_s->p2p_cb_on_scan_complete && !wpa_s->global->p2p_disabled &&
+	if (wpa_s->global->p2p_cb_on_scan_complete &&
+	    !wpa_s->global->p2p_disabled &&
 #endif
 	    wpa_s->global->p2p != NULL && !wpa_s->sta_scan_pending) {
-		wpa_s->p2p_cb_on_scan_complete = 0;
+		wpa_s->global->p2p_cb_on_scan_complete = 0;
 		if (p2p_other_scan_completed(wpa_s->global->p2p) == 1) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Pending P2P operation "
 				"stopped scan processing");
@@ -2267,11 +2268,11 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 	case EVENT_SCAN_RESULTS:
 		wpa_supplicant_event_scan_results(wpa_s, data);
 #ifdef CONFIG_P2P
-	if (wpa_s->p2p_cb_on_scan_complete && !wpa_s->global->p2p_disabled &&
+	if (wpa_s->global->p2p_cb_on_scan_complete && !wpa_s->global->p2p_disabled &&
 	    wpa_s->global->p2p != NULL &&
 	    wpa_s->wpa_state != WPA_AUTHENTICATING &&
 	    wpa_s->wpa_state != WPA_ASSOCIATING) {
-		wpa_s->p2p_cb_on_scan_complete = 0;
+		wpa_s->global->p2p_cb_on_scan_complete = 0;
 		if (p2p_other_scan_completed(wpa_s->global->p2p) == 1) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Pending P2P operation "
 				"continued after scan result processing");
