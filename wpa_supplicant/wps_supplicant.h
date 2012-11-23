@@ -9,8 +9,6 @@
 #ifndef WPS_SUPPLICANT_H
 #define WPS_SUPPLICANT_H
 
-struct wpa_scan_res;
-
 #ifdef CONFIG_WPS
 
 #include "wps/wps.h"
@@ -93,7 +91,7 @@ static inline int wpas_wps_ssid_bss_match(struct wpa_supplicant *wpa_s,
 
 static inline int wpas_wps_ssid_wildcard_ok(struct wpa_supplicant *wpa_s,
 					    struct wpa_ssid *ssid,
-					    struct wpa_scan_res *bss)
+					    struct wpa_bss *bss)
 {
 	return 0;
 }
