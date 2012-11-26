@@ -4283,7 +4283,7 @@ static void wpas_p2p_group_idle_timeout(void *eloop_ctx, void *timeout_ctx)
 
 static void wpas_p2p_set_group_idle_timeout(struct wpa_supplicant *wpa_s)
 {
-	unsigned int timeout;
+	int timeout;
 
 	eloop_cancel_timeout(wpas_p2p_group_idle_timeout, wpa_s, NULL);
 	if (wpa_s->current_ssid == NULL || !wpa_s->current_ssid->p2p_group)
