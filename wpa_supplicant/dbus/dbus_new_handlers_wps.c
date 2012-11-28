@@ -202,7 +202,7 @@ static int wpas_dbus_handler_wps_start_entry(DBusMessage *message, char *key,
 						   params, reply);
 	else if (os_strcmp(key, "Pin") == 0)
 		return wpas_dbus_handler_wps_pin(message, entry_iter,
-						 params, reply);
+						 params, reply, 0);
 #ifdef CONFIG_P2P
 	else if (os_strcmp(key, "P2PDeviceAddress") == 0)
 		return wpas_dbus_handler_wps_p2p_dev_addr(message, entry_iter,
