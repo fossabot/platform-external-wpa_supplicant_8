@@ -9,7 +9,6 @@
 #ifndef WPS_SUPPLICANT_H
 #define WPS_SUPPLICANT_H
 
-struct wpa_scan_res;
 struct wpa_scan_results;
 
 #ifdef CONFIG_WPS
@@ -40,9 +39,9 @@ int wpas_wps_start_oob(struct wpa_supplicant *wpa_s, char *device_type,
 int wpas_wps_start_reg(struct wpa_supplicant *wpa_s, const u8 *bssid,
 		       const char *pin, struct wps_new_ap_settings *settings);
 int wpas_wps_ssid_bss_match(struct wpa_supplicant *wpa_s,
-			    struct wpa_ssid *ssid, struct wpa_scan_res *bss);
+			    struct wpa_ssid *ssid, struct wpa_bss *bss);
 int wpas_wps_ssid_wildcard_ok(struct wpa_supplicant *wpa_s,
-			      struct wpa_ssid *ssid, struct wpa_scan_res *bss);
+			      struct wpa_ssid *ssid, struct wpa_bss *bss);
 int wpas_wps_scan_pbc_overlap(struct wpa_supplicant *wpa_s,
 			      struct wpa_bss *selected, struct wpa_ssid *ssid);
 void wpas_wps_notify_scan_results(struct wpa_supplicant *wpa_s);
@@ -90,14 +89,14 @@ static inline u8 wpas_wps_get_req_type(struct wpa_ssid *ssid)
 
 static inline int wpas_wps_ssid_bss_match(struct wpa_supplicant *wpa_s,
 					  struct wpa_ssid *ssid,
-					  struct wpa_scan_res *bss)
+					  struct wpa_bss *bss)
 {
 	return -1;
 }
 
 static inline int wpas_wps_ssid_wildcard_ok(struct wpa_supplicant *wpa_s,
 					    struct wpa_ssid *ssid,
-					    struct wpa_scan_res *bss)
+					    struct wpa_bss *bss)
 {
 	return 0;
 }
