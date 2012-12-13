@@ -2826,7 +2826,7 @@ static int wpa_driver_test_p2p_find(void *priv, unsigned int timeout, int type)
 	wpa_printf(MSG_DEBUG, "%s(timeout=%u)", __func__, timeout);
 	if (!drv->p2p)
 		return -1;
-	return p2p_find(drv->p2p, timeout, type, 0, NULL, NULL);
+	return p2p_find(drv->p2p, timeout, type, 0, NULL, NULL, 0);
 }
 
 
@@ -2868,7 +2868,7 @@ static int wpa_driver_test_p2p_connect(void *priv, const u8 *peer_addr,
 		return -1;
 	return p2p_connect(drv->p2p, peer_addr, wps_method, go_intent,
 			   own_interface_addr, force_freq, persistent_group,
-			   NULL, 0, 0);
+			   NULL, 0, 0, 0);
 }
 
 

@@ -172,6 +172,8 @@ static const char * p2p_state_txt(int state)
 		return "INVITE_LISTEN";
 	case P2P_SEARCH_WHEN_READY:
 		return "SEARCH_WHEN_READY";
+	case P2P_CONTINUE_SEARCH_WHEN_READY:
+		return "CONTINUE_SEARCH_WHEN_READY";
 	default:
 		return "?";
 	}
@@ -254,7 +256,7 @@ void p2p_go_neg_failed(struct p2p_data *p2p, struct p2p_device *peer,
 }
 
 
-static void p2p_listen_in_find(struct p2p_data *p2p)
+static void p2p_listen_in_find(struct p2p_data *p2p, int dev_disc)
 {
 	unsigned int r, tu;
 	int freq;
@@ -275,6 +277,19 @@ static void p2p_listen_in_find(struct p2p_data *p2p)
 	os_get_random((u8 *) &r, sizeof(r));
 	tu = (r % ((p2p->max_disc_int - p2p->min_disc_int) + 1) +
 	      p2p->min_disc_int) * 100;
+	if (p2p->max_disc_tu >= 0 && tu > (unsigned int) p2p->max_disc_tu)
+		tu = p2p->max_disc_tu;
+	if (!dev_disc && tu < 100)
+		tu = 100; /* Need to wait in non-device discovery use cases */
+	if (p2p->cfg->max_listen && 1024 * tu / 1000 > p2p->cfg->max_listen)
+		tu = p2p->cfg->max_listen * 1000 / 1024;
+
+	if (tu == 0) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Skip listen state "
+			"since duration was 0 TU");
+		p2p_set_timeout(p2p, 0, 0);
+		return;
+	}
 
 	p2p->pending_listen_freq = freq;
 	p2p->pending_listen_sec = 0;
@@ -835,6 +850,7 @@ static void p2p_search(struct p2p_data *p2p)
 {
 	int freq = 0;
 	enum p2p_scan_type type;
+	int res;
 
 	if (p2p->drv_in_listen) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Driver is still "
@@ -876,12 +892,18 @@ static void p2p_search(struct p2p_data *p2p)
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Starting search");
 	}
 
-	if (p2p->cfg->p2p_scan(p2p->cfg->cb_ctx, type, freq,
-			       p2p->num_req_dev_types, p2p->req_dev_types,
-			       p2p->find_dev_id)) {
+	res = p2p->cfg->p2p_scan(p2p->cfg->cb_ctx, type, freq,
+				 p2p->num_req_dev_types, p2p->req_dev_types,
+				 p2p->find_dev_id);
+	if (res < 0) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 			"P2P: Scan request failed");
 		p2p_continue_find(p2p);
+	} else if (res == 1) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Could not start "
+			"p2p_scan at this point - will try again after "
+			"previous scan completes");
+		p2p_set_state(p2p, P2P_CONTINUE_SEARCH_WHEN_READY);
 	} else {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Running p2p_scan");
 		p2p->p2p_scan_running = 1;
@@ -986,7 +1008,7 @@ static void p2p_free_req_dev_types(struct p2p_data *p2p)
 int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 	     enum p2p_discovery_type type,
 	     unsigned int num_req_dev_types, const u8 *req_dev_types,
-	     const u8 *dev_id)
+	     const u8 *dev_id, unsigned int search_delay)
 {
 	int res;
 
@@ -1020,6 +1042,8 @@ int p2p_find(struct p2p_data *p2p, unsigned int timeout,
 	p2p->find_type = type;
 	p2p_device_clear_reported(p2p);
 	p2p_set_state(p2p, P2P_SEARCH);
+	p2p->search_delay = search_delay;
+	p2p->in_search_delay = 0;
 	eloop_cancel_timeout(p2p_find_timeout, p2p, NULL);
 	p2p->last_p2p_find_timeout = timeout;
 	if (timeout)
@@ -1079,13 +1103,18 @@ int p2p_search_pending(struct p2p_data *p2p)
 
 int p2p_other_scan_completed(struct p2p_data *p2p)
 {
+	if (p2p->state == P2P_CONTINUE_SEARCH_WHEN_READY) {
+		p2p_set_state(p2p, P2P_SEARCH);
+		p2p_search(p2p);
+		return 1;
+	}
 	if (p2p->state != P2P_SEARCH_WHEN_READY)
 		return 0;
 	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Starting pending P2P find "
 		"now that previous scan was completed");
 	if (p2p_find(p2p, p2p->last_p2p_find_timeout, p2p->find_type,
 		     p2p->num_req_dev_types, p2p->req_dev_types,
-		     p2p->find_dev_id) < 0)
+		     p2p->find_dev_id, p2p->search_delay) < 0)
 		return 0;
 	return 1;
 }
@@ -1139,15 +1168,17 @@ void p2p_stop_find(struct p2p_data *p2p)
 }
 
 
-static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
+static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq,
+			      unsigned int pref_freq)
 {
-	if (force_freq) {
+	if (force_freq || pref_freq) {
 		u8 op_reg_class, op_channel;
-		if (p2p_freq_to_channel(p2p->cfg->country, force_freq,
+		unsigned int freq = force_freq ? force_freq : pref_freq;
+		if (p2p_freq_to_channel(p2p->cfg->country, freq,
 					&op_reg_class, &op_channel) < 0) {
 			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 				"P2P: Unsupported frequency %u MHz",
-				force_freq);
+				freq);
 			return -1;
 		}
 		if (!p2p_channels_includes(&p2p->cfg->channels, op_reg_class,
@@ -1155,15 +1186,21 @@ static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
 			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 				"P2P: Frequency %u MHz (oper_class %u "
 				"channel %u) not allowed for P2P",
-				force_freq, op_reg_class, op_channel);
+				freq, op_reg_class, op_channel);
 			return -1;
 		}
 		p2p->op_reg_class = op_reg_class;
 		p2p->op_channel = op_channel;
-		p2p->channels.reg_classes = 1;
-		p2p->channels.reg_class[0].channels = 1;
-		p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
-		p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+		if (force_freq) {
+			p2p->channels.reg_classes = 1;
+			p2p->channels.reg_class[0].channels = 1;
+			p2p->channels.reg_class[0].reg_class =
+				p2p->op_reg_class;
+			p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+		} else {
+			os_memcpy(&p2p->channels, &p2p->cfg->channels,
+				  sizeof(struct p2p_channels));
+		}
 	} else {
 		u8 op_reg_class, op_channel;
 
@@ -1263,7 +1300,7 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 		int go_intent, const u8 *own_interface_addr,
 		unsigned int force_freq, int persistent_group,
 		const u8 *force_ssid, size_t force_ssid_len,
-		int pd_before_go_neg)
+		int pd_before_go_neg, unsigned int pref_freq)
 {
 	struct p2p_device *dev;
 
@@ -1277,7 +1314,7 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 	if (p2p->cfg->pref_chan)
 		p2p_prepare_preferredchannel(p2p);
 	else {
-		if (p2p_prepare_channel(p2p, force_freq) < 0)
+		if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
 			return -1;
         }
 
@@ -1378,7 +1415,8 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 		  enum p2p_wps_method wps_method,
 		  int go_intent, const u8 *own_interface_addr,
 		  unsigned int force_freq, int persistent_group,
-		  const u8 *force_ssid, size_t force_ssid_len)
+		  const u8 *force_ssid, size_t force_ssid_len,
+		  unsigned int pref_freq)
 {
 	struct p2p_device *dev;
 
@@ -1389,7 +1427,7 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group);
 
-	if (p2p_prepare_channel(p2p, force_freq) < 0)
+	if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
 		return -1;
 
 	dev = p2p_get_device(p2p, peer_addr);
@@ -2364,6 +2402,7 @@ struct p2p_data * p2p_init(const struct p2p_config *cfg)
 	p2p->min_disc_int = 1;
 #endif
 	p2p->max_disc_int = 3;
+	p2p->max_disc_tu = -1;
 
 	os_get_random(&p2p->next_tie_breaker, 1);
 	p2p->next_tie_breaker &= 0x01;
@@ -2378,6 +2417,9 @@ struct p2p_data * p2p_init(const struct p2p_config *cfg)
 
 	eloop_register_timeout(P2P_PEER_EXPIRATION_INTERVAL, 0,
 			       p2p_expiration_timeout, p2p, NULL);
+
+	p2p->go_timeout = 100;
+	p2p->client_timeout = 20;
 
 	return p2p;
 }
@@ -2652,7 +2694,7 @@ void p2p_continue_find(struct p2p_data *p2p)
 		}
 	}
 
-	p2p_listen_in_find(p2p);
+	p2p_listen_in_find(p2p, 1);
 }
 
 
@@ -2698,8 +2740,7 @@ static void p2p_retry_pd(struct p2p_data *p2p)
 
 	/*
 	 * Retry the prov disc req attempt only for the peer that the user had
-	 * requested for and provided a join has not been initiated on it
-	 * in the meantime.
+	 * requested.
 	 */
 
 	dl_list_for_each(dev, &p2p->devices, struct p2p_device, list) {
@@ -2708,15 +2749,14 @@ static void p2p_retry_pd(struct p2p_data *p2p)
 			continue;
 		if (!dev->req_config_methods)
 			continue;
-		if (dev->flags & P2P_DEV_PD_FOR_JOIN)
-			continue;
 
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Send "
 			"pending Provision Discovery Request to "
 			MACSTR " (config methods 0x%x)",
 			MAC2STR(dev->info.p2p_device_addr),
 			dev->req_config_methods);
-		p2p_send_prov_disc_req(p2p, dev, 0, 0);
+		p2p_send_prov_disc_req(p2p, dev,
+				       dev->flags & P2P_DEV_PD_FOR_JOIN, 0);
 		return;
 	}
 }
@@ -3086,6 +3126,14 @@ int p2p_listen_end(struct p2p_data *p2p, unsigned int freq)
 				"new one");
 			return 1;
 		}
+		if (p2p->search_delay) {
+			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Delay "
+				"search operation by %u ms",
+				p2p->search_delay);
+				p2p_set_timeout(p2p, p2p->search_delay / 1000,
+					(p2p->search_delay % 1000) * 1000);
+			return 1;
+		}
 		p2p_search(p2p);
 		return 1;
 	}
@@ -3098,7 +3146,7 @@ static void p2p_timeout_connect(struct p2p_data *p2p)
 {
 	p2p->cfg->send_action_done(p2p->cfg->cb_ctx);
 	p2p_set_state(p2p, P2P_CONNECT_LISTEN);
-	p2p_listen_in_find(p2p);
+	p2p_listen_in_find(p2p, 0);
 }
 
 
@@ -3162,7 +3210,7 @@ static void p2p_timeout_wait_peer_idle(struct p2p_data *p2p)
 		"P2P: Go to Listen state while waiting for the peer to become "
 		"ready for GO Negotiation");
 	p2p_set_state(p2p, P2P_WAIT_PEER_CONNECT);
-	p2p_listen_in_find(p2p);
+	p2p_listen_in_find(p2p, 0);
 }
 
 
@@ -3207,9 +3255,23 @@ static void p2p_timeout_prov_disc_req(struct p2p_data *p2p)
 		p2p->pd_retries--;
 		p2p_retry_pd(p2p);
 	} else {
+		struct p2p_device *dev;
+		int for_join = 0;
+
+		dl_list_for_each(dev, &p2p->devices, struct p2p_device, list) {
+			if (os_memcmp(p2p->pending_pd_devaddr,
+				      dev->info.p2p_device_addr, ETH_ALEN) != 0)
+				continue;
+			if (dev->req_config_methods &&
+			    (dev->flags & P2P_DEV_PD_FOR_JOIN))
+				for_join = 1;
+		}
+
 		if (p2p->cfg->prov_disc_fail)
 			p2p->cfg->prov_disc_fail(p2p->cfg->cb_ctx,
 						 p2p->pending_pd_devaddr,
+						 for_join ?
+						 P2P_PROV_DISC_TIMEOUT_JOIN :
 						 P2P_PROV_DISC_TIMEOUT);
 		p2p_reset_pending_pd(p2p);
 	}
@@ -3230,7 +3292,7 @@ static void p2p_timeout_invite(struct p2p_data *p2p)
 		p2p_set_timeout(p2p, 0, 100000);
 		return;
 	}
-	p2p_listen_in_find(p2p);
+	p2p_listen_in_find(p2p, 0);
 }
 
 
@@ -3272,6 +3334,16 @@ static void p2p_state_timeout(void *eloop_ctx, void *timeout_ctx)
 		/* Check if we timed out waiting for PD req */
 		if (p2p->pending_action_state == P2P_PENDING_PD)
 			p2p_timeout_prov_disc_req(p2p);
+		if (p2p->search_delay && !p2p->in_search_delay) {
+			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Delay "
+				"search operation by %u ms",
+				p2p->search_delay);
+			p2p->in_search_delay = 1;
+			p2p_set_timeout(p2p, p2p->search_delay / 1000,
+				(p2p->search_delay % 1000) * 1000);
+			break;
+		}
+		p2p->in_search_delay = 0;
 		p2p_search(p2p);
 		break;
 	case P2P_CONNECT:
@@ -3316,6 +3388,8 @@ static void p2p_state_timeout(void *eloop_ctx, void *timeout_ctx)
 		p2p_timeout_invite_listen(p2p);
 		break;
 	case P2P_SEARCH_WHEN_READY:
+		break;
+	case P2P_CONTINUE_SEARCH_WHEN_READY:
 		break;
 	}
 }
@@ -4138,6 +4212,16 @@ p2p_get_peer_found(struct p2p_data *p2p, const u8 *addr, int next)
 	return &dev->info;
 }
 
+
+void p2p_set_config_timeout(struct p2p_data *p2p, u8 go_timeout,
+			    u8 client_timeout)
+{
+	if (p2p) {
+		p2p->go_timeout = go_timeout;
+		p2p->client_timeout = client_timeout;
+	}
+}
+
 #ifdef ANDROID_P2P
 int p2p_search_in_progress(struct p2p_data *p2p)
 {
@@ -4152,6 +4236,9 @@ int p2p_in_progress(struct p2p_data *p2p)
 {
 	if (p2p == NULL)
 		return 0;
+	if (p2p->state == P2P_SEARCH || p2p->state == P2P_SEARCH_WHEN_READY ||
+	    p2p->state == P2P_CONTINUE_SEARCH_WHEN_READY)
+		return 2;
 	return p2p->state != P2P_IDLE && p2p->state != P2P_PROVISIONING;
 }
 
@@ -4163,3 +4250,25 @@ void p2p_set_wfd_data(struct p2p_data *p2p, void *wfd)
 	p2p->wfd = wfd;
 }
 #endif
+
+void p2p_increase_search_delay(struct p2p_data *p2p, unsigned int delay)
+{
+	if (p2p && p2p->search_delay < delay)
+		p2p->search_delay = delay;
+}
+
+int p2p_set_disc_int(struct p2p_data *p2p, int min_disc_int, int max_disc_int,
+		    int max_disc_tu)
+{
+	if (min_disc_int > max_disc_int || min_disc_int < 0 || max_disc_int < 0)
+		return -1;
+
+	p2p->min_disc_int = min_disc_int;
+	p2p->max_disc_int = max_disc_int;
+	p2p->max_disc_tu = max_disc_tu;
+	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Set discoverable interval: "
+		"min=%d max=%d max_tu=%d", min_disc_int, max_disc_int,
+		max_disc_tu);
+
+	return 0;
+}

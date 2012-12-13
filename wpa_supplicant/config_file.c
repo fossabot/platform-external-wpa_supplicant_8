@@ -801,6 +801,11 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 		}
 		fprintf(f, "\n");
 	}
+	if (config->p2p_disabled)
+		fprintf(f, "p2p_disabled=%u\n", config->p2p_disabled);
+	if (config->p2p_no_group_iface)
+		fprintf(f, "p2p_no_group_iface=%u\n",
+			config->p2p_no_group_iface);
 #endif /* CONFIG_P2P */
 #ifdef CONFIG_WFD
 	if (config->wfd_enable)

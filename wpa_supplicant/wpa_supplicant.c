@@ -196,6 +196,17 @@ static void wpa_supplicant_timeout(void *eloop_ctx, void *timeout_ctx)
 	 * So, wait a second until scanning again.
 	 */
 	wpa_supplicant_req_scan(wpa_s, 1, 0);
+
+#ifdef CONFIG_P2P
+	if (wpa_s->global->p2p_cb_on_scan_complete && !wpa_s->global->p2p_disabled &&
+	    wpa_s->global->p2p != NULL) {
+		wpa_s->global->p2p_cb_on_scan_complete = 0;
+		if (p2p_other_scan_completed(wpa_s->global->p2p) == 1) {
+			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Pending P2P operation "
+			"continued after timed out authentication");
+		}
+	}
+#endif /* CONFIG_P2P */
 }
 
 
@@ -462,6 +473,9 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpa_s->disallow_aps_ssid = NULL;
 
 	wpabuf_free(wpa_s->last_gas_resp);
+
+	os_free(wpa_s->last_scan_res);
+	wpa_s->last_scan_res = NULL;
 }
 
 
@@ -1541,10 +1555,8 @@ static void wpa_supplicant_clear_connection(struct wpa_supplicant *wpa_s,
 	struct wpa_ssid *old_ssid;
 
 	wpa_clear_keys(wpa_s, addr);
-	wpa_supplicant_mark_disassoc(wpa_s);
 	old_ssid = wpa_s->current_ssid;
-	wpa_s->current_ssid = NULL;
-	wpa_s->current_bss = NULL;
+	wpa_supplicant_mark_disassoc(wpa_s);
 	wpa_sm_set_config(wpa_s->wpa, NULL);
 	eapol_sm_notify_config(wpa_s->eapol, NULL, NULL);
 	if (old_ssid != wpa_s->current_ssid)
@@ -3075,6 +3087,8 @@ void wpa_supplicant_deinit(struct wpa_global *global)
 	os_free(global->params.override_driver);
 	os_free(global->params.override_ctrl_interface);
 
+	os_free(global->p2p_disallow_freq);
+
 	os_free(global);
 	wpa_debug_close_syslog();
 	wpa_debug_close_file();
@@ -3222,6 +3236,17 @@ void wpas_connection_failed(struct wpa_supplicant *wpa_s, const u8 *bssid)
 	 */
 	wpa_supplicant_req_scan(wpa_s, timeout / 1000,
 				1000 * (timeout % 1000));
+
+#ifdef CONFIG_P2P
+	if (wpa_s->global->p2p_cb_on_scan_complete && !wpa_s->global->p2p_disabled &&
+	    wpa_s->global->p2p != NULL) {
+		wpa_s->global->p2p_cb_on_scan_complete = 0;
+		if (p2p_other_scan_completed(wpa_s->global->p2p) == 1) {
+			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Pending P2P operation "
+				"continued after failed association");
+		}
+	}
+#endif /* CONFIG_P2P */
 }
 
 

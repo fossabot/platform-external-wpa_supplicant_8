@@ -147,14 +147,28 @@ static void wpa_bss_anqp_free(struct wpa_bss_anqp *anqp)
 }
 
 
-static void wpa_bss_remove(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
+static void wpa_bss_remove(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
+			   const char *reason)
 {
+	if (wpa_s->last_scan_res) {
+		unsigned int i;
+		for (i = 0; i < wpa_s->last_scan_res_used; i++) {
+			if (wpa_s->last_scan_res[i] == bss) {
+				os_memmove(&wpa_s->last_scan_res[i],
+					   &wpa_s->last_scan_res[i + 1],
+					   (wpa_s->last_scan_res_used - i - 1)
+					   * sizeof(struct wpa_bss *));
+				wpa_s->last_scan_res_used--;
+				break;
+			}
+		}
+	}
 	dl_list_del(&bss->list);
 	dl_list_del(&bss->list_id);
 	wpa_s->num_bss--;
 	wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Remove id %u BSSID " MACSTR
-		" SSID '%s'", bss->id, MAC2STR(bss->bssid),
-		wpa_ssid_txt(bss->ssid, bss->ssid_len));
+		" SSID '%s' due to %s", bss->id, MAC2STR(bss->bssid),
+		wpa_ssid_txt(bss->ssid, bss->ssid_len), reason);
 	wpas_notify_bss_removed(wpa_s, bss->bssid, bss->id);
 	wpa_bss_anqp_free(bss->anqp);
 	os_free(bss);
@@ -218,13 +232,21 @@ static int wpa_bss_known(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
 }
 
 
+static int wpa_bss_in_use(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
+{
+	return bss == wpa_s->current_bss ||
+		os_memcmp(bss->bssid, wpa_s->bssid, ETH_ALEN) == 0 ||
+		os_memcmp(bss->bssid, wpa_s->pending_bssid, ETH_ALEN) == 0;
+}
+
+
 static int wpa_bss_remove_oldest_unknown(struct wpa_supplicant *wpa_s)
 {
 	struct wpa_bss *bss;
 
 	dl_list_for_each(bss, &wpa_s->bss, struct wpa_bss, list) {
 		if (!wpa_bss_known(wpa_s, bss)) {
-			wpa_bss_remove(wpa_s, bss);
+			wpa_bss_remove(wpa_s, bss, __func__);
 			return 0;
 		}
 	}
@@ -233,33 +255,40 @@ static int wpa_bss_remove_oldest_unknown(struct wpa_supplicant *wpa_s)
 }
 
 
-static void wpa_bss_remove_oldest(struct wpa_supplicant *wpa_s)
+static int wpa_bss_remove_oldest(struct wpa_supplicant *wpa_s)
 {
+	struct wpa_bss *bss;
+
 	/*
 	 * Remove the oldest entry that does not match with any configured
 	 * network.
 	 */
 	if (wpa_bss_remove_oldest_unknown(wpa_s) == 0)
-		return;
+		return 0;
 
 	/*
-	 * Remove the oldest entry since no better candidate for removal was
-	 * found.
+	 * Remove the oldest entry that isn't currently in use.
 	 */
-	wpa_bss_remove(wpa_s, dl_list_first(&wpa_s->bss,
-					    struct wpa_bss, list));
+	dl_list_for_each(bss, &wpa_s->bss, struct wpa_bss, list) {
+		if (!wpa_bss_in_use(wpa_s, bss)) {
+			wpa_bss_remove(wpa_s, bss, __func__);
+			return 0;
+		}
+	}
+
+	return -1;
 }
 
 
-static void wpa_bss_add(struct wpa_supplicant *wpa_s,
-			const u8 *ssid, size_t ssid_len,
-			struct wpa_scan_res *res)
+static struct wpa_bss * wpa_bss_add(struct wpa_supplicant *wpa_s,
+				    const u8 *ssid, size_t ssid_len,
+				    struct wpa_scan_res *res)
 {
 	struct wpa_bss *bss;
 
 	bss = os_zalloc(sizeof(*bss) + res->ie_len + res->beacon_ie_len);
 	if (bss == NULL)
-		return;
+		return NULL;
 	bss->id = wpa_s->bss_next_id++;
 	bss->last_update_idx = wpa_s->bss_update_idx;
 	wpa_bss_copy_res(bss, res);
@@ -277,8 +306,14 @@ static void wpa_bss_add(struct wpa_supplicant *wpa_s,
 		" SSID '%s'",
 		bss->id, MAC2STR(bss->bssid), wpa_ssid_txt(ssid, ssid_len));
 	wpas_notify_bss_added(wpa_s, bss->bssid, bss->id);
-	if (wpa_s->num_bss > wpa_s->conf->bss_max_count)
-		wpa_bss_remove_oldest(wpa_s);
+	if (wpa_s->num_bss > wpa_s->conf->bss_max_count &&
+	    wpa_bss_remove_oldest(wpa_s) != 0) {
+		wpa_printf(MSG_ERROR, "Increasing the MAX BSS count to %d "
+			   "because all BSSes are in use. We should normally "
+			   "not get here!", (int) wpa_s->num_bss);
+		wpa_s->conf->bss_max_count = wpa_s->num_bss;
+	}
+	return bss;
 }
 
 
@@ -452,19 +487,13 @@ static void wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 }
 
 
-static int wpa_bss_in_use(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
-{
-	return bss == wpa_s->current_bss ||
-		os_memcmp(bss->bssid, wpa_s->bssid, ETH_ALEN) == 0 ||
-		os_memcmp(bss->bssid, wpa_s->pending_bssid, ETH_ALEN) == 0;
-}
-
 
 void wpa_bss_update_start(struct wpa_supplicant *wpa_s)
 {
 	wpa_s->bss_update_idx++;
 	wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Start scan result update %u",
 		wpa_s->bss_update_idx);
+	wpa_s->last_scan_res_used = 0;
 }
 
 
@@ -495,9 +524,28 @@ void wpa_bss_update_scan_res(struct wpa_supplicant *wpa_s,
 	 * (to save memory) */
 	bss = wpa_bss_get(wpa_s, res->bssid, ssid + 2, ssid[1]);
 	if (bss == NULL)
-		wpa_bss_add(wpa_s, ssid + 2, ssid[1], res);
+		bss = wpa_bss_add(wpa_s, ssid + 2, ssid[1], res);
 	else
 		wpa_bss_update(wpa_s, bss, res);
+
+	if (bss == NULL)
+		return;
+	if (wpa_s->last_scan_res_used >= wpa_s->last_scan_res_size) {
+		struct wpa_bss **n;
+		unsigned int siz;
+		if (wpa_s->last_scan_res_size == 0)
+			siz = 32;
+		else
+			siz = wpa_s->last_scan_res_size * 2;
+		n = os_realloc_array(wpa_s->last_scan_res, siz,
+				     sizeof(struct wpa_bss *));
+		if (n == NULL)
+			return;
+		wpa_s->last_scan_res = n;
+		wpa_s->last_scan_res_size = siz;
+	}
+
+	wpa_s->last_scan_res[wpa_s->last_scan_res_used++] = bss;
 }
 
 
@@ -547,8 +595,25 @@ void wpa_bss_update_end(struct wpa_supplicant *wpa_s, struct scan_info *info,
 {
 	struct wpa_bss *bss, *n;
 
+	wpa_s->last_scan_full = 0;
+	os_get_time(&wpa_s->last_scan);
 	if (!new_scan)
 		return; /* do not expire entries without new scan */
+
+	if (info && !info->aborted && !info->freqs) {
+		size_t i;
+		if (info->num_ssids == 0) {
+			wpa_s->last_scan_full = 1;
+		} else {
+			for (i = 0; i < info->num_ssids; i++) {
+				if (info->ssids[i].ssid == NULL ||
+				    info->ssids[i].ssid_len == 0) {
+					wpa_s->last_scan_full = 1;
+					break;
+				}
+			}
+		}
+	}
 
 	dl_list_for_each_safe(bss, n, &wpa_s->bss, struct wpa_bss, list) {
 		if (wpa_bss_in_use(wpa_s, bss))
@@ -559,11 +624,14 @@ void wpa_bss_update_end(struct wpa_supplicant *wpa_s, struct scan_info *info,
 			bss->scan_miss_count++;
 		if (bss->scan_miss_count >=
 		    wpa_s->conf->bss_expiration_scan_count) {
-			wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Expire BSS %u due to "
-				"no match in scan", bss->id);
-			wpa_bss_remove(wpa_s, bss);
+			wpa_bss_remove(wpa_s, bss, "no match in scan");
 		}
 	}
+
+	wpa_printf(MSG_DEBUG, "BSS: last_scan_res_used=%u/%u "
+		   "last_scan_full=%d",
+		   wpa_s->last_scan_res_used, wpa_s->last_scan_res_size,
+		   wpa_s->last_scan_full);
 }
 
 
@@ -583,9 +651,7 @@ void wpa_bss_flush_by_age(struct wpa_supplicant *wpa_s, int age)
 			continue;
 
 		if (os_time_before(&bss->last_update, &t)) {
-			wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Expire BSS %u due to "
-				"age", bss->id);
-			wpa_bss_remove(wpa_s, bss);
+			wpa_bss_remove(wpa_s, bss, __func__);
 		} else
 			break;
 	}
@@ -622,7 +688,7 @@ void wpa_bss_flush(struct wpa_supplicant *wpa_s)
 	dl_list_for_each_safe(bss, n, &wpa_s->bss, struct wpa_bss, list) {
 		if (wpa_bss_in_use(wpa_s, bss))
 			continue;
-		wpa_bss_remove(wpa_s, bss);
+		wpa_bss_remove(wpa_s, bss, __func__);
 	}
 }
 

@@ -71,7 +71,8 @@ over the main control interface.
 
 Device Discovery
 
-p2p_find [timeout in seconds] [type=<social|progressive>]
+p2p_find [timeout in seconds] [type=<social|progressive>] \
+	[dev_id=<addr>] [delay=<search delay in ms>]
 
 The default behavior is to run a single full scan in the beginning and
 then scan only social channels. type=social will scan only social
@@ -80,6 +81,11 @@ like the default behavior, but it will scan through all the channels
 progressively one channel at the time in the Search state rounds. This
 will help in finding new groups or groups missed during the initial
 full scan.
+
+The optional dev_id option can be used to specify a single P2P peer to
+search for. The optional delay parameter can be used to request an extra
+delay to be used between search iterations (e.g., to free up radio
+resources for concurrent operations).
 
 p2p_listen [timeout in seconds]
 
@@ -119,7 +125,7 @@ join-a-group style PD instead of GO Negotiation style PD.
 
 p2p_connect <peer device address> <pbc|pin|PIN#> [display|keypad]
 	[persistent|persistent=<network id>] [join|auth]
-	[go_intent=<0..15>] [freq=<in MHz>] [provdisc]
+	[go_intent=<0..15>] [freq=<in MHz>] [ht40] [provdisc]
 
 Start P2P group formation with a discovered P2P peer. This includes
 optional group owner negotiation, group interface setup, provisioning,
@@ -160,7 +166,7 @@ used prior to starting GO Negotiation as a workaround with some deployed
 P2P implementations that require this to allow the user to accept the
 connection.
 
-p2p_group_add [persistent|persistent=<network id>] [freq=<freq in MHz>]
+p2p_group_add [persistent|persistent=<network id>] [freq=<freq in MHz>] [ht40]
 
 Set up a P2P group owner manually (i.e., without group owner
 negotiation with a specific peer). This is also known as autonomous
@@ -332,15 +338,16 @@ Remove all local services from internal SD query processing.
 Invitation
 
 p2p_invite [persistent=<network id>|group=<group ifname>] [peer=address]
-	[go_dev_addr=address]
+	[go_dev_addr=address] [freq=<freq in MHz>] [ht40]
 
 Invite a peer to join a group (e.g., group=wlan1) or to reinvoke a
 persistent group (e.g., persistent=4). If the peer device is the GO of
-the persisten group, the peer parameter is not needed. Otherwise it is
+the persistent group, the peer parameter is not needed. Otherwise it is
 used to specify which device to invite. go_dev_addr parameter can be
 used to override the GO device address for Invitation Request should
 it be not known for some reason (this should not be needed in most
-cases).
+cases). When reinvoking a persistent group, the GO device can specify
+the frequency for the group with the freq parameter.
 
 Group Operations
 
