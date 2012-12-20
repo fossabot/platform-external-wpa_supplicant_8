@@ -214,6 +214,11 @@ struct p2p_data {
 		 * P2P_SEARCH_WHEN_READY - Waiting to start Search
 		 */
 		P2P_SEARCH_WHEN_READY,
+
+		/**
+		 * P2P_CONTINUE_SEARCH_WHEN_READY - Waiting to continue Search
+		 */
+		P2P_CONTINUE_SEARCH_WHEN_READY,
 	} state;
 
 	/**
@@ -225,6 +230,11 @@ struct p2p_data {
 	 * max_disc_int - maxDiscoverableInterval
 	 */
 	int max_disc_int;
+
+       /**
+	* max_disc_tu - Maximum number of TUs for discoverable interval
+	*/
+	int max_disc_tu;
 
 	/**
 	 * devices - List of known P2P Device peers
@@ -440,12 +450,19 @@ struct p2p_data {
 	 */
 	int pd_retries;
 
+	u8 go_timeout;
+	u8 client_timeout;
+
+
 #ifdef CONFIG_WFD
 	/**
 	* wfd - WFD module data
 	*/
 	struct wfd_data *wfd;
 #endif
+	/* Extra delay in milliseconds between search iterations */
+	unsigned int search_delay;
+	int in_search_delay;
 };
 
 /**

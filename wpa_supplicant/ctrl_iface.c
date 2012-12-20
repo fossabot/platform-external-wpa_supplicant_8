@@ -609,9 +609,21 @@ static int wpa_supplicant_ctrl_iface_wps_pin(struct wpa_supplicant *wpa_s,
 	}
 
 #ifdef CONFIG_AP
-	if (wpa_s->ap_iface)
+	if (wpa_s->ap_iface) {
+		int timeout = 0;
+		char *pos;
+
+		if (pin) {
+			pos = os_strchr(pin, ' ');
+			if (pos) {
+				*pos++ = '\0';
+				timeout = atoi(pos);
+			}
+		}
+
 		return wpa_supplicant_ap_wps_pin(wpa_s, _bssid, pin,
-						 buf, buflen);
+						 buf, buflen, timeout);
+	}
 #endif /* CONFIG_AP */
 
 	if (pin) {
@@ -2950,6 +2962,7 @@ static int p2p_ctrl_find(struct wpa_supplicant *wpa_s, char *cmd)
 	enum p2p_discovery_type type = P2P_FIND_START_WITH_FULL;
 	u8 dev_id[ETH_ALEN], *_dev_id = NULL;
 	char *pos;
+	unsigned int search_delay;
 
 	if (os_strstr(cmd, "type=social"))
 		type = P2P_FIND_ONLY_SOCIAL;
@@ -2963,8 +2976,15 @@ static int p2p_ctrl_find(struct wpa_supplicant *wpa_s, char *cmd)
 			return -1;
 		_dev_id = dev_id;
 	}
+	pos = os_strstr(cmd, "delay=");
+	if (pos) {
+		pos += 6;
+		search_delay = atoi(pos);
+	} else
+		search_delay = wpas_p2p_search_delay(wpa_s);
 
-	return wpas_p2p_find(wpa_s, timeout, type, 0, NULL, _dev_id);
+	return wpas_p2p_find(wpa_s, timeout, type, 0, NULL, _dev_id,
+			     search_delay);
 }
 
 
@@ -2984,10 +3004,12 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	int go_intent = -1;
 	int freq = 0;
 	int pd;
+	int ht40;
 
 	/* <addr> <"pbc" | "pin" | PIN> [label|display|keypad]
 	 * [persistent|persistent=<network id>]
-	 * [join] [auth] [go_intent=<0..15>] [freq=<in MHz>] [provdisc] */
+	 * [join] [auth] [go_intent=<0..15>] [freq=<in MHz>] [provdisc]
+	 * [ht40] */
 
 	if (hwaddr_aton(cmd, addr))
 		return -1;
@@ -3015,6 +3037,7 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	auth = os_strstr(pos, " auth") != NULL;
 	automatic = os_strstr(pos, " auto") != NULL;
 	pd = os_strstr(pos, " provdisc") != NULL;
+	ht40 = (os_strstr(cmd, " ht40") != NULL);
 
 	pos2 = os_strstr(pos, " go_intent=");
 	if (pos2) {
@@ -3050,7 +3073,8 @@ static int p2p_ctrl_connect(struct wpa_supplicant *wpa_s, char *cmd,
 	wpas_p2p_block_concurrent_scan(wpa_s);
 	new_pin = wpas_p2p_connect(wpa_s, addr, pin, wps_method,
 				   persistent_group, automatic, join,
-				   auth, go_intent, freq, persistent_id, pd);
+				   auth, go_intent, freq, persistent_id, pd,
+				   ht40);
 	if (new_pin == -2) {
 		os_memcpy(buf, "FAIL-CHANNEL-UNAVAILABLE\n", 25);
 		return 25;
@@ -3407,6 +3431,8 @@ static int p2p_ctrl_invite_persistent(struct wpa_supplicant *wpa_s, char *cmd)
 	int id;
 	struct wpa_ssid *ssid;
 	u8 peer[ETH_ALEN];
+	int freq = 0;
+	int ht40;
 
 	id = atoi(cmd);
 	pos = os_strstr(cmd, " peer=");
@@ -3423,7 +3449,18 @@ static int p2p_ctrl_invite_persistent(struct wpa_supplicant *wpa_s, char *cmd)
 		return -1;
 	}
 
-	return wpas_p2p_invite(wpa_s, pos ? peer : NULL, ssid, NULL);
+	pos = os_strstr(cmd, " freq=");
+	if (pos) {
+		pos += 6;
+		freq = atoi(pos);
+		if (freq <= 0)
+			return -1;
+	}
+
+	ht40 = (os_strstr(cmd, " ht40") != NULL);
+
+	return wpas_p2p_invite(wpa_s, pos ? peer : NULL, ssid, NULL, freq,
+			       ht40);
 }
 
 
@@ -3470,7 +3507,7 @@ static int p2p_ctrl_invite(struct wpa_supplicant *wpa_s, char *cmd)
 
 
 static int p2p_ctrl_group_add_persistent(struct wpa_supplicant *wpa_s,
-					 char *cmd, int freq)
+					 char *cmd, int freq, int ht40)
 {
 	int id;
 	struct wpa_ssid *ssid;
@@ -3484,26 +3521,31 @@ static int p2p_ctrl_group_add_persistent(struct wpa_supplicant *wpa_s,
 		return -1;
 	}
 
-	return wpas_p2p_group_add_persistent(wpa_s, ssid, 0, freq);
+	return wpas_p2p_group_add_persistent(wpa_s, ssid, 0, freq, ht40);
 }
 
 
 static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 {
-	int freq = 0;
+	int freq = 0, ht40;
 	char *pos;
 
 	pos = os_strstr(cmd, "freq=");
 	if (pos)
 		freq = atoi(pos + 5);
 
+	ht40 = os_strstr(cmd, "ht40") != NULL;
+
 	if (os_strncmp(cmd, "persistent=", 11) == 0)
-		return p2p_ctrl_group_add_persistent(wpa_s, cmd + 11, freq);
+		return p2p_ctrl_group_add_persistent(wpa_s, cmd + 11, freq,
+						     ht40);
 	if (os_strcmp(cmd, "persistent") == 0 ||
 	    os_strncmp(cmd, "persistent ", 11) == 0)
-		return wpas_p2p_group_add(wpa_s, 1, freq);
+		return wpas_p2p_group_add(wpa_s, 1, freq, ht40);
 	if (os_strncmp(cmd, "freq=", 5) == 0)
-		return wpas_p2p_group_add(wpa_s, 0, freq);
+		return wpas_p2p_group_add(wpa_s, 0, freq, ht40);
+	if (ht40)
+		return wpas_p2p_group_add(wpa_s, 0, freq, ht40);
 
 	wpa_printf(MSG_DEBUG, "CTRL: Invalid P2P_GROUP_ADD parameters '%s'",
 		   cmd);
@@ -3587,6 +3629,56 @@ static int p2p_ctrl_peer(struct wpa_supplicant *wpa_s, char *cmd,
 	pos += res;
 
 	return pos - buf;
+}
+
+
+static int p2p_ctrl_disallow_freq(struct wpa_supplicant *wpa_s,
+				  const char *param)
+{
+	struct wpa_freq_range *freq = NULL, *n;
+	unsigned int count = 0, i;
+	const char *pos, *pos2, *pos3;
+
+	if (wpa_s->global->p2p == NULL)
+		return -1;
+
+	/*
+	 * param includes comma separated frequency range.
+	 * For example: 2412-2432,2462,5000-6000
+	 */
+	pos = param;
+	while (pos && pos[0]) {
+		n = os_realloc_array(freq, count + 1,
+				     sizeof(struct wpa_freq_range));
+		if (n == NULL) {
+			os_free(freq);
+			return -1;
+		}
+		freq = n;
+		freq[count].min = atoi(pos);
+		pos2 = os_strchr(pos, '-');
+		pos3 = os_strchr(pos, ',');
+		if (pos2 && (!pos3 || pos2 < pos3)) {
+			pos2++;
+			freq[count].max = atoi(pos2);
+		} else
+			freq[count].max = freq[count].min;
+		pos = pos3;
+		if (pos)
+			pos++;
+		count++;
+	}
+
+	for (i = 0; i < count; i++) {
+		wpa_printf(MSG_DEBUG, "P2P: Disallowed frequency range %u-%u",
+			   freq[i].min, freq[i].max);
+	}
+
+	os_free(wpa_s->global->p2p_disallow_freq);
+	wpa_s->global->p2p_disallow_freq = freq;
+	wpa_s->global->num_p2p_disallow_freq = count;
+	wpas_p2p_update_channel_list(wpa_s);
+	return 0;
 }
 
 
@@ -3746,6 +3838,33 @@ static int p2p_ctrl_set(struct wpa_supplicant *wpa_s, char *cmd)
 				wpa_s->sta_uapsd |= BIT(3);
 		}
 		return 0;
+	}
+
+	if (os_strcmp(cmd, "disallow_freq") == 0)
+		return p2p_ctrl_disallow_freq(wpa_s, param);
+
+	if (os_strcmp(cmd, "disc_int") == 0) {
+		int min_disc_int, max_disc_int, max_disc_tu;
+		char *pos;
+
+		pos = param;
+
+		min_disc_int = atoi(pos);
+		pos = os_strchr(pos, ' ');
+		if (pos == NULL)
+			return -1;
+		*pos++ = '\0';
+
+		max_disc_int = atoi(pos);
+		pos = os_strchr(pos, ' ');
+		if (pos == NULL)
+			return -1;
+		*pos++ = '\0';
+
+		max_disc_tu = atoi(pos);
+
+		return p2p_set_disc_int(wpa_s->global->p2p, min_disc_int,
+					max_disc_int, max_disc_tu);
 	}
 
 	wpa_printf(MSG_DEBUG, "CTRL_IFACE: Unknown P2P_SET field value '%s'",
@@ -4516,7 +4635,7 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 		if (wpas_p2p_group_remove(wpa_s, buf + 17))
 			reply_len = -1;
 	} else if (os_strcmp(buf, "P2P_GROUP_ADD") == 0) {
-		if (wpas_p2p_group_add(wpa_s, 0, 0))
+		if (wpas_p2p_group_add(wpa_s, 0, 0, 0))
 			reply_len = -1;
 	} else if (os_strncmp(buf, "P2P_GROUP_ADD ", 14) == 0) {
 		if (p2p_ctrl_group_add(wpa_s, buf + 14))

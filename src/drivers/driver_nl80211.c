@@ -1922,6 +1922,20 @@ static void nl80211_del_station_event(struct wpa_driver_nl80211_data *drv,
 	wpa_printf(MSG_DEBUG, "nl80211: Delete station " MACSTR,
 		   MAC2STR(addr));
 
+#if defined(ANDROID) && !defined(HOSTAPD)
+	if (is_broadcast_ether_addr(addr)) {
+	/* driver is asking supplicant to stop, this probably means driver has
+	* encountered errors that requires supplicant and framework to
+	* re-initialize. As part of the framework re-initialization it will
+	* re-start supplicant */
+	wpa_printf(MSG_DEBUG," %s: Send driver HANGED event "
+						"in case of SSR", __func__);
+	wpa_msg(drv->ctx, MSG_INFO,
+				WPA_EVENT_DRIVER_STATE "HANGED");
+	return;
+	}
+#endif
+
 	if (is_ap_interface(drv->nlmode) && drv->device_ap_sme) {
 		drv_event_disassoc(drv->ctx, addr);
 		return;
@@ -2591,7 +2605,8 @@ static int wpa_driver_nl80211_capa(struct wpa_driver_nl80211_data *drv)
 	drv->capa.flags |= WPA_DRIVER_FLAGS_SANE_ERROR_CODES;
 	drv->capa.flags |= WPA_DRIVER_FLAGS_SET_KEYS_AFTER_ASSOC_DONE;
 	drv->capa.flags |= WPA_DRIVER_FLAGS_EAPOL_TX_STATUS;
-	drv->capa.flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
+	if (!info.device_ap_sme)
+		drv->capa.flags |= WPA_DRIVER_FLAGS_DEAUTH_TX_STATUS;
 
 	drv->device_ap_sme = info.device_ap_sme;
 	drv->poll_command_supported = info.poll_command_supported;
@@ -7424,7 +7439,11 @@ static int i802_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr,
 			   int reason)
 {
 	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
 	struct ieee80211_mgmt mgmt;
+
+	if (drv->device_ap_sme)
+		return wpa_driver_nl80211_sta_remove(bss, addr);
 
 	memset(&mgmt, 0, sizeof(mgmt));
 	mgmt.frame_control = IEEE80211_FC(WLAN_FC_TYPE_MGMT,
@@ -7443,7 +7462,11 @@ static int i802_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr,
 			     int reason)
 {
 	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
 	struct ieee80211_mgmt mgmt;
+
+	if (drv->device_ap_sme)
+		return wpa_driver_nl80211_sta_remove(bss, addr);
 
 	memset(&mgmt, 0, sizeof(mgmt));
 	mgmt.frame_control = IEEE80211_FC(WLAN_FC_TYPE_MGMT,
