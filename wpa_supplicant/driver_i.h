@@ -676,4 +676,27 @@ static inline int wpa_drv_switch_channel(struct wpa_supplicant *wpa_s,
 	return wpa_s->driver->switch_channel(wpa_s->drv_priv, freq);
 }
 #endif
+
+#ifdef CONFIG_WIFI_DISC
+static inline int wpa_drv_wifi_disc_cmd(struct wpa_supplicant *wpa_s,
+				     char *cmd, char *buf, size_t buf_len)
+
+{
+	if (!wpa_s->driver->wifi_disc_cmd)
+		return -1;
+	return wpa_s->driver->wifi_disc_cmd(wpa_s->drv_priv, cmd, buf, buf_len);
+}
+#endif
+
+#ifdef CONFIG_WIFI_KTK
+static inline int wpa_drv_wifi_ktk_cmd(struct wpa_supplicant *wpa_s,
+				     char *cmd, char *buf, size_t buf_len)
+
+{
+	if (!wpa_s->driver->wifi_ktk_cmd)
+		return -1;
+	return wpa_s->driver->wifi_ktk_cmd(wpa_s->drv_priv, cmd, buf, buf_len);
+}
+#endif
+
 #endif /* DRIVER_I_H */

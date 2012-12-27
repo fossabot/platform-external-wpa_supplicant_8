@@ -4902,7 +4902,54 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 #endif
 	} else if (os_strcmp(buf, "REAUTHENTICATE") == 0) {
 		eapol_sm_request_reauth(wpa_s->eapol);
-	} else {
+	} 
+#ifdef CONFIG_WIFI_DISC
+	else if (os_strncmp(buf, "DISC_IE ", 8) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_disc_cmd(wpa_s, "DISC_IE", buf+8, buf_len-8))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DISC_IE_FILTER ", 15) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_disc_cmd(wpa_s, "DISC_IE_FILTER", buf+15, buf_len-15))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DISC_START ", 11) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_disc_cmd(wpa_s, "DISC_START", buf+11, buf_len-11))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DISC_STOP ", 10) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_disc_cmd(wpa_s, "DISC_STOP", buf+10, buf_len-10))
+			reply_len = -1;
+	}
+#endif
+#ifdef CONFIG_WIFI_KTK
+	else if (os_strncmp(buf, "KTK_IE ", 7) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_ktk_cmd(wpa_s, "KTK_IE", buf+7, buf_len-7))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "KTK_IE_FILTER ", 14) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_ktk_cmd(wpa_s, "KTK_IE_FILTER", buf+14, buf_len-14))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "KTK_START ", 10) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_ktk_cmd(wpa_s, "KTK_START", buf+10, buf_len-10))
+			reply_len = -1;
+	} else if (os_strncmp(buf, "KTK_STOP ", 9) == 0) {
+		int buf_len = os_strlen(buf);
+
+		if (wpa_drv_wifi_ktk_cmd(wpa_s, "KTK_STOP", buf+9, buf_len-9))
+			reply_len = -1;
+	}
+#endif
+	else {
 		os_memcpy(reply, "UNKNOWN COMMAND\n", 16);
 		reply_len = 16;
 	}
