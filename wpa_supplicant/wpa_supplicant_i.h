@@ -199,6 +199,12 @@ struct p2p_srv_upnp {
 	char *service;
 };
 
+struct wpa_freq_range {
+	unsigned int min;
+	unsigned int max;
+};
+
+
 /**
  * struct wpa_global - Internal, global data for all %wpa_supplicant interfaces
  *
@@ -219,6 +225,8 @@ struct wpa_global {
 	struct dl_list p2p_srv_bonjour; /* struct p2p_srv_bonjour */
 	struct dl_list p2p_srv_upnp; /* struct p2p_srv_upnp */
 	int p2p_disabled;
+	struct wpa_freq_range *p2p_disallow_freq;
+	unsigned int num_p2p_disallow_freq;
 #ifdef ANDROID_P2P
 	enum wpa_conc_pref {
 		WPA_CONC_PREF_NOT_SET,
@@ -230,6 +238,7 @@ struct wpa_global {
 #ifdef CONFIG_WFD
 	struct wfd_data *wfd;
 #endif
+	unsigned int p2p_cb_on_scan_complete:1;
 };
 
 
@@ -338,6 +347,16 @@ struct wpa_supplicant {
 	size_t num_bss;
 	unsigned int bss_update_idx;
 	unsigned int bss_next_id;
+
+	 /*
+	  * Pointers to BSS entries in the order they were in the last scan
+	  * results.
+	  */
+	struct wpa_bss **last_scan_res;
+	unsigned int last_scan_res_used;
+	unsigned int last_scan_res_size;
+	int last_scan_full;
+	struct os_time last_scan;
 
 	struct wpa_driver_ops *driver;
 	int interface_removed; /* whether the network interface has been
@@ -519,23 +538,15 @@ struct wpa_supplicant {
 	 */
 	char cross_connect_uplink[100];
 
-	enum {
-		P2P_GROUP_REMOVAL_UNKNOWN,
-		P2P_GROUP_REMOVAL_REQUESTED,
-		P2P_GROUP_REMOVAL_IDLE_TIMEOUT,
-		P2P_GROUP_REMOVAL_UNAVAILABLE,
-#ifdef ANDROID_P2P
-		P2P_GROUP_REMOVAL_FREQ_CONFLICT,
-#endif
-		P2P_GROUP_REMOVAL_GO_ENDING_SESSION
-	} removal_reason;
-
-	unsigned int p2p_cb_on_scan_complete:1;
+	unsigned int sta_scan_pending:1;
 	unsigned int p2p_auto_join:1;
 	unsigned int p2p_auto_pd:1;
 	unsigned int p2p_persistent_group:1;
 	unsigned int p2p_fallback_to_go_neg:1;
 	unsigned int p2p_pd_before_go_neg:1;
+	unsigned int p2p_go_ht40:1;
+	unsigned int user_initiated_pd:1;
+	int p2p_persistent_go_freq;
 	unsigned int p2p_block_concurrent_scan:1;
 
 	int p2p_persistent_id;
@@ -680,6 +691,7 @@ void wpas_p2p_block_concurrent_scan(struct wpa_supplicant *wpa_s);
 void wpas_p2p_unblock_concurrent_scan(struct wpa_supplicant *wpa_s);
 void wpa_supplicant_stop_countermeasures(void *eloop_ctx, void *sock_ctx);
 void wpa_supplicant_delayed_mic_error_report(void *eloop_ctx, void *sock_ctx);
+int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s);
 
 /* eap_register.c */
 int eap_register_methods(void);

@@ -81,15 +81,36 @@ static int wpa_supplicant_conf_ap(struct wpa_supplicant *wpa_s,
 	 */
 	if (wpa_s->hw.modes) {
 		struct hostapd_hw_modes *mode = NULL;
-		int i;
+		int i, no_ht = 0;
 		for (i = 0; i < wpa_s->hw.num_modes; i++) {
 			if (wpa_s->hw.modes[i].mode == conf->hw_mode) {
 				mode = &wpa_s->hw.modes[i];
 				break;
 			}
 		}
-		if (mode && mode->ht_capab) {
+
+#ifdef CONFIG_HT_OVERRIDES
+		if (ssid->disable_ht) {
+			conf->ieee80211n = 0;
+			conf->ht_capab = 0;
+			no_ht = 1;
+		}
+#endif /* CONFIG_HT_OVERRIDES */
+
+		if (!no_ht && mode && mode->ht_capab) {
 			conf->ieee80211n = 1;
+#ifdef CONFIG_P2P
+			if (conf->hw_mode == HOSTAPD_MODE_IEEE80211A &&
+			    (mode->ht_capab &
+			     HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET) &&
+			    ssid->ht40)
+				conf->secondary_channel =
+					wpas_p2p_get_ht40_mode(wpa_s, mode,
+							       conf->channel);
+			if (conf->secondary_channel)
+				conf->ht_capab |=
+					HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
+#endif /* CONFIG_P2P */
 
 			/*
 			 * white-list capabilities that won't cause issues
@@ -696,7 +717,8 @@ int wpa_supplicant_ap_wps_cancel(struct wpa_supplicant *wpa_s)
 
 
 int wpa_supplicant_ap_wps_pin(struct wpa_supplicant *wpa_s, const u8 *bssid,
-			      const char *pin, char *buf, size_t buflen)
+			      const char *pin, char *buf, size_t buflen,
+			      int timeout)
 {
 	int ret, ret_len = 0;
 
@@ -711,7 +733,7 @@ int wpa_supplicant_ap_wps_pin(struct wpa_supplicant *wpa_s, const u8 *bssid,
 		ret_len = os_snprintf(buf, buflen, "%s", pin);
 
 	ret = hostapd_wps_add_pin(wpa_s->ap_iface->bss[0], bssid, "any", pin,
-				  0);
+				  timeout);
 	if (ret)
 		return -1;
 	return ret_len;

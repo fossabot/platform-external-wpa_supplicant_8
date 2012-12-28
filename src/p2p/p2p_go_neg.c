@@ -159,7 +159,7 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
 	p2p_buf_add_go_intent(buf, (p2p->go_intent << 1) |
 			      p2p->next_tie_breaker);
 	p2p->next_tie_breaker = !p2p->next_tie_breaker;
-	p2p_buf_add_config_timeout(buf, 100, 20);
+	p2p_buf_add_config_timeout(buf, p2p->go_timeout, p2p->client_timeout);
 	p2p_buf_add_listen_channel(buf, p2p->cfg->country, p2p->cfg->reg_class,
 				   p2p->cfg->channel);
 	if (p2p->ext_listen_interval)
@@ -202,7 +202,7 @@ int p2p_connect_send(struct p2p_data *p2p, struct p2p_device *dev)
 		else
 			return -1;
 		return p2p_prov_disc_req(p2p, dev->info.p2p_device_addr,
-					 config_method, 0, 0);
+					 config_method, 0, 0, 1);
 	}
 
 	freq = dev->listen_freq > 0 ? dev->listen_freq : dev->oper_freq;
@@ -276,7 +276,7 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
 	}
 	p2p_buf_add_capability(buf, p2p->dev_capab, group_capab);
 	p2p_buf_add_go_intent(buf, (p2p->go_intent << 1) | tie_breaker);
-	p2p_buf_add_config_timeout(buf, 100, 20);
+	p2p_buf_add_config_timeout(buf, p2p->go_timeout, p2p->client_timeout);
 	if (peer && peer->go_state == REMOTE_GO) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Omit Operating "
 			"Channel attribute");
@@ -1151,6 +1151,18 @@ void p2p_process_go_neg_conf(struct p2p_data *p2p, const u8 *sa,
 			"becomes GO");
 		return;
 	}
+
+	/*
+	* The peer could have missed our ctrl::ack frame for GO Negotiation
+	* Confirm and continue retransmitting the frame. To reduce the
+	* likelihood of the peer not getting successful TX status for the
+	* GO Negotiation Confirm frame, wait a short time here before starting
+	* the group so that we will remain on the current channel to
+	* acknowledge any possible retransmission from the peer.
+	*/
+	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: 20 ms wait on current "
+		"channel before starting group");
+	os_sleep(0, 20000);
 
 	p2p_go_complete(p2p, dev);
 }
