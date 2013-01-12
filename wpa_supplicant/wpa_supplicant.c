@@ -476,6 +476,9 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpa_s->disallow_aps_ssid = NULL;
 
 	wpabuf_free(wpa_s->last_gas_resp);
+
+	os_free(wpa_s->last_scan_res);
+	wpa_s->last_scan_res = NULL;
 }
 
 
