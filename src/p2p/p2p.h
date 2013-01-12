@@ -1737,4 +1737,6 @@ void p2p_set_wfd_data(struct p2p_data *p2p, void *wfd);
 int p2p_set_disc_int(struct p2p_data *p2p, int min_disc_int, int max_disc_int,
 		    int max_disc_tu);
 
+void p2p_increase_search_delay(struct p2p_data *p2p, unsigned int delay);
+
 #endif /* P2P_H */
