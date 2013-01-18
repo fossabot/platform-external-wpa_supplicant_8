@@ -446,6 +446,9 @@ struct p2p_data {
 	*/
 	struct wfd_data *wfd;
 #endif
+	/* Extra delay in milliseconds between search iterations */
+	unsigned int search_delay;
+	int in_search_delay;
 };
 
 /**
