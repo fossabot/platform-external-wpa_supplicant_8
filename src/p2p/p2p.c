@@ -1155,15 +1155,17 @@ void p2p_stop_find(struct p2p_data *p2p)
 }
 
 
-static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
+static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq,
+			       unsigned int pref_freq)
 {
-	if (force_freq) {
+	if (force_freq || pref_freq) {
 		u8 op_reg_class, op_channel;
-		if (p2p_freq_to_channel(p2p->cfg->country, force_freq,
+		unsigned int freq = force_freq ? force_freq : pref_freq;
+		if (p2p_freq_to_channel(p2p->cfg->country, freq,
 					&op_reg_class, &op_channel) < 0) {
 			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 				"P2P: Unsupported frequency %u MHz",
-				force_freq);
+				freq);
 			return -1;
 		}
 		if (!p2p_channels_includes(&p2p->cfg->channels, op_reg_class,
@@ -1171,16 +1173,21 @@ static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
 			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 				"P2P: Frequency %u MHz (oper_class %u "
 				"channel %u) not allowed for P2P",
-				force_freq, op_reg_class, op_channel);
+				freq, op_reg_class, op_channel);
 			return -1;
 		}
 		p2p->op_reg_class = op_reg_class;
 		p2p->op_channel = op_channel;
 #ifndef ANDROID_P2P
-		p2p->channels.reg_classes = 1;
-		p2p->channels.reg_class[0].channels = 1;
-		p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
-		p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+		if (force_freq) {
+			p2p->channels.reg_classes = 1;
+			p2p->channels.reg_class[0].channels = 1;
+			p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
+			p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+		} else {
+			os_memcpy(&p2p->channels, &p2p->cfg->channels,
+				sizeof(struct p2p_channels));
+		}
 #else
 		if(p2p->cfg->p2p_concurrency == P2P_MULTI_CHANNEL_CONCURRENT) {
 			/* We we are requesting for a preferred channel. But since
@@ -1196,10 +1203,15 @@ static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq)
 #ifdef ANDROID_P2P
 			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "Single channel list %d", p2p->op_channel);
 #endif
-			p2p->channels.reg_classes = 1;
-			p2p->channels.reg_class[0].channels = 1;
-			p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
-			p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+			if (force_freq) {
+				p2p->channels.reg_classes = 1;
+				p2p->channels.reg_class[0].channels = 1;
+				p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
+				p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+			} else{
+				os_memcpy(&p2p->channels, &p2p->cfg->channels,
+					sizeof(struct p2p_channels));
+			}
 		}
 #endif
 	} else {
@@ -1281,7 +1293,7 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 		int go_intent, const u8 *own_interface_addr,
 		unsigned int force_freq, int persistent_group,
 		const u8 *force_ssid, size_t force_ssid_len,
-		int pd_before_go_neg)
+		int pd_before_go_neg, unsigned int pref_freq)
 {
 	struct p2p_device *dev;
 
@@ -1292,7 +1304,7 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group, pd_before_go_neg, force_freq);
 
-	if (p2p_prepare_channel(p2p, force_freq) < 0)
+	if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
 		return -1;
 
 	dev = p2p_get_device(p2p, peer_addr);
@@ -1392,7 +1404,8 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 		  enum p2p_wps_method wps_method,
 		  int go_intent, const u8 *own_interface_addr,
 		  unsigned int force_freq, int persistent_group,
-		  const u8 *force_ssid, size_t force_ssid_len)
+		  const u8 *force_ssid, size_t force_ssid_len,
+		  unsigned int pref_freq)
 {
 	struct p2p_device *dev;
 
@@ -1403,7 +1416,7 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group);
 
-	if (p2p_prepare_channel(p2p, force_freq) < 0)
+	if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
 		return -1;
 
 	dev = p2p_get_device(p2p, peer_addr);
