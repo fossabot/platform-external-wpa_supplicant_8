@@ -715,6 +715,11 @@ struct wpa_config {
 	struct wpabuf *wps_nfc_dh_privkey;
 
 	/**
+	 * p2p_disabled - Whether P2P operations are disabled for this interface
+	 */
+	int p2p_disabled;
+
+	/**
 	 * wps_nfc_dh_pubkey - NFC Device Password for password token
 	 */
 	struct wpabuf *wps_nfc_dev_pw;
