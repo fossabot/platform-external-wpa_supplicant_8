@@ -1138,9 +1138,8 @@ void p2p_stop_find(struct p2p_data *p2p)
 	p2p_stop_find_for_freq(p2p, 0);
 }
 
-
-static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq,
-			      unsigned int pref_freq)
+static int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
+			unsigned int force_freq, unsigned int pref_freq)
 {
 	if (force_freq || pref_freq) {
 		u8 op_reg_class, op_channel;
@@ -1222,6 +1221,11 @@ static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq,
 		p2p->op_reg_class, p2p->op_channel,
 		force_freq ? " (forced)" : "");
 
+	if (force_freq)
+		dev->flags |= P2P_DEV_FORCE_FREQ;
+	else
+		dev->flags &= ~P2P_DEV_FORCE_FREQ;
+
 	return 0;
 }
 
@@ -1261,8 +1265,6 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group, pd_before_go_neg);
 
-	if (p2p_prepare_channel(p2p, force_freq) < 0)
-			return -1;
 
 	dev = p2p_get_device(p2p, peer_addr);
 	if (dev == NULL || (dev->flags & P2P_DEV_PROBE_REQ_ONLY)) {
@@ -1271,6 +1273,9 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 			MAC2STR(peer_addr));
 		return -1;
 	}
+
+	if (p2p_prepare_channel(p2p, dev, force_freq, pref_freq) < 0)
+		return -1;
 
 	if (dev->flags & P2P_DEV_GROUP_CLIENT_ONLY) {
 		if (!(dev->info.dev_capab &
@@ -1339,11 +1344,6 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 	dev->wps_method = wps_method;
 	dev->status = P2P_SC_SUCCESS;
 
-	if (force_freq)
-		dev->flags |= P2P_DEV_FORCE_FREQ;
-	else
-		dev->flags &= ~P2P_DEV_FORCE_FREQ;
-
 	if (p2p->p2p_scan_running) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 			"P2P: p2p_scan running - delay connect send");
@@ -1373,9 +1373,6 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group);
 
-	if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
-		return -1;
-
 	dev = p2p_get_device(p2p, peer_addr);
 	if (dev == NULL) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
@@ -1383,6 +1380,9 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 			MAC2STR(peer_addr));
 		return -1;
 	}
+
+	if (p2p_prepare_channel(p2p, dev, force_freq, pref_freq) < 0)
+		return -1;
 
 	p2p->ssid_set = 0;
 	if (force_ssid) {
@@ -1403,11 +1403,6 @@ int p2p_authorize(struct p2p_data *p2p, const u8 *peer_addr,
 
 	dev->wps_method = wps_method;
 	dev->status = P2P_SC_SUCCESS;
-
-	if (force_freq)
-		dev->flags |= P2P_DEV_FORCE_FREQ;
-	else
-		dev->flags &= ~P2P_DEV_FORCE_FREQ;
 
 	return 0;
 }
