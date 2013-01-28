@@ -506,6 +506,7 @@ struct wpa_supplicant {
 	unsigned int p2p_fallback_to_go_neg:1;
 	unsigned int p2p_pd_before_go_neg:1;
 	unsigned int p2p_go_ht40:1;
+	int p2p_persistent_go_freq;
 	unsigned int p2p_block_concurrent_scan:1;
 
 	int p2p_persistent_id;
