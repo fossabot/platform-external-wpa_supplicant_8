@@ -238,6 +238,7 @@ struct wpa_global {
 #ifdef CONFIG_WFD
 	struct wfd_data *wfd;
 #endif
+	unsigned int p2p_cb_on_scan_complete:1;
 };
 
 
@@ -499,7 +500,6 @@ struct wpa_supplicant {
 	 */
 	char cross_connect_uplink[100];
 
-	unsigned int p2p_cb_on_scan_complete:1;
 	unsigned int sta_scan_pending:1;
 	unsigned int p2p_auto_join:1;
 	unsigned int p2p_auto_pd:1;
