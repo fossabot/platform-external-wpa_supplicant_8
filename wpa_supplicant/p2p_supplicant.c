@@ -204,7 +204,6 @@ static int wpas_p2p_scan(void *ctx, enum p2p_scan_type type, int freq,
 	wpabuf_free(ies);
 
 	if (ret) {
-		wpa_s->scan_res_handler = NULL;
 #ifdef ANDROID_P2P
 		if (wpa_s->scanning || (wpa_s->scan_res_handler == wpas_p2p_scan_res_handler) || wpas_global_scan_in_progress(wpa_s)) {
 #else
