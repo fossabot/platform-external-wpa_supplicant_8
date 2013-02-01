@@ -410,9 +410,8 @@ static void notify_bss_changes(struct wpa_supplicant *wpa_s, u32 changes,
 }
 
 
-static struct wpa_bss *
-wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
-	       struct wpa_scan_res *res)
+static void wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
+			   struct wpa_scan_res *res)
 {
 	u32 changes;
 
@@ -434,13 +433,6 @@ wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 		nbss = os_realloc(bss, sizeof(*bss) + res->ie_len +
 				  res->beacon_ie_len);
 		if (nbss) {
-			unsigned int i;
-			for (i = 0; i < wpa_s->last_scan_res_used; i++) {
-				if (wpa_s->last_scan_res[i] == bss) {
-					wpa_s->last_scan_res[i] = nbss;
-					break;
-				}
-			}
 			if ((bss == wpa_s->current_bss) && (bss != nbss)) {
 				wpa_s->current_bss = nbss;
 			}
@@ -457,8 +449,6 @@ wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 	dl_list_add_tail(&wpa_s->bss, &bss->list);
 
 	notify_bss_changes(wpa_s, changes, bss);
-
-	return bss;
 }
 
 
@@ -507,7 +497,7 @@ void wpa_bss_update_scan_res(struct wpa_supplicant *wpa_s,
 	if (bss == NULL)
 		wpa_bss_add(wpa_s, ssid + 2, ssid[1], res);
 	else
-		bss = wpa_bss_update(wpa_s, bss, res);
+		wpa_bss_update(wpa_s, bss, res);
 }
 
 
