@@ -39,6 +39,31 @@
 static void interworking_next_anqp_fetch(struct wpa_supplicant *wpa_s);
 
 
+static void interworking_reconnect(struct wpa_supplicant *wpa_s)
+{
+	if (wpa_s->wpa_state >= WPA_AUTHENTICATING) {
+		wpa_supplicant_cancel_sched_scan(wpa_s);
+		wpa_supplicant_deauthenticate(wpa_s,
+					      WLAN_REASON_DEAUTH_LEAVING);
+	}
+	wpa_s->disconnected = 0;
+	wpa_s->reassociate = 1;
+
+	if (wpa_s->last_scan_res_used > 0) {
+		struct os_time now;
+		os_get_time(&now);
+		if (now.sec - wpa_s->last_scan.sec <= 5) {
+			wpa_printf(MSG_DEBUG, "Interworking: Old scan results "
+				   "are fresh - connect without new scan");
+			if (wpas_select_network_from_last_scan(wpa_s) == 0)
+				return;
+		}
+	}
+
+	wpa_supplicant_req_scan(wpa_s, 0, 0);
+}
+
+
 static struct wpabuf * anqp_build_req(u16 info_ids[], size_t num_ids,
 				      struct wpabuf *extra)
 {

@@ -991,8 +991,6 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 					      union wpa_event_data *data)
 #endif
 {
-	struct wpa_bss *selected;
-	struct wpa_ssid *ssid = NULL;
 	struct wpa_scan_results *scan_res;
 	int ap = 0;
 
@@ -1102,6 +1100,15 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 	}
 
 	wpa_scan_results_free(scan_res);
+
+	return wpas_select_network_from_last_scan(wpa_s);
+}
+
+
+int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s)
+{
+	struct wpa_bss *selected;
+	struct wpa_ssid *ssid = NULL;
 
 	selected = wpa_supplicant_pick_network(wpa_s, &ssid);
 
