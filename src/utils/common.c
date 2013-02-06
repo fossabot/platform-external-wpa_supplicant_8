@@ -343,6 +343,132 @@ TCHAR * wpa_strdup_tchar(const char *str)
 }
 #endif /* CONFIG_NATIVE_WINDOWS */
 
+void printf_encode(char *txt, size_t maxlen, const u8 *data, size_t len)
+{
+	char *end = txt + maxlen;
+	size_t i;
+
+	for (i = 0; i < len; i++) {
+		if (txt + 4 > end)
+			break;
+
+		switch (data[i]) {
+		case '\"':
+			*txt++ = '\\';
+			*txt++ = '\"';
+			break;
+		case '\\':
+			*txt++ = '\\';
+			*txt++ = '\\';
+			break;
+		case '\e':
+			*txt++ = '\\';
+			*txt++ = 'e';
+			break;
+		case '\n':
+			*txt++ = '\\';
+			*txt++ = 'n';
+			break;
+		case '\r':
+			*txt++ = '\\';
+			*txt++ = 'r';
+			break;
+		case '\t':
+			*txt++ = '\\';
+			*txt++ = 't';
+			break;
+		default:
+			if (data[i] >= 32 && data[i] <= 127) {
+				*txt++ = data[i];
+			} else {
+				txt += os_snprintf(txt, end - txt, "\\x%02x",
+						data[i]);
+			}
+			break;
+		}
+	}
+
+	*txt = '\0';
+}
+
+size_t printf_decode(u8 *buf, size_t maxlen, const char *str)
+{
+	const char *pos = str;
+	size_t len = 0;
+	int val;
+
+	while (*pos) {
+		if (len == maxlen)
+			break;
+		switch (*pos) {
+		case '\\':
+			pos++;
+			switch (*pos) {
+			case '\\':
+				buf[len++] = '\\';
+				pos++;
+				break;
+			case '"':
+				buf[len++] = '"';
+				pos++;
+				break;
+			case 'n':
+				buf[len++] = '\n';
+				pos++;
+				break;
+			case 'r':
+				buf[len++] = '\r';
+				pos++;
+				break;
+			case 't':
+				buf[len++] = '\t';
+				pos++;
+				break;
+			case 'e':
+				buf[len++] = '\e';
+				pos++;
+				break;
+			case 'x':
+				pos++;
+				val = hex2byte(pos);
+				if (val < 0) {
+					val = hex2num(*pos);
+					if (val < 0)
+						break;
+					buf[len++] = val;
+					pos++;
+				} else {
+					buf[len++] = val;
+					pos += 2;
+				}
+				break;
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+				val = *pos++ - '0';
+				if (*pos >= '0' && *pos <= '7')
+					val = val * 8 + (*pos++ - '0');
+				if (*pos >= '0' && *pos <= '7')
+					val = val * 8 + (*pos++ - '0');
+				buf[len++] = val;
+				break;
+			default:
+				break;
+			}
+			break;
+		default:
+			buf[len++] = *pos++;
+			break;
+		}
+	}
+
+	return len;
+}
 
 /**
  * wpa_ssid_txt - Convert SSID to a printable string
@@ -360,19 +486,14 @@ TCHAR * wpa_strdup_tchar(const char *str)
  */
 const char * wpa_ssid_txt(const u8 *ssid, size_t ssid_len)
 {
-	static char ssid_txt[33];
-	char *pos;
+	static char ssid_txt[32 * 4 + 1];
 
-	if (ssid_len > 32)
-		ssid_len = 32;
-	os_memcpy(ssid_txt, ssid, ssid_len);
-	ssid_txt[ssid_len] = '\0';
-	for (pos = ssid_txt; *pos != '\0'; pos++) {
-#ifndef WPA_UNICODE_SSID
-		if ((u8) *pos < 32 || (u8) *pos >= 127)
-			*pos = '_';
-#endif
+	if (ssid == NULL) {
+		ssid_txt[0] = '\0';
+	return ssid_txt;
 	}
+
+	printf_encode(ssid_txt, sizeof(ssid_txt), ssid, ssid_len);
 	return ssid_txt;
 }
 
