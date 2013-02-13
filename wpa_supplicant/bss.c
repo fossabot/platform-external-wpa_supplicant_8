@@ -191,7 +191,8 @@ struct wpa_bss * wpa_bss_get(struct wpa_supplicant *wpa_s, const u8 *bssid,
 }
 
 
-static void wpa_bss_copy_res(struct wpa_bss *dst, struct wpa_scan_res *src)
+static void wpa_bss_copy_res(struct wpa_bss *dst, struct wpa_scan_res *src,
+			     struct os_time *fetch_time)
 {
 	os_time_t usec;
 
@@ -205,7 +206,8 @@ static void wpa_bss_copy_res(struct wpa_bss *dst, struct wpa_scan_res *src)
 	dst->level = src->level;
 	dst->tsf = src->tsf;
 
-	os_get_time(&dst->last_update);
+	dst->last_update.sec = fetch_time->sec;
+	dst->last_update.usec = fetch_time->usec;
 	dst->last_update.sec -= src->age / 1000;
 	usec = (src->age % 1000) * 1000;
 	if (dst->last_update.usec < usec) {
@@ -282,7 +284,8 @@ static int wpa_bss_remove_oldest(struct wpa_supplicant *wpa_s)
 
 static struct wpa_bss * wpa_bss_add(struct wpa_supplicant *wpa_s,
 				    const u8 *ssid, size_t ssid_len,
-				    struct wpa_scan_res *res)
+				    struct wpa_scan_res *res,
+				    struct os_time *fetch_time)
 {
 	struct wpa_bss *bss;
 
@@ -291,7 +294,7 @@ static struct wpa_bss * wpa_bss_add(struct wpa_supplicant *wpa_s,
 		return NULL;
 	bss->id = wpa_s->bss_next_id++;
 	bss->last_update_idx = wpa_s->bss_update_idx;
-	wpa_bss_copy_res(bss, res);
+	wpa_bss_copy_res(bss, res, fetch_time);
 	os_memcpy(bss->ssid, ssid, ssid_len);
 	bss->ssid_len = ssid_len;
 	bss->ie_len = res->ie_len;
@@ -447,14 +450,14 @@ static void notify_bss_changes(struct wpa_supplicant *wpa_s, u32 changes,
 
 static struct wpa_bss *
 wpa_bss_update(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
-	       struct wpa_scan_res *res)
+	       struct wpa_scan_res *res, struct os_time *fetch_time)
 {
 	u32 changes;
 
 	changes = wpa_bss_compare_res(bss, res);
 	bss->scan_miss_count = 0;
 	bss->last_update_idx = wpa_s->bss_update_idx;
-	wpa_bss_copy_res(bss, res);
+	wpa_bss_copy_res(bss, res, fetch_time);
 	/* Move the entry to the end of the list */
 	dl_list_del(&bss->list);
 	if (bss->ie_len + bss->beacon_ie_len >=
@@ -506,7 +509,8 @@ void wpa_bss_update_start(struct wpa_supplicant *wpa_s)
 
 
 void wpa_bss_update_scan_res(struct wpa_supplicant *wpa_s,
-			     struct wpa_scan_res *res)
+			struct wpa_scan_res *res,
+			struct os_time *fetch_time)
 {
 	const u8 *ssid, *p2p;
 	struct wpa_bss *bss;
@@ -544,9 +548,9 @@ void wpa_bss_update_scan_res(struct wpa_supplicant *wpa_s,
 	 * (to save memory) */
 	bss = wpa_bss_get(wpa_s, res->bssid, ssid + 2, ssid[1]);
 	if (bss == NULL)
-		bss = wpa_bss_add(wpa_s, ssid + 2, ssid[1], res);
+		bss = wpa_bss_add(wpa_s, ssid + 2, ssid[1], res, fetch_time);
 	else
-		bss = wpa_bss_update(wpa_s, bss, res);
+		bss = wpa_bss_update(wpa_s, bss, res, fetch_time);
 
 	if (bss == NULL)
 		return;
