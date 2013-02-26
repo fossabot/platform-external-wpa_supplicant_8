@@ -1694,6 +1694,12 @@ const char * p2p_wps_method_text(enum p2p_wps_method method);
  * @wfd: WFD module context from wfd_init()
  */
 void p2p_set_wfd_data(struct p2p_data *p2p, void *wfd);
+
+/**
+ * p2p_peer_set_intended_addr - Save intended address for use by GO
+ */
+void p2p_peer_set_intended_addr(struct p2p_data *p2p, const u8 *dev_addr,
+				const u8 *intended_addr);
 #endif
 
 #endif /* P2P_H */
