@@ -1712,6 +1712,10 @@ void wpa_supplicant_disassociate(struct wpa_supplicant *wpa_s,
 	u8 *addr = NULL;
 	union wpa_event_data event;
 
+#ifdef CONFIG_TDLS
+	wpa_tdls_teardown_peers(wpa_s->wpa);
+#endif /* CONFIG_TDLS */
+
 	if (!is_zero_ether_addr(wpa_s->bssid)) {
 		wpa_drv_disassociate(wpa_s, wpa_s->bssid, reason_code);
 		addr = wpa_s->bssid;
@@ -1738,6 +1742,10 @@ void wpa_supplicant_deauthenticate(struct wpa_supplicant *wpa_s,
 {
 	u8 *addr = NULL;
 	union wpa_event_data event;
+
+#ifdef CONFIG_TDLS
+	wpa_tdls_teardown_peers(wpa_s->wpa);
+#endif /* CONFIG_TDLS */
 
 	if (!is_zero_ether_addr(wpa_s->bssid)) {
 		wpa_drv_deauthenticate(wpa_s, wpa_s->bssid, reason_code);
