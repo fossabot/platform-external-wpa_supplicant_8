@@ -3077,11 +3077,7 @@ static void p2p_go_neg_req_cb(struct p2p_data *p2p, int success)
 	 * channel.
 	 */
 	p2p_set_state(p2p, P2P_CONNECT);
-#ifdef ANDROID_P2P
-	p2p_set_timeout(p2p, 0, 350000);
-#else
-	p2p_set_timeout(p2p, 0, success ? 200000 : 100000);
-#endif
+	p2p_set_timeout(p2p, 0, success ? 500000 : 100000);
 }
 
 
@@ -3097,11 +3093,7 @@ static void p2p_go_neg_resp_cb(struct p2p_data *p2p, int success)
 		return;
 	}
 	p2p_set_state(p2p, P2P_CONNECT);
-#ifdef ANDROID_P2P
-	p2p_set_timeout(p2p, 0, 350000);
-#else
-	p2p_set_timeout(p2p, 0, 250000);
-#endif
+	p2p_set_timeout(p2p, 0, 500000);
 }
 
 
