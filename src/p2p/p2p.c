@@ -1800,6 +1800,16 @@ static void p2p_add_dev_from_probe_req(struct p2p_data *p2p, const u8 *addr,
 
 	p2p_parse_free(&msg);
 
+#ifdef CONFIG_WFD
+	if (wfd_add_peer_info(p2p->cfg->msg_ctx,
+				&dev->wfd_info, ie, ie_len)) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+				"P2P: Failed to add WFD peer info"
+				"for a device entry on Prob Req");
+	}
+#endif
+
+
 	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 		"P2P: Created device entry based on Probe Req: " MACSTR
 		" dev_capab=0x%x group_capab=0x%x name='%s' listen_freq=%d",
