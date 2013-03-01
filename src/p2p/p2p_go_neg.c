@@ -479,6 +479,18 @@ void p2p_process_go_neg_req(struct p2p_data *p2p, const u8 *sa,
 		dev = p2p_add_dev_from_go_neg_req(p2p, sa, &msg);
 	else if (dev->flags & P2P_DEV_PROBE_REQ_ONLY)
 		p2p_add_dev_info(p2p, sa, dev, &msg);
+
+#ifdef CONFIG_WFD
+	if (dev) {
+		if (wfd_add_peer_info(p2p->cfg->msg_ctx,
+					&dev->wfd_info, data + 1, len - 1)) {
+			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+					"P2P: Failed to add WFD peer info"
+					"for a device entry on GO Neg Request");
+		}
+	}
+#endif
+
 	if (dev && dev->flags & P2P_DEV_USER_REJECTED) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 			"P2P: User has rejected this peer");
