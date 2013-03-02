@@ -1185,8 +1185,8 @@ void p2p_stop_find(struct p2p_data *p2p)
  * may be further optimized in p2p_reselect_channel() once the peer information
  * is available.
  */
-static int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
-			       unsigned int force_freq, unsigned int pref_freq)
+int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
+			unsigned int force_freq, unsigned int pref_freq)
 {
 	if (force_freq || pref_freq) {
 		u8 op_reg_class, op_channel;
