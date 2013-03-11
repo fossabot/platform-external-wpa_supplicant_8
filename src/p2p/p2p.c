@@ -242,8 +242,10 @@ void p2p_go_neg_failed(struct p2p_data *p2p, struct p2p_device *peer,
 	struct p2p_go_neg_results res;
 	p2p_clear_timeout(p2p);
 	p2p_set_state(p2p, P2P_IDLE);
-	if (p2p->go_neg_peer)
+	if (p2p->go_neg_peer) {
+		p2p->go_neg_peer->flags &= ~P2P_DEV_PEER_WAITING_RESPONSE;
 		p2p->go_neg_peer->wps_method = WPS_NOT_READY;
+	}
 	p2p->go_neg_peer = NULL;
 
 	os_memset(&res, 0, sizeof(res));
@@ -1197,6 +1199,8 @@ void p2p_stop_find_for_freq(struct p2p_data *p2p, int freq)
 	p2p_set_state(p2p, P2P_IDLE);
 	p2p_free_req_dev_types(p2p);
 	p2p->start_after_scan = P2P_AFTER_SCAN_NOTHING;
+	if (p2p->go_neg_peer)
+		p2p->go_neg_peer->flags &= ~P2P_DEV_PEER_WAITING_RESPONSE;
 	p2p->go_neg_peer = NULL;
 	p2p->sd_peer = NULL;
 	p2p->invite_peer = NULL;
@@ -1248,8 +1252,8 @@ void p2p_stop_find(struct p2p_data *p2p)
  * may be further optimized in p2p_reselect_channel() once the peer information
  * is available.
  */
-static int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
-			       unsigned int force_freq, unsigned int pref_freq)
+int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
+			unsigned int force_freq, unsigned int pref_freq)
 {
 	if (force_freq || pref_freq) {
 		u8 op_reg_class, op_channel;
@@ -1455,12 +1459,14 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 	else {
 		dev->flags &= ~P2P_DEV_PD_BEFORE_GO_NEG;
 		/*
-		 * Assign dialog token here to use the same value in each
-		 * retry within the same GO Negotiation exchange.
+		 * Assign dialog token and tie breaker here to use the same
+		 * values in each retry within the same GO Negotiation exchange.
 		 */
 		dev->dialog_token++;
 		if (dev->dialog_token == 0)
 			dev->dialog_token = 1;
+		dev->tie_breaker = p2p->next_tie_breaker;
+		p2p->next_tie_breaker = !p2p->next_tie_breaker;
 	}
 	dev->connect_reqs = 0;
 	dev->go_neg_req_sent = 0;
@@ -2251,11 +2257,13 @@ p2p_probe_req_rx(struct p2p_data *p2p, const u8 *addr, const u8 *dst,
 	if ((p2p->state == P2P_CONNECT || p2p->state == P2P_CONNECT_LISTEN) &&
 	    p2p->go_neg_peer &&
 	    os_memcmp(addr, p2p->go_neg_peer->info.p2p_device_addr, ETH_ALEN)
-	    == 0) {
+	    == 0 &&
+	    !(p2p->go_neg_peer->flags & P2P_DEV_WAIT_GO_NEG_CONFIRM)) {
 		/* Received a Probe Request from GO Negotiation peer */
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 			"P2P: Found GO Negotiation peer - try to start GO "
 			"negotiation from timeout");
+		eloop_cancel_timeout(p2p_go_neg_start, p2p, NULL);
 		eloop_register_timeout(0, 0, p2p_go_neg_start, p2p, NULL);
 		return P2P_PREQ_PROCESSED;
 	}
@@ -2569,6 +2577,7 @@ void p2p_deinit(struct p2p_data *p2p)
 	eloop_cancel_timeout(p2p_expiration_timeout, p2p, NULL);
 	eloop_cancel_timeout(p2p_ext_listen_timeout, p2p, NULL);
 	eloop_cancel_timeout(p2p_scan_timeout, p2p, NULL);
+	eloop_cancel_timeout(p2p_go_neg_start, p2p, NULL);
 	p2p_flush(p2p);
 	p2p_free_req_dev_types(p2p);
 	os_free(p2p->cfg->dev_name);
@@ -3039,6 +3048,7 @@ int p2p_ie_text(struct wpabuf *p2p_ie, char *buf, char *end)
 static void p2p_go_neg_req_cb(struct p2p_data *p2p, int success)
 {
 	struct p2p_device *dev = p2p->go_neg_peer;
+	int timeout;
 
 	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 		"P2P: GO Negotiation Request TX callback: success=%d",
@@ -3077,11 +3087,20 @@ static void p2p_go_neg_req_cb(struct p2p_data *p2p, int success)
 	 * channel.
 	 */
 	p2p_set_state(p2p, P2P_CONNECT);
-#ifdef ANDROID_P2P
-	p2p_set_timeout(p2p, 0, 350000);
-#else
-	p2p_set_timeout(p2p, 0, success ? 200000 : 100000);
-#endif
+	timeout = success ? 500000 : 100000;
+	if (!success && p2p->go_neg_peer &&
+	    (p2p->go_neg_peer->flags & P2P_DEV_PEER_WAITING_RESPONSE)) {
+		unsigned int r;
+		/*
+		 * Peer is expected to wait our response and we will skip the
+		 * listen phase. Add some randomness to the wait time here to
+		 * make it less likely to hit cases where we could end up in
+		 * sync with peer not listening.
+		 */
+		os_get_random((u8 *) &r, sizeof(r));
+		timeout += r % 100000;
+	}
+	p2p_set_timeout(p2p, 0, timeout);
 }
 
 
@@ -3097,11 +3116,7 @@ static void p2p_go_neg_resp_cb(struct p2p_data *p2p, int success)
 		return;
 	}
 	p2p_set_state(p2p, P2P_CONNECT);
-#ifdef ANDROID_P2P
-	p2p_set_timeout(p2p, 0, 350000);
-#else
-	p2p_set_timeout(p2p, 0, 250000);
-#endif
+	p2p_set_timeout(p2p, 0, 500000);
 }
 
 
@@ -3323,6 +3338,15 @@ static void p2p_timeout_connect(struct p2p_data *p2p)
 		p2p_go_neg_failed(p2p, p2p->go_neg_peer, -1);
 		return;
 	}
+	if (p2p->go_neg_peer &&
+	    (p2p->go_neg_peer->flags & P2P_DEV_PEER_WAITING_RESPONSE) &&
+	    p2p->go_neg_peer->connect_reqs < 120) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Peer expected to "
+			"wait our response - skip listen");
+		p2p_connect_send(p2p, p2p->go_neg_peer);
+		return;
+	}
+
 	p2p_set_state(p2p, P2P_CONNECT_LISTEN);
 	p2p_listen_in_find(p2p, 0);
 }
@@ -3486,7 +3510,7 @@ static void p2p_timeout_invite_listen(struct p2p_data *p2p)
 				"P2P: Invitation Request retry limit reached");
 			if (p2p->cfg->invitation_result)
 				p2p->cfg->invitation_result(
-					p2p->cfg->cb_ctx, -1, NULL);
+					p2p->cfg->cb_ctx, -1, NULL, NULL);
 		}
 		p2p_set_state(p2p, P2P_IDLE);
 	}
