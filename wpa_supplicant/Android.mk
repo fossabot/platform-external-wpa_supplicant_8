@@ -189,6 +189,10 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
+ifdef CONFIG_SAE
+L_CFLAGS += -DCONFIG_SAE
+endif
+
 ifdef CONFIG_WNM
 CFLAGS += -DCONFIG_WNM
 OBJS += wnm_sta.c
