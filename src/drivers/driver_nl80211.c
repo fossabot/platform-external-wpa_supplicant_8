@@ -1603,6 +1603,34 @@ static void mlme_event_remain_on_channel(struct wpa_driver_nl80211_data *drv,
 }
 
 
+static void mlme_event_ft_event(struct wpa_driver_nl80211_data *drv,
+				struct nlattr *tb[])
+{
+	union wpa_event_data data;
+
+	os_memset(&data, 0, sizeof(data));
+
+	if (tb[NL80211_ATTR_IE]) {
+		data.ft_ies.ies = nla_data(tb[NL80211_ATTR_IE]);
+		data.ft_ies.ies_len = nla_len(tb[NL80211_ATTR_IE]);
+	}
+
+	if (tb[NL80211_ATTR_IE_RIC]) {
+		data.ft_ies.ric_ies = nla_data(tb[NL80211_ATTR_IE_RIC]);
+		data.ft_ies.ric_ies_len = nla_len(tb[NL80211_ATTR_IE_RIC]);
+	}
+
+	if (tb[NL80211_ATTR_MAC])
+		os_memcpy(data.ft_ies.target_ap,
+			  nla_data(tb[NL80211_ATTR_MAC]), ETH_ALEN);
+
+	wpa_printf(MSG_DEBUG, "nl80211: FT event target_ap " MACSTR,
+		   MAC2STR(data.ft_ies.target_ap));
+
+	wpa_supplicant_event(drv->ctx, EVENT_FT_RESPONSE, &data);
+}
+
+
 static void send_scan_event(struct wpa_driver_nl80211_data *drv, int aborted,
 			    struct nlattr *tb[])
 {
@@ -2253,6 +2281,9 @@ static void do_process_drv_event(struct wpa_driver_nl80211_data *drv,
 		break;
 	case NL80211_CMD_TDLS_OPER:
 		nl80211_tdls_oper_event(drv, tb);
+		break;
+	case NL80211_CMD_FT_EVENT:
+		mlme_event_ft_event(drv, tb);
 		break;
 	default:
 		wpa_printf(MSG_DEBUG, "nl80211: Ignored unknown event "
@@ -5700,6 +5731,8 @@ static int wpa_driver_nl80211_sta_add(void *priv,
 	if (!msg)
 		return -ENOMEM;
 
+	wpa_printf(MSG_DEBUG, "nl80211: %s STA " MACSTR,
+		   params->set ? "Set" : "Add", MAC2STR(params->addr));
 	nl80211_cmd(drv, msg, 0, params->set ? NL80211_CMD_SET_STATION :
 		    NL80211_CMD_NEW_STATION);
 
@@ -5707,20 +5740,49 @@ static int wpa_driver_nl80211_sta_add(void *priv,
 	NLA_PUT(msg, NL80211_ATTR_MAC, ETH_ALEN, params->addr);
 	NLA_PUT(msg, NL80211_ATTR_STA_SUPPORTED_RATES, params->supp_rates_len,
 		params->supp_rates);
+	wpa_hexdump(MSG_DEBUG, "  * supported rates", params->supp_rates,
+		    params->supp_rates_len);
 	if (!params->set) {
+		wpa_printf(MSG_DEBUG, "  * aid=%u", params->aid);
 		NLA_PUT_U16(msg, NL80211_ATTR_STA_AID, params->aid);
+		wpa_printf(MSG_DEBUG, "  * listen_interval=%u",
+			   params->listen_interval);
 		NLA_PUT_U16(msg, NL80211_ATTR_STA_LISTEN_INTERVAL,
 			    params->listen_interval);
 	}
 	if (params->ht_capabilities) {
+		wpa_hexdump(MSG_DEBUG, "  * ht_capabilities",
+			    (u8 *) params->ht_capabilities,
+			    sizeof(*params->ht_capabilities));
 		NLA_PUT(msg, NL80211_ATTR_HT_CAPABILITY,
 			sizeof(*params->ht_capabilities),
 			params->ht_capabilities);
 	}
 
+	if (params->vht_capabilities) {
+		wpa_hexdump(MSG_DEBUG, "  * vht_capabilities",
+			    (u8 *) params->vht_capabilities,
+			    sizeof(*params->vht_capabilities));
+		NLA_PUT(msg, NL80211_ATTR_VHT_CAPABILITY,
+			sizeof(*params->vht_capabilities),
+			params->vht_capabilities);
+	}
+
+	wpa_printf(MSG_DEBUG, "  * capability=0x%x", params->capability);
+	NLA_PUT_U16(msg, NL80211_ATTR_STA_CAPABILITY, params->capability);
+
+	if (params->ext_capab) {
+		wpa_hexdump(MSG_DEBUG, "  * ext_capab",
+			    params->ext_capab, params->ext_capab_len);
+		NLA_PUT(msg, NL80211_ATTR_STA_EXT_CAPABILITY,
+			params->ext_capab_len, params->ext_capab);
+	}
+
 	os_memset(&upd, 0, sizeof(upd));
 	upd.mask = sta_flags_nl80211(params->flags);
 	upd.set = upd.mask;
+	wpa_printf(MSG_DEBUG, "  * flags set=0x%x mask=0x%x",
+		   upd.set, upd.mask);
 	NLA_PUT(msg, NL80211_ATTR_STA_FLAGS2, sizeof(upd), &upd);
 
 	if (params->flags & WPA_STA_WMM) {
@@ -5728,10 +5790,11 @@ static int wpa_driver_nl80211_sta_add(void *priv,
 		if (!wme)
 			goto nla_put_failure;
 
+		wpa_printf(MSG_DEBUG, "  * qosinfo=0x%x", params->qosinfo);
 		NLA_PUT_U8(wme, NL80211_STA_WME_UAPSD_QUEUES,
 				params->qosinfo & WMM_QOSINFO_STA_AC_MASK);
 		NLA_PUT_U8(wme, NL80211_STA_WME_MAX_SP,
-				(params->qosinfo > WMM_QOSINFO_STA_SP_SHIFT) &
+				(params->qosinfo >> WMM_QOSINFO_STA_SP_SHIFT) &
 				WMM_QOSINFO_STA_SP_MASK);
 		if (nla_put_nested(msg, NL80211_ATTR_STA_WME, wme) < 0)
 			goto nla_put_failure;
@@ -6873,12 +6936,20 @@ skip_auth_type:
 	}
 
 	if (params->key_mgmt_suite == KEY_MGMT_802_1X ||
-	    params->key_mgmt_suite == KEY_MGMT_PSK) {
+	    params->key_mgmt_suite == KEY_MGMT_PSK ||
+	    params->key_mgmt_suite == KEY_MGMT_FT_802_1X ||
+	    params->key_mgmt_suite == KEY_MGMT_FT_PSK) {
 		int mgmt = WLAN_AKM_SUITE_PSK;
 
 		switch (params->key_mgmt_suite) {
 		case KEY_MGMT_802_1X:
 			mgmt = WLAN_AKM_SUITE_8021X;
+			break;
+		case KEY_MGMT_FT_802_1X:
+			mgmt = WLAN_AKM_SUITE_FT_8021X;
+			break;
+		case KEY_MGMT_FT_PSK:
+			mgmt = WLAN_AKM_SUITE_FT_PSK;
 			break;
 		case KEY_MGMT_PSK:
 		default:
@@ -9220,6 +9291,39 @@ static int android_pno_stop(struct i802_bss *bss)
 #endif /* ANDROID */
 
 
+static int wpa_driver_nl80211_update_ft_ies(void *priv, const u8 *md,
+					    const u8 *ies, size_t ies_len)
+{
+	int ret;
+	struct nl_msg *msg;
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	u16 mdid = WPA_GET_LE16(md);
+
+	msg = nlmsg_alloc();
+	if (!msg)
+		return -ENOMEM;
+
+	wpa_printf(MSG_DEBUG, "nl80211: Updating FT IEs");
+	nl80211_cmd(drv, msg, 0, NL80211_CMD_UPDATE_FT_IES);
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+	NLA_PUT(msg, NL80211_ATTR_IE, ies_len, ies);
+	NLA_PUT_U16(msg, NL80211_ATTR_MDID, mdid);
+
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+	if (ret) {
+		wpa_printf(MSG_DEBUG, "nl80211: update_ft_ies failed "
+			   "err=%d (%s)", ret, strerror(-ret));
+	}
+
+	return ret;
+
+nla_put_failure:
+	nlmsg_free(msg);
+	return -ENOBUFS;
+}
+
+
 const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.name = "nl80211",
 	.desc = "Linux nl80211/cfg80211",
@@ -9304,4 +9408,5 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 #ifdef ANDROID
 	.driver_cmd = wpa_driver_nl80211_driver_cmd,
 #endif
+	.update_ft_ies = wpa_driver_nl80211_update_ft_ies,
 };

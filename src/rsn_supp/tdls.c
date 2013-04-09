@@ -122,6 +122,7 @@ struct wpa_tdls_peer {
 	size_t supp_rates_len;
 
 	struct ieee80211_ht_capabilities *ht_capabilities;
+	struct ieee80211_vht_capabilities *vht_capabilities;
 
 	u8 qos_info;
 
@@ -620,6 +621,8 @@ static void wpa_tdls_peer_free(struct wpa_sm *sm, struct wpa_tdls_peer *peer)
 	peer->sm_tmr.buf = NULL;
 	os_free(peer->ht_capabilities);
 	peer->ht_capabilities = NULL;
+	os_free(peer->vht_capabilities);
+	peer->vht_capabilities = NULL;
 	os_free(peer->ext_capab);
 	peer->ext_capab = NULL;
 	peer->rsnie_i_len = peer->rsnie_p_len = 0;
@@ -1379,6 +1382,34 @@ static int copy_peer_ht_capab(const struct wpa_eapol_ie_parse *kde,
 }
 
 
+static int copy_peer_vht_capab(const struct wpa_eapol_ie_parse *kde,
+			      struct wpa_tdls_peer *peer)
+{
+	if (!kde->vht_capabilities ||
+	    kde->vht_capabilities_len <
+	    sizeof(struct ieee80211_vht_capabilities) ) {
+		wpa_printf(MSG_DEBUG, "TDLS: No supported vht capabilities "
+			   "received");
+		return 0;
+	}
+
+	if (!peer->vht_capabilities) {
+		peer->vht_capabilities =
+                        os_zalloc(sizeof(struct ieee80211_vht_capabilities));
+		if (peer->vht_capabilities == NULL)
+                        return -1;
+	}
+
+	os_memcpy(peer->vht_capabilities, kde->vht_capabilities,
+                  sizeof(struct ieee80211_vht_capabilities));
+	wpa_hexdump(MSG_DEBUG, "TDLS: Peer VHT capabilities",
+		    (u8 *) peer->vht_capabilities,
+		    sizeof(struct ieee80211_vht_capabilities));
+
+	return 0;
+}
+
+
 static int copy_peer_ext_capab(const struct wpa_eapol_ie_parse *kde,
 			       struct wpa_tdls_peer *peer)
 {
@@ -1451,6 +1482,57 @@ static int wpa_tdls_process_tpk_m1(struct wpa_sm *sm, const u8 *src_addr,
 			goto error;
 	}
 
+	/* If found, use existing entry instead of adding a new one;
+         * how to handle the case where both ends initiate at the
+         * same time? */
+        if (existing_peer) {
+                if (peer->tpk_success) {
+                        wpa_printf(MSG_DEBUG, "TDLS: TDLS Setup Request while "
+                                   "direct link is enabled - tear down the "
+                                   "old link first");
+#if 0
+                        /* TODO: Disabling the link would be more proper
+                         * operation here, but it seems to trigger a race with
+                         * some drivers handling the new request frame. */
+                        wpa_sm_tdls_oper(sm, TDLS_DISABLE_LINK, src_addr);
+#else
+                        if (sm->tdls_external_setup)
+                                wpa_sm_tdls_oper(sm, TDLS_DISABLE_LINK,
+                                                 src_addr);
+                        else
+                                wpa_tdls_del_key(sm, peer);
+#endif
+                        wpa_tdls_peer_free(sm, peer);
+                }
+
+                /*
+                 * An entry is already present, so check if we already sent a
+                 * TDLS Setup Request. If so, compare MAC addresses and let the
+                 * STA with the lower MAC address continue as the initiator.
+                 * The other negotiation is terminated.
+                 */
+                if (peer->initiator) {
+                        if (os_memcmp(sm->own_addr, src_addr, ETH_ALEN) < 0) {
+                                wpa_printf(MSG_DEBUG, "TDLS: Discard request "
+                                           "from peer with higher address "
+                                           MACSTR, MAC2STR(src_addr));
+                                return -1;
+                        } else {
+                                wpa_printf(MSG_DEBUG, "TDLS: Accept request "
+                                           "from peer with lower address "
+                                           MACSTR " (terminate previously "
+                                           "initiated negotiation",
+                                           MAC2STR(src_addr));
+				if (sm->tdls_external_setup)
+					wpa_sm_tdls_oper(sm, TDLS_DISABLE_LINK,
+							 src_addr);
+				else
+					wpa_tdls_del_key(sm, peer);
+				wpa_tdls_peer_free(sm, peer);
+                        }
+                }
+        }
+
 	/* capability information */
 	peer->capability = WPA_GET_LE16(cpos);
 	cpos += 2;
@@ -1482,6 +1564,9 @@ static int wpa_tdls_process_tpk_m1(struct wpa_sm *sm, const u8 *src_addr,
 		goto error;
 
 	if (copy_peer_ht_capab(&kde, peer) < 0)
+		goto error;
+
+	if (copy_peer_vht_capab(&kde, peer) < 0)
 		goto error;
 
 	if (copy_peer_ext_capab(&kde, peer) < 0)
@@ -1585,52 +1670,6 @@ static int wpa_tdls_process_tpk_m1(struct wpa_sm *sm, const u8 *src_addr,
 	}
 
 skip_rsn:
-	/* If found, use existing entry instead of adding a new one;
-	 * how to handle the case where both ends initiate at the
-	 * same time? */
-	if (existing_peer) {
-		if (peer->tpk_success) {
-			wpa_printf(MSG_DEBUG, "TDLS: TDLS Setup Request while "
-				   "direct link is enabled - tear down the "
-				   "old link first");
-#if 0
-			/* TODO: Disabling the link would be more proper
-			 * operation here, but it seems to trigger a race with
-			 * some drivers handling the new request frame. */
-			wpa_sm_tdls_oper(sm, TDLS_DISABLE_LINK, src_addr);
-#else
-			if (sm->tdls_external_setup)
-				wpa_sm_tdls_oper(sm, TDLS_DISABLE_LINK,
-						 src_addr);
-			else
-				wpa_tdls_del_key(sm, peer);
-#endif
-			wpa_tdls_peer_free(sm, peer);
-		}
-
-		/*
-		 * An entry is already present, so check if we already sent a
-		 * TDLS Setup Request. If so, compare MAC addresses and let the
-		 * STA with the lower MAC address continue as the initiator.
-		 * The other negotiation is terminated.
-		 */
-		if (peer->initiator) {
-			if (os_memcmp(sm->own_addr, src_addr, ETH_ALEN) < 0) {
-				wpa_printf(MSG_DEBUG, "TDLS: Discard request "
-					   "from peer with higher address "
-					   MACSTR, MAC2STR(src_addr));
-				return -1;
-			} else {
-				wpa_printf(MSG_DEBUG, "TDLS: Accept request "
-					   "from peer with lower address "
-					   MACSTR " (terminate previously "
-					   "initiated negotiation",
-					   MAC2STR(src_addr));
-				wpa_tdls_peer_free(sm, peer);
-			}
-		}
-	}
-
 #ifdef CONFIG_TDLS_TESTING
 	if (tdls_testing & TDLS_TESTING_CONCURRENT_INIT) {
 		if (os_memcmp(sm->own_addr, peer->addr, ETH_ALEN) < 0) {
@@ -1718,7 +1757,7 @@ skip_rsn:
 
 skip_rsn_check:
 	/* add the peer to the driver as a "setup in progress" peer */
-	wpa_sm_tdls_peer_addset(sm, peer->addr, 1, 0, NULL, 0, NULL, 0,
+	wpa_sm_tdls_peer_addset(sm, peer->addr, 1, 0, NULL, 0, NULL, NULL, 0,
 				NULL, 0);
 
 	wpa_printf(MSG_DEBUG, "TDLS: Sending TDLS Setup Response / TPK M2");
@@ -1762,8 +1801,9 @@ static void wpa_tdls_enable_link(struct wpa_sm *sm, struct wpa_tdls_peer *peer)
 	/* add supported rates, capabilities, and qos_info to the TDLS peer */
 	wpa_sm_tdls_peer_addset(sm, peer->addr, 0, peer->capability,
 				peer->supp_rates, peer->supp_rates_len,
-				peer->ht_capabilities, peer->qos_info,
-				peer->ext_capab, peer->ext_capab_len);
+				peer->ht_capabilities, peer->vht_capabilities,
+				peer->qos_info, peer->ext_capab,
+				peer->ext_capab_len);
 
 	wpa_sm_tdls_oper(sm, TDLS_ENABLE_LINK, peer->addr);
 }
@@ -1794,6 +1834,16 @@ static int wpa_tdls_process_tpk_m2(struct wpa_sm *sm, const u8 *src_addr,
 	if (peer == NULL) {
 		wpa_printf(MSG_INFO, "TDLS: No matching peer found for "
 			   "TPK M2: " MACSTR, MAC2STR(src_addr));
+		return -1;
+	}
+	if (!peer->initiator) {
+		/*
+		 * This may happen if both devices try to initiate TDLS at the
+		 * same time and we accept the TPK M1 from the peer in
+		 * wpa_tdls_process_tpk_m1() and clear our previous state.
+		 */
+		wpa_printf(MSG_INFO, "TDLS: We were not the initiator, so "
+			   "ignore TPK M2 from " MACSTR, MAC2STR(src_addr));
 		return -1;
 	}
 	wpa_tdls_tpk_retry_timeout_cancel(sm, peer, WLAN_TDLS_SETUP_REQUEST);
@@ -1860,6 +1910,9 @@ static int wpa_tdls_process_tpk_m2(struct wpa_sm *sm, const u8 *src_addr,
 		goto error;
 
 	if (copy_peer_ht_capab(&kde, peer) < 0)
+		goto error;
+
+	if (copy_peer_vht_capab(&kde, peer) < 0)
 		goto error;
 
 	if (copy_peer_ext_capab(&kde, peer) < 0)
@@ -2179,7 +2232,7 @@ int wpa_tdls_start(struct wpa_sm *sm, const u8 *addr)
 	peer->initiator = 1;
 
 	/* add the peer to the driver as a "setup in progress" peer */
-	wpa_sm_tdls_peer_addset(sm, peer->addr, 1, 0, NULL, 0, NULL, 0,
+	wpa_sm_tdls_peer_addset(sm, peer->addr, 1, 0, NULL, 0, NULL, NULL, 0,
 				NULL, 0);
 
 	if (wpa_tdls_send_tpk_m1(sm, peer) < 0) {

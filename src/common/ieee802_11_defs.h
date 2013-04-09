@@ -970,6 +970,8 @@ enum wifi_display_subelem {
 /* AKM suite selectors */
 #define WLAN_AKM_SUITE_8021X		0x000FAC01
 #define WLAN_AKM_SUITE_PSK		0x000FAC02
+#define WLAN_AKM_SUITE_FT_8021X		0x000FAC03
+#define WLAN_AKM_SUITE_FT_PSK		0x000FAC04
 
 
 /* IEEE 802.11v - WNM Action field values */
