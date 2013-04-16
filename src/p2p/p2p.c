@@ -1290,27 +1290,6 @@ static int p2p_prepare_channel(struct p2p_data *p2p, unsigned int force_freq,
 	return 0;
 }
 
-
-static void p2p_prepare_preferredchannel(struct p2p_data *p2p) {
-
-	unsigned int i, r, class = 0;
-
-	p2p->channels.reg_classes = 1;
-	p2p->channels.reg_class[0].channels = p2p->cfg->num_pref_chan;
-
-	for (i = 0; p2p->cfg->pref_chan && i < p2p->cfg->num_pref_chan; i++) {
-		p2p->channels.reg_class[i].reg_class =  p2p->cfg->pref_chan[i].op_class;
-		p2p->channels.reg_class[i].channel[i] = p2p->cfg->pref_chan[i].chan;
-		p2p->op_reg_class = p2p->channels.reg_class[0].reg_class;
-		wpa_printf(MSG_DEBUG, "P2P: Set "
-				"preferred chnnel (op_class %u "
-				"channel %u)",
-				p2p->channels.reg_class[i].reg_class,
-				p2p->channels.reg_class[i].channel[i]);
-	}
-}
-
-
 static void p2p_set_dev_persistent(struct p2p_device *dev,
 				   int persistent_group)
 {
@@ -1347,12 +1326,8 @@ int p2p_connect(struct p2p_data *p2p, const u8 *peer_addr,
 		MAC2STR(peer_addr), go_intent, MAC2STR(own_interface_addr),
 		wps_method, persistent_group, pd_before_go_neg);
 
-	if (p2p->cfg->pref_chan)
-		p2p_prepare_preferredchannel(p2p);
-	else {
-		if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
+	if (p2p_prepare_channel(p2p, force_freq, pref_freq) < 0)
 			return -1;
-        }
 
 	dev = p2p_get_device(p2p, peer_addr);
 	if (dev == NULL || (dev->flags & P2P_DEV_PROBE_REQ_ONLY)) {
