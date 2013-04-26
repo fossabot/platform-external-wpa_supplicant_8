@@ -756,6 +756,7 @@ static int interworking_connect_3gpp(struct wpa_supplicant *wpa_s,
 	ssid = wpa_config_add_network(wpa_s->conf);
 	if (ssid == NULL)
 		return -1;
+	ssid->parent_cred = cred;
 
 	wpas_notify_network_added(wpa_s, ssid);
 	wpa_config_set_network_defaults(ssid);
@@ -1065,6 +1066,7 @@ static int interworking_connect_roaming_consortium(
 	ssid = wpa_config_add_network(wpa_s->conf);
 	if (ssid == NULL)
 		return -1;
+	ssid->parent_cred = cred;
 	wpas_notify_network_added(wpa_s, ssid);
 	wpa_config_set_network_defaults(ssid);
 	ssid->priority = cred->priority;
@@ -1201,6 +1203,7 @@ int interworking_connect(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
 		nai_realm_free(realm, count);
 		return -1;
 	}
+	ssid->parent_cred = cred;
 	wpas_notify_network_added(wpa_s, ssid);
 	wpa_config_set_network_defaults(ssid);
 	ssid->priority = cred->priority;
