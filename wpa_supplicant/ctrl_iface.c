@@ -4611,7 +4611,8 @@ static int wpas_ctrl_iface_wnm_sleep(struct wpa_supplicant *wpa_s, char *cmd)
 		}
 	}
 
-	ret = ieee802_11_send_wnmsleep_req(wpa_s, enter ? 0 : 1, intval,
+	ret = ieee802_11_send_wnmsleep_req(wpa_s, enter ? WNM_SLEEP_MODE_ENTER :
+					   WNM_SLEEP_MODE_EXIT, intval,
 					   tfs_req);
 	wpabuf_free(tfs_req);
 
