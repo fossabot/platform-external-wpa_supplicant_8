@@ -385,6 +385,7 @@ struct hostapd_bss_config {
 	int time_advertisement;
 	char *time_zone;
 	int wnm_sleep_mode;
+	int bss_transition;
 
 	/* IEEE 802.11u - Interworking */
 	int interworking;
