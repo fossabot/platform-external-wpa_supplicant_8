@@ -429,7 +429,9 @@ static int wpa_supplicant_ssid_bss_match(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_IEEE80211W
 		if (!(ie.capabilities & WPA_CAPABILITY_MFPC) &&
-		    ssid->ieee80211w == MGMT_FRAME_PROTECTION_REQUIRED) {
+		    (ssid->ieee80211w == MGMT_FRAME_PROTECTION_DEFAULT ?
+		     wpa_s->conf->pmf : ssid->ieee80211w) ==
+		    MGMT_FRAME_PROTECTION_REQUIRED) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "   skip RSN IE - no mgmt "
 				"frame protection");
 			break;
@@ -878,6 +880,8 @@ static void wpa_supplicant_req_new_scan(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_P2P */
 		return;
 	}
+
+	wpa_s->scan_for_connection = 1;
 	wpa_supplicant_req_scan(wpa_s, timeout_sec, timeout_usec);
 }
 
@@ -1335,6 +1339,26 @@ static void wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 
 #endif /* CONFIG_NO_SCAN_PROCESSING */
 
+
+int wpa_supplicant_fast_associate(struct wpa_supplicant *wpa_s)
+{
+#ifdef CONFIG_NO_SCAN_PROCESSING
+	return -1;
+#else /* CONFIG_NO_SCAN_PROCESSING */
+	struct os_time now;
+
+	if (wpa_s->last_scan_res_used <= 0)
+		return -1;
+
+	os_get_time(&now);
+	if (now.sec - wpa_s->last_scan.sec > 5) {
+		wpa_printf(MSG_DEBUG, "Fast associate: Old scan results");
+		return -1;
+	}
+
+	return wpas_select_network_from_last_scan(wpa_s);
+#endif /* CONFIG_NO_SCAN_PROCESSING */
+}
 
 #ifdef CONFIG_WNM
 
@@ -2187,7 +2211,7 @@ static void wpa_supplicant_event_wnm(struct wpa_supplicant *wpa_s,
 			   "(action=%d, intval=%d)",
 			   data->wnm.sleep_action, data->wnm.sleep_intval);
 		ieee802_11_send_wnmsleep_req(wpa_s, data->wnm.sleep_action,
-					     data->wnm.sleep_intval);
+					     data->wnm.sleep_intval, NULL);
 		break;
 	}
 }
@@ -2311,50 +2335,6 @@ static void wpa_supplicant_event_unprot_disassoc(struct wpa_supplicant *wpa_s,
 		   MAC2STR(e->sa), MAC2STR(e->da), e->reason_code);
 	sme_event_unprot_disconnect(wpa_s, e->sa, e->da, e->reason_code);
 #endif /* CONFIG_IEEE80211W */
-}
-
-
-static void wnm_action_rx(struct wpa_supplicant *wpa_s, struct rx_action *rx)
-{
-	u8 action, mode;
-	const u8 *pos, *end;
-
-	if (rx->data == NULL || rx->len == 0)
-		return;
-
-	pos = rx->data;
-	end = pos + rx->len;
-	action = *pos++;
-
-	wpa_printf(MSG_DEBUG, "WNM: RX action %u from " MACSTR,
-		   action, MAC2STR(rx->sa));
-	switch (action) {
-	case WNM_BSS_TRANS_MGMT_REQ:
-		if (pos + 5 > end)
-			break;
-		wpa_printf(MSG_DEBUG, "WNM: BSS Transition Management "
-			   "Request: dialog_token=%u request_mode=0x%x "
-			   "disassoc_timer=%u validity_interval=%u",
-			   pos[0], pos[1], WPA_GET_LE16(pos + 2), pos[4]);
-		mode = pos[1];
-		pos += 5;
-		if (mode & 0x08)
-			pos += 12; /* BSS Termination Duration */
-		if (mode & 0x10) {
-			char url[256];
-			if (pos + 1 > end || pos + 1 + pos[0] > end) {
-				wpa_printf(MSG_DEBUG, "WNM: Invalid BSS "
-					   "Transition Management Request "
-					   "(URL)");
-				break;
-			}
-			os_memcpy(url, pos + 1, pos[0]);
-			url[pos[0]] = '\0';
-			wpa_msg(wpa_s, MSG_INFO, "WNM: ESS Disassociation "
-				"Imminent - session_info_url=%s", url);
-		}
-		break;
-	}
 }
 
 
@@ -2751,10 +2731,6 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 				 data->rx_action.freq) == 0)
 			break;
 #endif /* CONFIG_GAS */
-		if (data->rx_action.category == WLAN_ACTION_WNM) {
-			wnm_action_rx(wpa_s, &data->rx_action);
-			break;
-		}
 #ifdef CONFIG_TDLS
 		if (data->rx_action.category == WLAN_ACTION_PUBLIC &&
 		    data->rx_action.len >= 4 &&

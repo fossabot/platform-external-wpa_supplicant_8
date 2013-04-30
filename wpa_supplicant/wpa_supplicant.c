@@ -927,7 +927,9 @@ static int wpa_supplicant_suites_from_ai(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_IEEE80211W
 	if (!(ie->capabilities & WPA_CAPABILITY_MFPC) &&
-	    ssid->ieee80211w == MGMT_FRAME_PROTECTION_REQUIRED) {
+	    (ssid->ieee80211w == MGMT_FRAME_PROTECTION_DEFAULT ?
+	     wpa_s->conf->pmf : ssid->ieee80211w) ==
+	    MGMT_FRAME_PROTECTION_REQUIRED) {
 		wpa_msg(wpa_s, MSG_INFO, "WPA: Driver associated with an AP "
 			"that does not support management frame protection - "
 			"reject");
@@ -1070,6 +1072,10 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	}
 
 	sel = ie.key_mgmt & ssid->key_mgmt;
+#ifdef CONFIG_SAE
+	if (!(wpa_s->drv_flags & WPA_DRIVER_FLAGS_SAE))
+		sel &= ~(WPA_KEY_MGMT_SAE | WPA_KEY_MGMT_FT_SAE);
+#endif /* CONFIG_SAE */
 	if (0) {
 #ifdef CONFIG_IEEE80211R
 	} else if (sel & WPA_KEY_MGMT_FT_IEEE8021X) {
@@ -1079,6 +1085,14 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 		wpa_s->key_mgmt = WPA_KEY_MGMT_FT_PSK;
 		wpa_dbg(wpa_s, MSG_DEBUG, "WPA: using KEY_MGMT FT/PSK");
 #endif /* CONFIG_IEEE80211R */
+#ifdef CONFIG_SAE
+	} else if (sel & WPA_KEY_MGMT_SAE) {
+		wpa_s->key_mgmt = WPA_KEY_MGMT_SAE;
+		wpa_dbg(wpa_s, MSG_DEBUG, "RSN: using KEY_MGMT SAE");
+	} else if (sel & WPA_KEY_MGMT_FT_SAE) {
+		wpa_s->key_mgmt = WPA_KEY_MGMT_FT_SAE;
+		wpa_dbg(wpa_s, MSG_DEBUG, "RSN: using KEY_MGMT FT/SAE");
+#endif /* CONFIG_SAE */
 #ifdef CONFIG_IEEE80211W
 	} else if (sel & WPA_KEY_MGMT_IEEE8021X_SHA256) {
 		wpa_s->key_mgmt = WPA_KEY_MGMT_IEEE8021X_SHA256;
@@ -1111,7 +1125,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_IEEE80211W
 	sel = ie.mgmt_group_cipher;
-	if (ssid->ieee80211w == NO_MGMT_FRAME_PROTECTION ||
+	if ((ssid->ieee80211w == MGMT_FRAME_PROTECTION_DEFAULT ?
+	     wpa_s->conf->pmf : ssid->ieee80211w) == NO_MGMT_FRAME_PROTECTION ||
 	    !(ie.capabilities & WPA_CAPABILITY_MFPC))
 		sel = 0;
 	if (sel & WPA_CIPHER_AES_128_CMAC) {
@@ -1124,7 +1139,9 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 	}
 	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_MGMT_GROUP,
 			 wpa_s->mgmt_group_cipher);
-	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_MFP, ssid->ieee80211w);
+	wpa_sm_set_param(wpa_s->wpa, WPA_PARAM_MFP,
+			 (ssid->ieee80211w == MGMT_FRAME_PROTECTION_DEFAULT ?
+			  wpa_s->conf->pmf : ssid->ieee80211w));
 #endif /* CONFIG_IEEE80211W */
 
 	if (wpa_sm_set_assoc_wpa_ie_default(wpa_s->wpa, wpa_ie, wpa_ie_len)) {
@@ -1209,6 +1226,33 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 }
 
 
+int wpas_build_ext_capab(struct wpa_supplicant *wpa_s, u8 *buf)
+{
+	u32 ext_capab = 0;
+	u8 *pos = buf;
+
+#ifdef CONFIG_INTERWORKING
+	if (wpa_s->conf->interworking)
+		ext_capab |= BIT(31); /* Interworking */
+#endif /* CONFIG_INTERWORKING */
+
+#ifdef CONFIG_WNM
+	ext_capab |= BIT(17); /* WNM-Sleep Mode */
+	ext_capab |= BIT(19); /* BSS Transition */
+#endif /* CONFIG_WNM */
+
+	if (!ext_capab)
+		return 0;
+
+	*pos++ = WLAN_EID_EXT_CAPAB;
+	*pos++ = 4;
+	WPA_PUT_LE32(pos, ext_capab);
+	pos += 4;
+
+	return pos - buf;
+}
+
+
 /**
  * wpa_supplicant_associate - Request association
  * @wpa_s: Pointer to wpa_supplicant data
@@ -1230,6 +1274,8 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 	struct wpa_driver_capa capa;
 	int assoc_failed = 0;
 	struct wpa_ssid *old_ssid;
+	u8 ext_capab[10];
+	int ext_capab_len;
 #ifdef CONFIG_HT_OVERRIDES
 	struct ieee80211_ht_capabilities htcaps;
 	struct ieee80211_ht_capabilities htcaps_mask;
@@ -1305,7 +1351,7 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 		   (ssid->key_mgmt & WPA_KEY_MGMT_WPS)) {
 		/* Use ap_scan==1 style network selection to find the network
 		 */
-		wpa_s->scan_req = 2;
+		wpa_s->scan_req = MANUAL_SCAN_REQ;
 		wpa_s->reassociate = 1;
 		wpa_supplicant_req_scan(wpa_s, 0, 0);
 		return;
@@ -1343,7 +1389,9 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 		    wpa_bss_get_ie(bss, WLAN_EID_RSN)) &&
 	    wpa_key_mgmt_wpa(ssid->key_mgmt)) {
 		int try_opportunistic;
-		try_opportunistic = ssid->proactive_key_caching &&
+		try_opportunistic = (ssid->proactive_key_caching < 0 ?
+				     wpa_s->conf->okc :
+				     ssid->proactive_key_caching) &&
 			(ssid->proto & WPA_PROTO_RSN);
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
 					    wpa_s->current_ssid,
@@ -1441,21 +1489,16 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 	}
 #endif /* CONFIG_HS20 */
 
-#ifdef CONFIG_INTERWORKING
-	if (wpa_s->conf->interworking) {
+	ext_capab_len = wpas_build_ext_capab(wpa_s, ext_capab);
+	if (ext_capab_len > 0) {
 		u8 *pos = wpa_ie;
 		if (wpa_ie_len > 0 && pos[0] == WLAN_EID_RSN)
 			pos += 2 + pos[1];
-		os_memmove(pos + 6, pos, wpa_ie_len - (pos - wpa_ie));
-		wpa_ie_len += 6;
-		*pos++ = WLAN_EID_EXT_CAPAB;
-		*pos++ = 4;
-		*pos++ = 0x00;
-		*pos++ = 0x00;
-		*pos++ = 0x00;
-		*pos++ = 0x80; /* Bit 31 - Interworking */
+		os_memmove(pos + ext_capab_len, pos,
+			   wpa_ie_len - (pos - wpa_ie));
+		wpa_ie_len += ext_capab_len;
+		os_memcpy(pos, ext_capab, ext_capab_len);
 	}
-#endif /* CONFIG_INTERWORKING */
 
 	wpa_clear_keys(wpa_s, bss ? bss->bssid : NULL);
 	use_crypt = 1;
@@ -1548,8 +1591,10 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 	params.drop_unencrypted = use_crypt;
 
 #ifdef CONFIG_IEEE80211W
-	params.mgmt_frame_protection = ssid->ieee80211w;
-	if (ssid->ieee80211w != NO_MGMT_FRAME_PROTECTION && bss) {
+	params.mgmt_frame_protection =
+		ssid->ieee80211w == MGMT_FRAME_PROTECTION_DEFAULT ?
+		wpa_s->conf->pmf : ssid->ieee80211w;
+	if (params.mgmt_frame_protection != NO_MGMT_FRAME_PROTECTION && bss) {
 		const u8 *rsn = wpa_bss_get_ie(bss, WLAN_EID_RSN);
 		struct wpa_ie_data ie;
 		if (rsn && wpa_parse_wpa_ie(rsn, 2 + rsn[1], &ie) == 0 &&
@@ -1903,7 +1948,9 @@ void wpa_supplicant_select_network(struct wpa_supplicant *wpa_s,
 	wpa_s->connect_without_scan = NULL;
 	wpa_s->disconnected = 0;
 	wpa_s->reassociate = 1;
-	wpa_supplicant_req_scan(wpa_s, 0, disconnected ? 100000 : 0);
+
+	if (wpa_supplicant_fast_associate(wpa_s) != 1)
+		wpa_supplicant_req_scan(wpa_s, 0, disconnected ? 100000 : 0);
 
 	if (ssid)
 		wpas_notify_network_selected(wpa_s, ssid);
@@ -2437,7 +2484,7 @@ static struct wpa_supplicant * wpa_supplicant_alloc(void)
 	wpa_s = os_zalloc(sizeof(*wpa_s));
 	if (wpa_s == NULL)
 		return NULL;
-	wpa_s->scan_req = 1;
+	wpa_s->scan_req = INITIAL_SCAN_REQ;
 	wpa_s->scan_interval = 5;
 	wpa_s->new_connection = 1;
 	wpa_s->parent = wpa_s;

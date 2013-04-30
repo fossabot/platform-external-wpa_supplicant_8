@@ -39,6 +39,7 @@
 #include "blacklist.h"
 #include "wpas_glue.h"
 #include "autoscan.h"
+#include "wnm_sta.h"
 
 extern struct wpa_driver_ops *wpa_drivers[];
 
@@ -1281,6 +1282,45 @@ static int wpa_supplicant_ctrl_iface_status(struct wpa_supplicant *wpa_s,
 			return pos - buf;
 		pos += ret;
 	}
+
+	if (wpa_s->current_ssid) {
+		struct wpa_cred *cred;
+		char *type;
+
+		for (cred = wpa_s->conf->cred; cred; cred = cred->next) {
+			if (wpa_s->current_ssid->parent_cred != cred)
+				continue;
+			if (!cred->domain)
+				continue;
+
+			ret = os_snprintf(pos, end - pos, "home_sp=%s\n",
+					  cred->domain);
+			if (ret < 0 || ret >= end - pos)
+				return pos - buf;
+			pos += ret;
+
+			if (wpa_s->current_bss == NULL ||
+			    wpa_s->current_bss->anqp == NULL)
+				res = -1;
+			else
+				res = interworking_home_sp_cred(
+					wpa_s, cred,
+					wpa_s->current_bss->anqp->domain_name);
+			if (res > 0)
+				type = "home";
+			else if (res == 0)
+				type = "roaming";
+			else
+				type = "unknown";
+
+			ret = os_snprintf(pos, end - pos, "sp_type=%s\n", type);
+			if (ret < 0 || ret >= end - pos)
+				return pos - buf;
+			pos += ret;
+
+			break;
+		}
+	}
 #endif /* CONFIG_HS20 */
 
 	if (wpa_key_mgmt_wpa_ieee8021x(wpa_s->key_mgmt) ||
@@ -2204,20 +2244,48 @@ static int wpa_supplicant_ctrl_iface_add_cred(struct wpa_supplicant *wpa_s,
 }
 
 
+static int wpas_ctrl_remove_cred(struct wpa_supplicant *wpa_s,
+				 struct wpa_cred *cred)
+{
+	struct wpa_ssid *ssid;
+	char str[20];
+
+	if (cred == NULL || wpa_config_remove_cred(wpa_s->conf, cred->id) < 0) {
+		wpa_printf(MSG_DEBUG, "CTRL_IFACE: Could not find cred");
+		return -1;
+	}
+
+	/* Remove any network entry created based on the removed credential */
+	ssid = wpa_s->conf->ssid;
+	while (ssid) {
+		if (ssid->parent_cred == cred) {
+			wpa_printf(MSG_DEBUG, "Remove network id %d since it "
+				   "used the removed credential", ssid->id);
+			os_snprintf(str, sizeof(str), "%d", ssid->id);
+			ssid = ssid->next;
+			wpa_supplicant_ctrl_iface_remove_network(wpa_s, str);
+		} else
+			ssid = ssid->next;
+	}
+
+	return 0;
+}
+
+
 static int wpa_supplicant_ctrl_iface_remove_cred(struct wpa_supplicant *wpa_s,
 						 char *cmd)
 {
 	int id;
-	struct wpa_cred *cred;
+	struct wpa_cred *cred, *prev;
 
 	/* cmd: "<cred id>" or "all" */
 	if (os_strcmp(cmd, "all") == 0) {
 		wpa_printf(MSG_DEBUG, "CTRL_IFACE: REMOVE_CRED all");
 		cred = wpa_s->conf->cred;
 		while (cred) {
-			id = cred->id;
+			prev = cred;
 			cred = cred->next;
-			wpa_config_remove_cred(wpa_s->conf, id);
+			wpas_ctrl_remove_cred(wpa_s, prev);
 		}
 		return 0;
 	}
@@ -2226,14 +2294,7 @@ static int wpa_supplicant_ctrl_iface_remove_cred(struct wpa_supplicant *wpa_s,
 	wpa_printf(MSG_DEBUG, "CTRL_IFACE: REMOVE_CRED id=%d", id);
 
 	cred = wpa_config_get_cred(wpa_s->conf, id);
-	if (cred == NULL ||
-	    wpa_config_remove_cred(wpa_s->conf, id) < 0) {
-		wpa_printf(MSG_DEBUG, "CTRL_IFACE: Could not find cred id=%d",
-			   id);
-		return -1;
-	}
-
-	return 0;
+	return wpas_ctrl_remove_cred(wpa_s, cred);
 }
 
 
@@ -4507,6 +4568,60 @@ static int wpa_supplicant_ctrl_iface_autoscan(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_AUTOSCAN */
 
 
+#ifdef CONFIG_WNM
+
+static int wpas_ctrl_iface_wnm_sleep(struct wpa_supplicant *wpa_s, char *cmd)
+{
+	int enter;
+	int intval = 0;
+	char *pos;
+	int ret;
+	struct wpabuf *tfs_req = NULL;
+
+	if (os_strncmp(cmd, "enter", 5) == 0)
+		enter = 1;
+	else if (os_strncmp(cmd, "exit", 4) == 0)
+		enter = 0;
+	else
+		return -1;
+
+	pos = os_strstr(cmd, " interval=");
+	if (pos)
+		intval = atoi(pos + 10);
+
+	pos = os_strstr(cmd, " tfs_req=");
+	if (pos) {
+		char *end;
+		size_t len;
+		pos += 9;
+		end = os_strchr(pos, ' ');
+		if (end)
+			len = end - pos;
+		else
+			len = os_strlen(pos);
+		if (len & 1)
+			return -1;
+		len /= 2;
+		tfs_req = wpabuf_alloc(len);
+		if (tfs_req == NULL)
+			return -1;
+		if (hexstr2bin(pos, wpabuf_put(tfs_req, len), len) < 0) {
+			wpabuf_free(tfs_req);
+			return -1;
+		}
+	}
+
+	ret = ieee802_11_send_wnmsleep_req(wpa_s, enter ? WNM_SLEEP_MODE_ENTER :
+					   WNM_SLEEP_MODE_EXIT, intval,
+					   tfs_req);
+	wpabuf_free(tfs_req);
+
+	return ret;
+}
+
+#endif /* CONFIG_WNM */
+
+
 static int wpa_supplicant_signal_poll(struct wpa_supplicant *wpa_s, char *buf,
 				      size_t buflen)
 {
@@ -4938,14 +5053,14 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 			    ((wpa_s->wpa_state <= WPA_SCANNING) ||
 			     (wpa_s->wpa_state == WPA_COMPLETED))) {
 				wpa_s->normal_scans = 0;
-				wpa_s->scan_req = 2;
+				wpa_s->scan_req = MANUAL_SCAN_REQ;
 				wpa_supplicant_req_scan(wpa_s, 0, 0);
 			} else if (wpa_s->sched_scanning) {
 				wpa_printf(MSG_DEBUG, "Stop ongoing "
 					   "sched_scan to allow requested "
 					   "full scan to proceed");
 				wpa_supplicant_cancel_sched_scan(wpa_s);
-				wpa_s->scan_req = 2;
+				wpa_s->scan_req = MANUAL_SCAN_REQ;
 				wpa_supplicant_req_scan(wpa_s, 0, 0);
 			} else {
 				wpa_printf(MSG_DEBUG, "Ongoing scan action - "
@@ -5080,6 +5195,11 @@ char * wpa_supplicant_ctrl_iface_process(struct wpa_supplicant *wpa_s,
 #endif
 	} else if (os_strcmp(buf, "REAUTHENTICATE") == 0) {
 		eapol_sm_request_reauth(wpa_s->eapol);
+#ifdef CONFIG_WNM
+	} else if (os_strncmp(buf, "WNM_SLEEP ", 10) == 0) {
+		if (wpas_ctrl_iface_wnm_sleep(wpa_s, buf + 10))
+			reply_len = -1;
+#endif /* CONFIG_WNM */
 	} else {
 		os_memcpy(reply, "UNKNOWN COMMAND\n", 16);
 		reply_len = 16;

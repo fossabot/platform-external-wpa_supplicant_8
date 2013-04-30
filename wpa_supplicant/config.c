@@ -504,6 +504,12 @@ static int wpa_config_parse_key_mgmt(const struct parse_data *data,
 		else if (os_strcmp(start, "WPS") == 0)
 			val |= WPA_KEY_MGMT_WPS;
 #endif /* CONFIG_WPS */
+#ifdef CONFIG_SAE
+		else if (os_strcmp(start, "SAE") == 0)
+			val |= WPA_KEY_MGMT_SAE;
+		else if (os_strcmp(start, "FT-SAE") == 0)
+			val |= WPA_KEY_MGMT_FT_SAE;
+#endif /* CONFIG_SAE */
 		else {
 			wpa_printf(MSG_ERROR, "Line %d: invalid key_mgmt '%s'",
 				   line, start);
@@ -1829,6 +1835,7 @@ void wpa_config_free_cred(struct wpa_cred *cred)
 	os_free(cred->eap_method);
 	os_free(cred->phase1);
 	os_free(cred->phase2);
+	os_free(cred->excluded_ssid);
 	os_free(cred);
 }
 
@@ -2035,6 +2042,10 @@ void wpa_config_set_network_defaults(struct wpa_ssid *ssid)
 	ssid->ampdu_factor = DEFAULT_AMPDU_FACTOR;
 	ssid->ampdu_density = DEFAULT_AMPDU_DENSITY;
 #endif /* CONFIG_HT_OVERRIDES */
+	ssid->proactive_key_caching = -1;
+#ifdef CONFIG_IEEE80211W
+	ssid->ieee80211w = MGMT_FRAME_PROTECTION_DEFAULT;
+#endif /* CONFIG_IEEE80211W */
 }
 
 
@@ -2398,6 +2409,34 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 		os_memcpy(cred->roaming_consortium, val, len);
 		cred->roaming_consortium_len = len;
 		os_free(val);
+		return 0;
+	}
+
+	if (os_strcmp(var, "excluded_ssid") == 0) {
+		struct excluded_ssid *e;
+
+		if (len > MAX_SSID_LEN) {
+			wpa_printf(MSG_ERROR, "Line %d: invalid "
+				   "excluded_ssid length %d", line, (int) len);
+			os_free(val);
+			return -1;
+		}
+
+		e = os_realloc_array(cred->excluded_ssid,
+				     cred->num_excluded_ssid + 1,
+				     sizeof(struct excluded_ssid));
+		if (e == NULL) {
+			os_free(val);
+			return -1;
+		}
+		cred->excluded_ssid = e;
+
+		e = &cred->excluded_ssid[cred->num_excluded_ssid++];
+		os_memcpy(e->ssid, val, len);
+		e->ssid_len = len;
+
+		os_free(val);
+
 		return 0;
 	}
 
@@ -3027,6 +3066,8 @@ static const struct global_parse_data global_fields[] = {
 	{ STR(ext_password_backend), CFG_CHANGED_EXT_PW_BACKEND },
 	{ INT(p2p_go_max_inactivity), 0 },
 	{ INT_RANGE(auto_interworking, 0, 1), 0 },
+	{ INT(okc), 0 },
+	{ INT(pmf), 0 },
 };
 
 #undef FUNC
