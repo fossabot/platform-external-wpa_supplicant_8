@@ -398,12 +398,42 @@ struct wpa_supplicant {
 
 	struct wpa_blacklist *blacklist;
 
-	int scan_req; /* manual scan request; this forces a scan even if there
-		       * are no enabled networks in the configuration */
+	/**
+	 * scan_req - Type of the scan request
+	 */
+	enum scan_req_type {
+		/**
+		 * NORMAL_SCAN_REQ - Normal scan request
+		 *
+		 * This is used for scans initiated by wpa_supplicant to find an
+		 * AP for a connection.
+		 */
+		NORMAL_SCAN_REQ,
+
+		/**
+		 * INITIAL_SCAN_REQ - Initial scan request
+		 *
+		 * This is used for the first scan on an interface to force at
+		 * least one scan to be run even if the configuration does not
+		 * include any enabled networks.
+		 */
+		INITIAL_SCAN_REQ,
+
+		/**
+		 * MANUAL_SCAN_REQ - Manual scan request
+		 *
+		 * This is used for scans where the user request a scan or
+		 * a specific wpa_supplicant operation (e.g., WPS) requires scan
+		 * to be run.
+		 */
+		MANUAL_SCAN_REQ
+	} scan_req;
 	int scan_runs; /* number of scan runs since WPS was started */
 	int *next_scan_freqs;
 	int scan_interval; /* time in sec between scans to find suitable AP */
 	int normal_scans; /* normal scans run before sched_scan */
+	int scan_for_connection; /* whether the scan request was triggered for
+				  * finding a connection */
 
 	unsigned int drv_flags;
 	unsigned int drv_enc;
@@ -710,6 +740,7 @@ int disallowed_bssid(struct wpa_supplicant *wpa_s, const u8 *bssid);
 int disallowed_ssid(struct wpa_supplicant *wpa_s, const u8 *ssid,
 		    size_t ssid_len);
 void wpa_supplicant_proc_40mhz_intolerant(struct wpa_supplicant *wpa_s);
+int wpas_build_ext_capab(struct wpa_supplicant *wpa_s, u8 *buf);
 
 /**
  * wpa_supplicant_ctrl_iface_ctrl_rsp_handle - Handle a control response
@@ -735,6 +766,7 @@ void wpa_supplicant_stop_countermeasures(void *eloop_ctx, void *sock_ctx);
 void wpa_supplicant_delayed_mic_error_report(void *eloop_ctx, void *sock_ctx);
 void wnm_bss_keep_alive_deinit(struct wpa_supplicant *wpa_s);
 int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s);
+int wpa_supplicant_fast_associate(struct wpa_supplicant *wpa_s);
 
 /* eap_register.c */
 int eap_register_methods(void);

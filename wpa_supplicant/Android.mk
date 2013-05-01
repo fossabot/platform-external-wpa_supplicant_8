@@ -189,8 +189,12 @@ NEED_SHA256=y
 NEED_AES_OMAC1=y
 endif
 
-ifdef CONFIG_IEEE80211V
-L_CFLAGS += -DCONFIG_IEEE80211V
+ifdef CONFIG_SAE
+L_CFLAGS += -DCONFIG_SAE
+endif
+
+ifdef CONFIG_WNM
+CFLAGS += -DCONFIG_WNM
 OBJS += wnm_sta.c
 endif
 
@@ -753,10 +757,6 @@ OBJS += src/eap_server/eap_server_methods.c
 
 ifdef CONFIG_IEEE80211N
 L_CFLAGS += -DCONFIG_IEEE80211N
-endif
-
-ifdef CONFIG_WNM
-L_CFLAGS += -DCONFIG_WNM
 endif
 
 ifdef NEED_AP_MLME

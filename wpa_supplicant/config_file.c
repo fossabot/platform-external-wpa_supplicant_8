@@ -678,11 +678,12 @@ static void wpa_config_write_network(FILE *f, struct wpa_ssid *ssid)
 	INT_DEFe(fragment_size, DEFAULT_FRAGMENT_SIZE);
 #endif /* IEEE8021X_EAPOL */
 	INT(mode);
-	INT(proactive_key_caching);
+	write_int(f, "proactive_key_caching", ssid->proactive_key_caching, -1);
 	INT(disabled);
 	INT(peerkey);
 #ifdef CONFIG_IEEE80211W
-	INT(ieee80211w);
+	write_int(f, "ieee80211w", ssid->ieee80211w,
+		  MGMT_FRAME_PROTECTION_DEFAULT);
 #endif /* CONFIG_IEEE80211W */
 	STR(id_str);
 #ifdef CONFIG_P2P
@@ -741,6 +742,16 @@ static void wpa_config_write_cred(FILE *f, struct wpa_cred *cred)
 		fprintf(f, "\tphase1=\"%s\"\n", cred->phase1);
 	if (cred->phase2)
 		fprintf(f, "\tphase2=\"%s\"\n", cred->phase2);
+	if (cred->excluded_ssid) {
+		size_t i, j;
+		for (i = 0; i < cred->num_excluded_ssid; i++) {
+			struct excluded_ssid *e = &cred->excluded_ssid[i];
+			fprintf(f, "\texcluded_ssid=");
+			for (j = 0; j < e->ssid_len; j++)
+				fprintf(f, "%02x", e->ssid[j]);
+			fprintf(f, "\n");
+		}
+	}
 }
 
 
@@ -955,6 +966,10 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 	if (config->auto_interworking)
 		fprintf(f, "auto_interworking=%d\n",
 			config->auto_interworking);
+	if (config->okc)
+		fprintf(f, "okc=%d\n", config->okc);
+	if (config->pmf)
+		fprintf(f, "pmf=%d\n", config->pmf);
 }
 
 #endif /* CONFIG_NO_CONFIG_WRITE */

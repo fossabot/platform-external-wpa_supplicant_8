@@ -76,6 +76,7 @@
 #define WLAN_AUTH_OPEN			0
 #define WLAN_AUTH_SHARED_KEY		1
 #define WLAN_AUTH_FT			2
+#define WLAN_AUTH_SAE			3
 #define WLAN_AUTH_LEAP			128
 
 #define WLAN_AUTH_CHALLENGE_LEN 128
@@ -157,6 +158,8 @@
 #define WLAN_STATUS_REQ_REFUSED_SSPN 67
 #define WLAN_STATUS_REQ_REFUSED_UNAUTH_ACCESS 68
 #define WLAN_STATUS_INVALID_RSNIE 72
+#define WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ 76
+#define WLAN_STATUS_FINITE_CYCLIC_GROUP_NOT_SUPPORTED 77
 #define WLAN_STATUS_TRANSMISSION_FAILURE 79
 
 /* Reason codes (IEEE 802.11-2007, 7.3.1.7, Table 7-22) */
@@ -533,6 +536,16 @@ struct ieee80211_mgmt {
 					 * Entries */
 					u8 variable[0];
 				} STRUCT_PACKED bss_tm_req;
+				struct {
+					u8 action; /* 8 */
+					u8 dialog_token;
+					u8 status_code;
+					u8 bss_termination_delay;
+					/* Target BSSID (optional),
+					 * BSS Transition Candidate List
+					 * Entries (optional) */
+					u8 variable[0];
+				} STRUCT_PACKED bss_tm_resp;
 			} u;
 		} STRUCT_PACKED action;
 	} u;
@@ -1037,10 +1050,13 @@ struct ieee80211_2040_intol_chan_report {
 struct wnm_sleep_element {
 	u8 eid;     /* WLAN_EID_WNMSLEEP */
 	u8 len;
-	u8 action_type; /* WLAN_WNM_SLEEP_ENTER/EXIT */
+	u8 action_type; /* WNM_SLEEP_ENTER/WNM_SLEEP_MODE_EXIT */
 	u8 status;
 	le16 intval;
 } STRUCT_PACKED;
+
+#define WNM_SLEEP_MODE_ENTER 0
+#define WNM_SLEEP_MODE_EXIT 1
 
 enum wnm_sleep_mode_response_status {
 	WNM_STATUS_SLEEP_ACCEPT = 0,

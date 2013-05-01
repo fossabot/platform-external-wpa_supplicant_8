@@ -624,6 +624,12 @@ static int hostapd_config_parse_key_mgmt(int line, const char *value)
 		else if (os_strcmp(start, "WPA-EAP-SHA256") == 0)
 			val |= WPA_KEY_MGMT_IEEE8021X_SHA256;
 #endif /* CONFIG_IEEE80211W */
+#ifdef CONFIG_SAE
+		else if (os_strcmp(start, "SAE") == 0)
+			val |= WPA_KEY_MGMT_SAE;
+		else if (os_strcmp(start, "FT-SAE") == 0)
+			val |= WPA_KEY_MGMT_FT_SAE;
+#endif /* CONFIG_SAE */
 		else {
 			wpa_printf(MSG_ERROR, "Line %d: invalid key_mgmt '%s'",
 				   line, start);
@@ -2702,6 +2708,12 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 			bss->time_zone = os_strdup(pos);
 			if (bss->time_zone == NULL)
 				errors++;
+#ifdef CONFIG_WNM
+		} else if (os_strcmp(buf, "wnm_sleep_mode") == 0) {
+			bss->wnm_sleep_mode = atoi(pos);
+		} else if (os_strcmp(buf, "bss_transition") == 0) {
+			bss->bss_transition = atoi(pos);
+#endif /* CONFIG_WNM */
 #ifdef CONFIG_INTERWORKING
 		} else if (os_strcmp(buf, "interworking") == 0) {
 			bss->interworking = atoi(pos);
