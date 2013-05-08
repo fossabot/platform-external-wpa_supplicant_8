@@ -19,7 +19,6 @@
 
 #define MAX_TFS_IE_LEN  1024
 
-#ifdef CONFIG_IEEE80211V
 
 /* get the TFS IE from driver */
 static int ieee80211_11_get_tfs_ie(struct hostapd_data *hapd, const u8 *addr,
@@ -265,5 +264,3 @@ int ieee802_11_rx_wnm_action_ap(struct hostapd_data *hapd,
 		   action->data[0], MAC2STR(action->sa));
 	return -1;
 }
-
-#endif /* CONFIG_IEEE80211V */

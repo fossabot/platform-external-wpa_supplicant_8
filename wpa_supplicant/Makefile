@@ -176,8 +176,8 @@ ifdef CONFIG_SAE
 CFLAGS += -DCONFIG_SAE
 endif
 
-ifdef CONFIG_IEEE80211V
-CFLAGS += -DCONFIG_IEEE80211V
+ifdef CONFIG_WNM
+CFLAGS += -DCONFIG_WNM
 OBJS += wnm_sta.o
 endif
 
@@ -757,10 +757,6 @@ OBJS += ../src/eap_server/eap_server_methods.o
 
 ifdef CONFIG_IEEE80211N
 CFLAGS += -DCONFIG_IEEE80211N
-endif
-
-ifdef CONFIG_WNM
-CFLAGS += -DCONFIG_WNM
 endif
 
 ifdef NEED_AP_MLME
