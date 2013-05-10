@@ -1537,10 +1537,10 @@ void wpa_sm_aborted_cached(struct wpa_sm *sm)
 }
 
 
-static void wpa_eapol_key_dump(struct wpa_sm *sm,
+static int wpa_eapol_key_dump(struct wpa_sm *sm,
 			       const struct wpa_eapol_key *key)
 {
-#ifndef CONFIG_NO_STDOUT_DEBUG
+//#ifndef CONFIG_NO_STDOUT_DEBUG
 	u16 key_info = WPA_GET_BE16(key->key_info);
 
 	wpa_dbg(sm->ctx->msg_ctx, MSG_DEBUG, "  EAPOL-Key type=%d", key->type);
@@ -1569,7 +1569,8 @@ static void wpa_eapol_key_dump(struct wpa_sm *sm,
 	wpa_hexdump(MSG_DEBUG, "  key_rsc", key->key_rsc, 8);
 	wpa_hexdump(MSG_DEBUG, "  key_id (reserved)", key->key_id, 8);
 	wpa_hexdump(MSG_DEBUG, "  key_mic", key->key_mic, 16);
-#endif /* CONFIG_NO_STDOUT_DEBUG */
+//#endif /* CONFIG_NO_STDOUT_DEBUG */
+        return WPA_GET_BE16(key->key_data_length);
 }
 
 
@@ -1837,7 +1838,7 @@ int wpa_sm_rx_eapol(struct wpa_sm *sm, const u8 *src_addr,
 		}
 	}
 
-	ret = 1;
+	ret = wpa_eapol_key_dump(sm, key);
 
 out:
 	os_free(tmp);
