@@ -105,6 +105,8 @@ const char *wpa_supplicant_full_license5 =
 "\n";
 #endif /* CONFIG_NO_STDOUT_DEBUG */
 
+int keyfailcount;
+
 extern int wpa_debug_level;
 extern int wpa_debug_show_keys;
 extern int wpa_debug_timestamp;
@@ -552,6 +554,8 @@ const char * wpa_supplicant_state_txt(enum wpa_states state)
 		return "GROUP_HANDSHAKE";
 	case WPA_COMPLETED:
 		return "COMPLETED";
+        case WPA_KEYFAIL:
+                return "KEYFAIL";
 	default:
 		return "UNKNOWN";
 	}
@@ -642,7 +646,7 @@ void wpa_supplicant_set_state(struct wpa_supplicant *wpa_s,
 		wpas_p2p_completed(wpa_s);
 #endif /* CONFIG_P2P */
 	} else if (state == WPA_DISCONNECTED || state == WPA_ASSOCIATING ||
-		   state == WPA_ASSOCIATED) {
+		   state == WPA_ASSOCIATED || state == WPA_KEYFAIL) {
 		wpa_s->new_connection = 1;
 		wpa_drv_set_operstate(wpa_s, 0);
 #ifndef IEEE8021X_EAPOL
@@ -1479,6 +1483,9 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 	if (ret < 0) {
 		wpa_msg(wpa_s, MSG_INFO, "Association request to the driver "
 			"failed");
+                if (ret == -22) {
+                    wpa_supplicant_set_state(wpa_s, WPA_KEYFAIL);
+                }
 		if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_SANE_ERROR_CODES) {
 			/*
 			 * The driver is known to mean what is saying, so we
@@ -2037,6 +2044,7 @@ void wpa_supplicant_rx_eapol(void *ctx, const u8 *src_addr,
 			     const u8 *buf, size_t len)
 {
 	struct wpa_supplicant *wpa_s = ctx;
+        int value = 0;
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "RX EAPOL from " MACSTR, MAC2STR(src_addr));
 	wpa_hexdump(MSG_MSGDUMP, "RX EAPOL", buf, len);
@@ -2116,9 +2124,17 @@ void wpa_supplicant_rx_eapol(void *ctx, const u8 *src_addr,
 	    eapol_sm_rx_eapol(wpa_s->eapol, src_addr, buf, len) > 0)
 		return;
 	wpa_drv_poll(wpa_s);
-	if (!(wpa_s->drv_flags & WPA_DRIVER_FLAGS_4WAY_HANDSHAKE))
-		wpa_sm_rx_eapol(wpa_s->wpa, src_addr, buf, len);
-	else if (wpa_key_mgmt_wpa_ieee8021x(wpa_s->key_mgmt)) {
+	if (!(wpa_s->drv_flags & WPA_DRIVER_FLAGS_4WAY_HANDSHAKE)) {
+		value = wpa_sm_rx_eapol(wpa_s->wpa, src_addr, buf, len);
+                if (value == 0)
+                   keyfailcount++;
+                else
+                   keyfailcount = 0;
+                if (keyfailcount > 2) {
+                   wpa_supplicant_set_state(wpa_s, WPA_KEYFAIL);
+                   keyfailcount = 0;
+                }
+	} else if (wpa_key_mgmt_wpa_ieee8021x(wpa_s->key_mgmt)) {
 		/*
 		 * Set portValid = TRUE here since we are going to skip 4-way
 		 * handshake processing which would normally set portValid. We
