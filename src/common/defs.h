@@ -219,6 +219,13 @@ enum wpa_states {
 	 */
 	WPA_GROUP_HANDSHAKE,
 
+        /**
+         * WPA_KEYFAIL - Prevent user type wrong key
+         *
+         * This state is control for prevent user type wrong passwd.
+         */
+        WPA_KEYFAIL,
+
 	/**
 	 * WPA_COMPLETED - All authentication completed
 	 *
@@ -236,6 +243,7 @@ enum wpa_states {
 	 * fully configured.
 	 */
 	WPA_COMPLETED
+
 };
 
 #define MLME_SETPROTECTION_PROTECT_TYPE_NONE 0
