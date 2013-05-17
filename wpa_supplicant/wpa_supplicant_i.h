@@ -651,6 +651,17 @@ struct wpa_supplicant {
 	struct wpabuf *last_gas_resp;
 	u8 last_gas_addr[ETH_ALEN];
 	u8 last_gas_dialog_token;
+
+#ifdef CONFIG_WNM
+	u8 wnm_dialog_token;
+	u8 wnm_reply;
+	u8 wnm_num_neighbor_report;
+	u8 wnm_mode;
+	u16 wnm_dissoc_timer;
+	u8 wnm_validity_interval;
+	u8 wnm_bss_termination_duration[12];
+	struct neighbor_report *wnm_neighbor_report_elements;
+#endif /* CONFIG_WNM */
 };
 
 
