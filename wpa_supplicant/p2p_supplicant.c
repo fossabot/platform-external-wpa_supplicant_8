@@ -2485,6 +2485,12 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	if (global->p2p)
 		return 0;
 
+#ifdef ANDROID_P2P
+	if(wpa_s->drv_flags & WPA_DRIVER_FLAGS_MULTI_CHANNEL_CONCURRENT)
+		p2p.p2p_concurrency = P2P_MULTI_CHANNEL_CONCURRENT;
+	else if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_P2P_CONCURRENT)
+		p2p.p2p_concurrency = P2P_SINGLE_CHANNEL_CONCURRENT;
+#endif
 	if (wpa_s->drv_flags & WPA_DRIVER_FLAGS_P2P_MGMT) {
 		struct p2p_params params;
 

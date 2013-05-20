@@ -351,6 +351,14 @@ struct p2p_config {
 	 */
 	size_t ssid_postfix_len;
 
+#ifdef ANDROID_P2P
+	enum p2p_concurrency_type {
+		P2P_NON_CONCURRENT,
+		P2P_SINGLE_CHANNEL_CONCURRENT,
+		P2P_MULTI_CHANNEL_CONCURRENT,
+	} p2p_concurrency;
+#endif
+
 	/**
 	 * max_listen - Maximum listen duration in ms
 	 */
