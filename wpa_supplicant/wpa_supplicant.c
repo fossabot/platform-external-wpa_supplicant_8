@@ -3719,3 +3719,42 @@ int disallowed_ssid(struct wpa_supplicant *wpa_s, const u8 *ssid,
 
 	return 0;
 }
+
+
+/**
+ * wpas_wpa_is_in_progress - Check whether a connection is in progress
+ * @wpa_s: Pointer to wpa_supplicant data
+ *
+ * This function is to check if the wpa state is in beginning of the connection
+ * during 4-way handshake or group key handshake with WPA on any shared
+ * interface.
+ */
+int wpas_wpa_is_in_progress(struct wpa_supplicant *wpa_s)
+{
+	const char *rn, *rn2;
+	struct wpa_supplicant *ifs;
+
+	if (!wpa_s->driver->get_radio_name)
+                return 0;
+
+	rn = wpa_s->driver->get_radio_name(wpa_s->drv_priv);
+	if (rn == NULL || rn[0] == '\0')
+		return 0;
+
+	for (ifs = wpa_s->global->ifaces; ifs; ifs = ifs->next) {
+		if (ifs == wpa_s || !ifs->driver->get_radio_name)
+			continue;
+
+		rn2 = ifs->driver->get_radio_name(ifs->drv_priv);
+		if (!rn2 || os_strcmp(rn, rn2) != 0)
+			continue;
+		if (ifs->wpa_state >= WPA_AUTHENTICATING &&
+		    ifs->wpa_state != WPA_COMPLETED) {
+			wpa_dbg(wpa_s, MSG_DEBUG, "Connection is in progress "
+				"on interface %s - defer scan", ifs->ifname);
+			return 1;
+		}
+	}
+
+	return 0;
+}
