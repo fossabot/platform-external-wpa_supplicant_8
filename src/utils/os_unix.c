@@ -5,6 +5,14 @@
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
  */
+/*
+ * Copyright (c) 2011-2012 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+  * Qualcomm Atheros Confidential and Proprietary.
+  * Notifications and licenses are retained for attribution purposes only
+ */
+
+
 
 #include "includes.h"
 
@@ -257,7 +265,14 @@ int os_program_init(void)
 	 * We ignore errors here since errors are normal if we
 	 * are already running as non-root.
 	 */
+#ifdef SIM_AKA_QUALCOMM
+	/* QMI library (EAP AKA/SIM support used) is using diag logs and RIL
+	 *	so permission for DIAG and RADIO group is added
+        */
+	gid_t groups[] = { AID_INET, AID_WIFI, AID_DIAG, AID_RADIO, AID_KEYSTORE };
+#else
 	gid_t groups[] = { AID_INET, AID_WIFI, AID_KEYSTORE };
+#endif
 	struct __user_cap_header_struct header;
 	struct __user_cap_data_struct cap;
 

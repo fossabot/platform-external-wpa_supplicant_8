@@ -1,3 +1,9 @@
+# Copyright (c) 2011-2012 Qualcomm Atheros, Inc.
+# All Rights Reserved. 
+# Qualcomm Atheros Confidential and Proprietary. 
+# Notifications and licenses are retained for attribution purposes only
+
+
 ifndef CC
 CC=gcc
 endif
@@ -475,6 +481,12 @@ CONFIG_EAP_SIM_COMMON=y
 NEED_AES_CBC=y
 endif
 
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+CFLAGS += -DSIM_AKA_QUALCOMM
+OBJS += eap_proxy.o
+CONFIG_IEEE8021X_EAPOL=y
+endif
+
 ifdef CONFIG_EAP_AKA_PRIME
 # EAP-AKA'
 ifeq ($(CONFIG_EAP_AKA_PRIME), dyn)
@@ -698,6 +710,9 @@ endif
 ifdef CONFIG_IEEE8021X_EAPOL
 # IEEE 802.1X/EAPOL state machines (e.g., for RADIUS authentication)
 CFLAGS += -DIEEE8021X_EAPOL
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+CFLAGS += -DSIM_AKA_QUALCOMM
+endif
 OBJS += ../src/eapol_supp/eapol_supp_sm.o
 OBJS += ../src/eap_peer/eap.o ../src/eap_peer/eap_methods.o
 NEED_EAP_COMMON=y

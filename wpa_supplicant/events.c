@@ -6,6 +6,14 @@
  * See README for more details.
  */
 
+/*
+ * Copyright (c) 2011-2012 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+  * Qualcomm Atheros Confidential and Proprietary.
+  * Notifications and licenses are retained for attribution purposes only
+ */
+
+
 #include "includes.h"
 
 #include "common.h"
@@ -307,6 +315,7 @@ int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "Selected network is configured to use SIM "
 		"(sim=%d aka=%d) - initialize PCSC", sim, aka);
+#ifndef SIM_AKA_QUALCOMM
 	if (sim && aka)
 		type = SCARD_TRY_BOTH;
 	else if (aka)
@@ -322,6 +331,7 @@ int wpa_supplicant_scard_init(struct wpa_supplicant *wpa_s,
 	}
 	wpa_sm_set_scard_ctx(wpa_s->wpa, wpa_s->scard);
 	eapol_sm_register_scard_ctx(wpa_s->eapol, wpa_s->scard);
+#endif /* SIM_AKA_QUALCOMM */
 #endif /* PCSC_FUNCS */
 #endif /* IEEE8021X_EAPOL */
 

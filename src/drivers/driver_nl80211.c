@@ -6941,12 +6941,12 @@ skip_auth_type:
 
 	if (params->key_mgmt_suite == KEY_MGMT_802_1X ||
 	    params->key_mgmt_suite == KEY_MGMT_PSK ||
-	    params->key_mgmt_suite == KEY_MGMT_FT_802_1X ||
-	    params->key_mgmt_suite == KEY_MGMT_FT_PSK) {
+        params->key_mgmt_suite == KEY_MGMT_802_1X_NO_WPA) {
 		int mgmt = WLAN_AKM_SUITE_PSK;
 
 		switch (params->key_mgmt_suite) {
 		case KEY_MGMT_802_1X:
+        case KEY_MGMT_802_1X_NO_WPA:
 			mgmt = WLAN_AKM_SUITE_8021X;
 			break;
 		case KEY_MGMT_FT_802_1X:

@@ -68,6 +68,13 @@ INCLUDES += $(LOCAL_PATH)/src/utils
 INCLUDES += $(LOCAL_PATH)/src/wps
 INCLUDES += external/openssl/include
 INCLUDES += system/security/keystore
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+INCLUDES += vendor/qcom/proprietary/qmi/inc
+INCLUDES += vendor/qcom/proprietary/qmi/platform
+INCLUDES += vendor/qcom/proprietary/qmi/src
+INCLUDES += vendor/qcom/proprietary/qmi/services
+INCLUDES += vendor/qcom/proprietary/qmi/core/lib/inc
+endif
 ifdef CONFIG_DRIVER_NL80211
 INCLUDES += external/libnl-headers
 endif
@@ -436,6 +443,13 @@ CONFIG_IEEE8021X_EAPOL=y
 CONFIG_EAP_SIM_COMMON=y
 NEED_AES_CBC=y
 endif
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+L_CFLAGS += -DSIM_AKA_QUALCOMM
+L_CFLAGS += -DSIM_AKA_IDENTITY_IMSI
+#L_CFLAGS += -DSIM_AKA_IMSI_RAW_ENABLED
+OBJS += eap_proxy.c
+CONFIG_IEEE8021X_EAPOL=y
+endif
 
 ifdef CONFIG_EAP_LEAP
 # EAP-LEAP
@@ -705,6 +719,9 @@ endif
 ifdef CONFIG_IEEE8021X_EAPOL
 # IEEE 802.1X/EAPOL state machines (e.g., for RADIUS authentication)
 L_CFLAGS += -DIEEE8021X_EAPOL
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+L_CFLAGS += -DSIM_AKA_QUALCOMM
+endif
 OBJS += src/eapol_supp/eapol_supp_sm.c
 OBJS += src/eap_peer/eap.c src/eap_peer/eap_methods.c
 NEED_EAP_COMMON=y
@@ -1301,7 +1318,7 @@ endif
 ifdef CONFIG_NO_STDOUT_DEBUG
 L_CFLAGS += -DCONFIG_NO_STDOUT_DEBUG
 ifndef CONFIG_CTRL_IFACE
-L_CFLAGS += -DCONFIG_NO_WPA_MSG
+#L_CFLAGS += -DCONFIG_NO_WPA_MSG
 endif
 endif
 
@@ -1515,6 +1532,12 @@ ifneq ($(BOARD_WPA_SUPPLICANT_PRIVATE_LIB),)
 LOCAL_STATIC_LIBRARIES += $(BOARD_WPA_SUPPLICANT_PRIVATE_LIB)
 endif
 LOCAL_SHARED_LIBRARIES := libc libcutils
+ifeq ($(BOARD_HAS_QCOM_WLAN), true)
+LOCAL_SHARED_LIBRARIES += libqmi
+LOCAL_SHARED_LIBRARIES += libqmiservices
+LOCAL_SHARED_LIBRARIES += libidl
+LOCAL_SHARED_LIBRARIES += libqcci_legacy
+endif
 ifeq ($(CONFIG_TLS), openssl)
 LOCAL_SHARED_LIBRARIES += libcrypto libssl
 endif

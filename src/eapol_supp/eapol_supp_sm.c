@@ -6,6 +6,15 @@
  * See README for more details.
  */
 
+/*
+ * Copyright (c) 2011-2012 Qualcomm Atheros, Inc.
+ * All Rights Reserved.
+  * Qualcomm Atheros Confidential and Proprietary.
+  * Notifications and licenses are retained for attribution purposes only
+ */
+
+
+
 #include "includes.h"
 
 #include "common.h"
@@ -17,6 +26,10 @@
 #include "common/eapol_common.h"
 #include "eap_peer/eap.h"
 #include "eapol_supp_sm.h"
+
+#ifdef SIM_AKA_QUALCOMM
+#include "eap_proxy.h"
+#endif
 
 #define STATE_MACHINE_DATA struct eapol_sm
 #define STATE_MACHINE_DEBUG_PREFIX "EAPOL"
@@ -136,6 +149,10 @@ struct eapol_sm {
 	Boolean cached_pmk;
 
 	Boolean unicast_key_received, broadcast_key_received;
+#ifdef SIM_AKA_QUALCOMM
+        Boolean is_simaka;
+        eap_proxy_sm *eap_proxy;
+#endif
 };
 
 
@@ -462,12 +479,27 @@ SM_STATE(SUPP_BE, SUCCESS)
 	SM_ENTRY(SUPP_BE, SUCCESS);
 	sm->keyRun = TRUE;
 	sm->suppSuccess = TRUE;
-
+#ifdef SIM_AKA_QUALCOMM
+	if (FALSE == sm->is_simaka) {
+		if (eap_key_available(sm->eap)) {
+			/* New key received - clear IEEE 802.1X EAPOL-Key replay
+			 * counter */
+			sm->replay_counter_valid = FALSE;
+		}
+	} else {
+		if (eap_proxy_key_available(sm->eap_proxy)) {
+			/* New key received - clear IEEE 802.1X EAPOL-Key replay
+			 * counter */
+			sm->replay_counter_valid = FALSE;
+		}
+	}
+#else
 	if (eap_key_available(sm->eap)) {
 		/* New key received - clear IEEE 802.1X EAPOL-Key replay
 		 * counter */
 		sm->replay_counter_valid = FALSE;
 	}
+#endif
 }
 
 
@@ -804,15 +836,52 @@ static void eapol_sm_getSuppRsp(struct eapol_sm *sm)
 static void eapol_sm_txSuppRsp(struct eapol_sm *sm)
 {
 	struct wpabuf *resp;
-
+#ifdef SIM_AKA_QUALCOMM
+        u8 *proxy_resp;
+        size_t resp_len;
+#endif
 	wpa_printf(MSG_DEBUG, "EAPOL: txSuppRsp");
+
+#ifdef SIM_AKA_QUALCOMM
+	/* EAP_SIM_AKA -> Get eap Response from eap Proxy incase of SIM/AKA */
+	if (FALSE == sm->is_simaka) {
+		resp = eap_get_eapRespData(sm->eap);
+		if (resp == NULL) {
+			wpa_printf(MSG_WARNING, "EAPOL: txSuppRsp -"
+				   " EAP response data not available");
+			return;
+		}
+
+		/* Send EAP-Packet from the EAP layer to the Authenticator */
+		sm->ctx->eapol_send(sm->ctx->eapol_send_ctx,
+				    IEEE802_1X_TYPE_EAP_PACKET, wpabuf_head(resp),
+				    wpabuf_len(resp));
+		/* eapRespData is not used anymore, so free it here */
+		wpabuf_free(resp);
+
+	} else {
+		proxy_resp = eap_proxy_get_eapRespData(sm->eap_proxy, &resp_len);
+		if (proxy_resp == NULL) {
+			wpa_printf(MSG_WARNING, "EAPOL: txSuppRsp -"
+				   " EAP response data not available");
+			return;
+		}
+
+		/* Send EAP-Packet from the EAP layer to the Authenticator */
+		sm->ctx->eapol_send(sm->ctx->eapol_send_ctx,
+				    IEEE802_1X_TYPE_EAP_PACKET, proxy_resp,
+				    resp_len);
+
+		/* eapRespData is not used anymore, so free it here */
+		os_free(proxy_resp);
+	}
+#else
 	resp = eap_get_eapRespData(sm->eap);
 	if (resp == NULL) {
 		wpa_printf(MSG_WARNING, "EAPOL: txSuppRsp - EAP response data "
 			   "not available");
 		return;
 	}
-
 	/* Send EAP-Packet from the EAP layer to the Authenticator */
 	sm->ctx->eapol_send(sm->ctx->eapol_send_ctx,
 			    IEEE802_1X_TYPE_EAP_PACKET, wpabuf_head(resp),
@@ -821,6 +890,7 @@ static void eapol_sm_txSuppRsp(struct eapol_sm *sm)
 	/* eapRespData is not used anymore, so free it here */
 	wpabuf_free(resp);
 
+#endif
 	if (sm->initial_req)
 		sm->dot1xSuppEapolReqIdFramesRx++;
 	else
@@ -883,8 +953,20 @@ void eapol_sm_step(struct eapol_sm *sm)
 		SM_STEP_RUN(SUPP_PAE);
 		SM_STEP_RUN(KEY_RX);
 		SM_STEP_RUN(SUPP_BE);
+#ifdef SIM_AKA_QUALCOMM
+		/* EAP_SIM_AKA-> Drive the Eap proxy sm incase of EAP/SIM */
+		if (FALSE == sm->is_simaka) {
+			if (eap_peer_sm_step(sm->eap))
+				sm->changed = TRUE;
+		} else {
+			if (eap_proxy_sm_step(sm->eap_proxy, sm->eap)){
+				sm->changed = TRUE;
+			}
+		}
+#else
 		if (eap_peer_sm_step(sm->eap))
 			sm->changed = TRUE;
+#endif
 		if (!sm->changed)
 			break;
 	}
@@ -1070,7 +1152,17 @@ int eapol_sm_get_status(struct eapol_sm *sm, char *buf, size_t buflen,
 		len += ret;
 	}
 
-	len += eap_sm_get_status(sm->eap, buf + len, buflen - len, verbose);
+#ifdef SIM_AKA_QUALCOMM
+        if (sm->is_simaka) {
+        len += eap_proxy_sm_get_status(sm->eap_proxy,
+              buf + len, buflen - len, verbose);
+        }
+        else {
+             len += eap_sm_get_status(sm->eap, buf + len, buflen - len, verbose);
+        }
+#else
+    len += eap_sm_get_status(sm->eap, buf + len, buflen - len, verbose);
+#endif
 
 	return len;
 }
@@ -1227,6 +1319,13 @@ int eapol_sm_rx_eapol(struct eapol_sm *sm, const u8 *src, const u8 *buf,
 			wpa_printf(MSG_DEBUG, "EAPOL: Received EAP-Packet "
 				   "frame");
 			sm->eapolEap = TRUE;
+#ifdef SIM_AKA_QUALCOMM
+                if (TRUE == sm->is_simaka) {
+                        eap_proxy_packet_update(sm->eap_proxy,wpabuf_head(sm->eapReqData), wpabuf_len(sm->eapReqData));
+			wpa_printf(MSG_DEBUG, "EAPOL:QMI"
+                                   " EAP Req Updated \n");
+                }
+#endif
 			eapol_sm_step(sm);
 		}
 		break;
@@ -1387,6 +1486,23 @@ void eapol_sm_notify_config(struct eapol_sm *sm,
 		return;
 
 	sm->config = config;
+#ifdef SIM_AKA_QUALCOMM
+	/* Read the Config File to check for SIM/AKA  EAP_SIM_AKA */
+	if ( config && eap_allowed_method(sm->eap,
+			EAP_VENDOR_IETF , EAP_TYPE_SIM)) {
+			sm->is_simaka = TRUE;
+		if (NULL != sm->eap_proxy)
+			sm->eap_proxy->eap_type =  EAP_TYPE_SIM;
+	} else if (config && eap_allowed_method(sm->eap,
+					EAP_VENDOR_IETF , EAP_TYPE_AKA)) {
+			sm->is_simaka = TRUE;
+			if (NULL != sm->eap_proxy)
+				sm->eap_proxy->eap_type =  EAP_TYPE_AKA;
+
+	} else {
+		sm->is_simaka = FALSE;
+	}
+#endif
 
 	if (conf == NULL)
 		return;
@@ -1395,11 +1511,22 @@ void eapol_sm_notify_config(struct eapol_sm *sm,
 	sm->conf.required_keys = conf->required_keys;
 	sm->conf.fast_reauth = conf->fast_reauth;
 	sm->conf.workaround = conf->workaround;
+#ifdef SIM_AKA_QUALCOMM
+    /* EAP_SIM_AKA -> call Eap Proxy incase of SIM/AKA */
+    if (FALSE == sm->is_simaka) {
+	    if (sm->eap) {
+		   eap_set_fast_reauth(sm->eap, conf->fast_reauth);
+		   eap_set_workaround(sm->eap, conf->workaround);
+		   eap_set_force_disabled(sm->eap, conf->eap_disabled);
+	    }
+    }
+#else
 	if (sm->eap) {
 		eap_set_fast_reauth(sm->eap, conf->fast_reauth);
 		eap_set_workaround(sm->eap, conf->workaround);
 		eap_set_force_disabled(sm->eap, conf->eap_disabled);
 	}
+#endif
 }
 
 
@@ -1418,7 +1545,30 @@ int eapol_sm_get_key(struct eapol_sm *sm, u8 *key, size_t len)
 {
 	const u8 *eap_key;
 	size_t eap_len;
-
+#ifdef SIM_AKA_QUALCOMM
+	/* EAP_SIM_AKA -> Get Key From Eap Proxy incase of SIM/AKA */
+	if (FALSE == sm->is_simaka) {
+		if (sm == NULL || !eap_key_available(sm->eap)) {
+		    wpa_printf(MSG_DEBUG, "EAPOL: EAP key not available");
+		    return -1;
+	    }
+	    eap_key = eap_get_eapKeyData(sm->eap, &eap_len);
+            if (eap_key == NULL) {
+		    wpa_printf(MSG_DEBUG, "EAPOL: Failed to get eapKeyData");
+		    return -1;
+	    }
+	} else {
+	    if (sm == NULL || !eap_proxy_key_available(sm->eap_proxy)) {
+		    wpa_printf(MSG_DEBUG, "EAPOL: EAP key not available");
+		    return -1;
+	    }
+	    eap_key = eap_proxy_get_eapKeyData(sm->eap_proxy, &eap_len);
+            if (eap_key == NULL) {
+		    wpa_printf(MSG_DEBUG, "EAPOL: Failed to get eapKeyData");
+		    return -1;
+	    }
+	}
+#else
 	if (sm == NULL || !eap_key_available(sm->eap)) {
 		wpa_printf(MSG_DEBUG, "EAPOL: EAP key not available");
 		return -1;
@@ -1428,6 +1578,7 @@ int eapol_sm_get_key(struct eapol_sm *sm, u8 *key, size_t len)
 		wpa_printf(MSG_DEBUG, "EAPOL: Failed to get eapKeyData");
 		return -1;
 	}
+#endif
 	if (len > eap_len) {
 		wpa_printf(MSG_DEBUG, "EAPOL: Requested key length (%lu) not "
 			   "available (len=%lu)",
@@ -1891,7 +2042,18 @@ struct eapol_sm *eapol_sm_init(struct eapol_ctx *ctx)
 		os_free(sm);
 		return NULL;
 	}
-
+#ifdef SIM_AKA_QUALCOMM
+	/*initalize the simaka flag  before it enteres the states */
+	sm->is_simaka = FALSE;
+	/* Initialize Eap Proxy */
+	sm->eap_proxy = eap_proxy_init(sm, &eapol_cb, sm->ctx->msg_ctx);
+	if (NULL == sm->eap_proxy) {
+		wpa_printf(MSG_ERROR, "Unable to Initialize EAP"
+						" Proxy for AKA/SIM \n");
+		os_free(sm);
+		return NULL;
+	}
+#endif
 	/* Initialize EAPOL state machines */
 	sm->initialize = TRUE;
 	eapol_sm_step(sm);
@@ -1918,6 +2080,10 @@ void eapol_sm_deinit(struct eapol_sm *sm)
 	eloop_cancel_timeout(eapol_sm_step_timeout, NULL, sm);
 	eloop_cancel_timeout(eapol_port_timers_tick, NULL, sm);
 	eap_peer_sm_deinit(sm->eap);
+#ifdef SIM_AKA_QUALCOMM
+	/* EAP_SIM_AKA -> call Eap Proxy incase of SIM/AKA */
+	eap_proxy_deinit(sm->eap_proxy);
+#endif
 	os_free(sm->last_rx_key);
 	wpabuf_free(sm->eapReqData);
 	os_free(sm->ctx);
