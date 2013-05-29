@@ -194,7 +194,7 @@ L_CFLAGS += -DCONFIG_SAE
 endif
 
 ifdef CONFIG_WNM
-CFLAGS += -DCONFIG_WNM
+L_CFLAGS += -DCONFIG_WNM
 OBJS += wnm_sta.c
 endif
 
@@ -748,6 +748,9 @@ OBJS += src/ap/ieee802_11_ht.c
 endif
 ifdef CONFIG_CTRL_IFACE
 OBJS += src/ap/ctrl_iface_ap.c
+endif
+ifdef CONFIG_WNM
+OBJS += src/ap/wnm_ap.c
 endif
 
 L_CFLAGS += -DEAP_SERVER -DEAP_SERVER_IDENTITY
