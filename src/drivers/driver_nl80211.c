@@ -2488,6 +2488,10 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 		capa->max_match_sets =
 			nla_get_u8(tb[NL80211_ATTR_MAX_MATCH_SETS]);
 
+	if (tb[NL80211_ATTR_MAC_ACL_MAX])
+		capa->max_acl_mac_addrs =
+			nla_get_u8(tb[NL80211_ATTR_MAC_ACL_MAX]);
+
 	if (tb[NL80211_ATTR_SUPPORTED_IFTYPES]) {
 		struct nlattr *nl_mode;
 		int i;
@@ -5486,6 +5490,60 @@ static int nl80211_set_bss(struct i802_bss *bss, int cts, int preamble,
  nla_put_failure:
 	nlmsg_free(msg);
 	return -ENOBUFS;
+}
+
+
+static int wpa_driver_nl80211_set_acl(void *priv,
+				      struct hostapd_acl_params *params)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	struct nl_msg *msg;
+	struct nlattr *acl;
+	unsigned int i;
+	int ret = 0;
+
+	if (!(drv->capa.max_acl_mac_addrs))
+		return -ENOTSUP;
+
+	if (params->num_mac_acl > drv->capa.max_acl_mac_addrs)
+		return -ENOTSUP;
+
+	msg = nlmsg_alloc();
+	if (!msg)
+		return -ENOMEM;
+
+	wpa_printf(MSG_DEBUG, "nl80211: Set %s ACL (num_mac_acl=%u)",
+		   params->acl_policy ? "Accept" : "Deny", params->num_mac_acl);
+
+	nl80211_cmd(drv, msg, 0, NL80211_CMD_SET_MAC_ACL);
+
+	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
+
+	NLA_PUT_U32(msg, NL80211_ATTR_ACL_POLICY, params->acl_policy ?
+		    NL80211_ACL_POLICY_DENY_UNLESS_LISTED :
+		    NL80211_ACL_POLICY_ACCEPT_UNLESS_LISTED);
+
+	acl = nla_nest_start(msg, NL80211_ATTR_MAC_ADDRS);
+	if (acl == NULL)
+		goto nla_put_failure;
+
+	for (i = 0; i < params->num_mac_acl; i++)
+		NLA_PUT(msg, i + 1, ETH_ALEN, params->mac_acl[i].addr);
+
+	nla_nest_end(msg, acl);
+
+	ret = send_and_recv_msgs(drv, msg, NULL, NULL);
+	msg = NULL;
+	if (ret) {
+		wpa_printf(MSG_DEBUG, "nl80211: Failed to set MAC ACL: %d (%s)",
+			   ret, strerror(-ret));
+	}
+
+nla_put_failure:
+	nlmsg_free(msg);
+
+	return ret;
 }
 
 
@@ -9351,6 +9409,7 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.set_supp_port = wpa_driver_nl80211_set_supp_port,
 	.set_country = wpa_driver_nl80211_set_country,
 	.set_ap = wpa_driver_nl80211_set_ap,
+	.set_acl = wpa_driver_nl80211_set_acl,
 	.if_add = wpa_driver_nl80211_if_add,
 	.if_remove = wpa_driver_nl80211_if_remove,
 	.send_mlme = wpa_driver_nl80211_send_mlme,
