@@ -863,10 +863,15 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 #endif /* CONFIG_P2P */
 
 	if (authorized) {
-		if (dev_addr)
+		if (dev_addr) {
+#ifdef CONFIG_WIFI_DISPLAY
+			p2p_peer_set_intended_addr(hapd->p2p, dev_addr,
+				sta->addr);
+#endif /* CONFIG_WIFI_DISPLAY */
 			wpa_msg(hapd->msg_ctx, MSG_INFO, AP_STA_CONNECTED
 				MACSTR " p2p_dev_addr=" MACSTR,
 				MAC2STR(sta->addr), MAC2STR(dev_addr));
+		}
 		else
 			wpa_msg(hapd->msg_ctx, MSG_INFO, AP_STA_CONNECTED
 				MACSTR, MAC2STR(sta->addr));
