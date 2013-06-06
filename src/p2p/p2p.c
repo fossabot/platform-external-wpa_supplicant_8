@@ -4547,6 +4547,17 @@ int p2p_set_wfd_coupled_sink_info(struct p2p_data *p2p,
 	return 0;
 }
 
+void p2p_peer_set_intended_addr(struct p2p_data *p2p, const u8 *dev_addr,
+								const u8 *intended_addr)
+{
+	struct p2p_device *dev;
+
+	dev = p2p_get_device(p2p, dev_addr);
+
+	if ( dev != NULL && is_zero_ether_addr(dev->intended_addr))
+		os_memcpy(dev->intended_addr, intended_addr, ETH_ALEN);
+}
+
 #endif /* CONFIG_WIFI_DISPLAY */
 
 int p2p_set_disc_int(struct p2p_data *p2p, int min_disc_int, int max_disc_int,

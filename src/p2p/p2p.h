@@ -1787,6 +1787,11 @@ int p2p_set_wfd_dev_info(struct p2p_data *p2p, const struct wpabuf *elem);
 int p2p_set_wfd_assoc_bssid(struct p2p_data *p2p, const struct wpabuf *elem);
 int p2p_set_wfd_coupled_sink_info(struct p2p_data *p2p,
 				  const struct wpabuf *elem);
+/**
+ * p2p_peer_set_intended_addr - Save intended address for use by GO
+ */
+void p2p_peer_set_intended_addr(struct p2p_data *p2p, const u8 *dev_addr,
+				const u8 *intended_addr);
 struct wpabuf * wifi_display_encaps(struct wpabuf *subelems);
 
 /**
