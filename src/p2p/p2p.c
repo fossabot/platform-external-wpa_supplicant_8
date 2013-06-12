@@ -1239,6 +1239,82 @@ void p2p_stop_find(struct p2p_data *p2p)
 }
 
 
+static int p2p_prepare_channel_pref(struct p2p_data *p2p,
+				    unsigned int force_freq,
+				    unsigned int pref_freq)
+{
+	u8 op_class, op_channel;
+	unsigned int freq = force_freq ? force_freq : pref_freq;
+
+	if (p2p_freq_to_channel(p2p->cfg->country, freq,
+				&op_class, &op_channel) < 0) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+			"P2P: Unsupported frequency %u MHz", freq);
+		return -1;
+	}
+
+	if (!p2p_channels_includes(&p2p->cfg->channels, op_class, op_channel)) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
+			"P2P: Frequency %u MHz (oper_class %u channel %u) not "
+			"allowed for P2P", freq, op_class, op_channel);
+		return -1;
+	}
+
+	p2p->op_reg_class = op_class;
+	p2p->op_channel = op_channel;
+
+	if (force_freq) {
+		p2p->channels.reg_classes = 1;
+		p2p->channels.reg_class[0].channels = 1;
+		p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
+		p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
+	} else {
+		os_memcpy(&p2p->channels, &p2p->cfg->channels,
+			  sizeof(struct p2p_channels));
+	}
+
+	return 0;
+}
+
+
+static void p2p_prepare_channel_best(struct p2p_data *p2p)
+{
+	u8 op_class, op_channel;
+
+	if (!p2p->cfg->cfg_op_channel && p2p->best_freq_overall > 0 &&
+	    p2p_supported_freq(p2p, p2p->best_freq_overall) &&
+	    p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_overall,
+				&op_class, &op_channel) == 0) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Select best "
+			"overall channel as operating channel preference");
+		p2p->op_reg_class = op_class;
+		p2p->op_channel = op_channel;
+	} else if (!p2p->cfg->cfg_op_channel && p2p->best_freq_5 > 0 &&
+		   p2p_supported_freq(p2p, p2p->best_freq_5) &&
+		   p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_5,
+				       &op_class, &op_channel) == 0) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Select best 5 GHz "
+			"channel as operating channel preference");
+		p2p->op_reg_class = op_class;
+		p2p->op_channel = op_channel;
+	} else if (!p2p->cfg->cfg_op_channel && p2p->best_freq_24 > 0 &&
+		   p2p_supported_freq(p2p, p2p->best_freq_24) &&
+		   p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_24,
+				       &op_class, &op_channel) == 0) {
+		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Select best 2.4 "
+			"GHz channel as operating channel preference");
+		p2p->op_reg_class = op_class;
+		p2p->op_channel = op_channel;
+	} else {
+		p2p->op_reg_class = p2p->cfg->op_reg_class;
+		p2p->op_channel = p2p->cfg->op_channel;
+	}
+
+	os_memcpy(&p2p->channels, &p2p->cfg->channels,
+		  sizeof(struct p2p_channels));
+}
+
+
 /**
  * p2p_prepare_channel - Select operating channel for GO Negotiation
  * @p2p: P2P module context from p2p_init()
@@ -1256,104 +1332,10 @@ int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
 			unsigned int force_freq, unsigned int pref_freq)
 {
 	if (force_freq || pref_freq) {
-		u8 op_reg_class, op_channel;
-		unsigned int freq = force_freq ? force_freq : pref_freq;
-		if (p2p_freq_to_channel(p2p->cfg->country, freq,
-					&op_reg_class, &op_channel) < 0) {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
-				"P2P: Unsupported frequency %u MHz",
-				freq);
+		if (p2p_prepare_channel_pref(p2p, force_freq, pref_freq) < 0)
 			return -1;
-		}
-		if (!p2p_channels_includes(&p2p->cfg->channels, op_reg_class,
-					   op_channel)) {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
-				"P2P: Frequency %u MHz (oper_class %u "
-				"channel %u) not allowed for P2P",
-				freq, op_reg_class, op_channel);
-			return -1;
-		}
-		p2p->op_reg_class = op_reg_class;
-		p2p->op_channel = op_channel;
-#ifndef ANDROID_P2P
-		if (force_freq) {
-			p2p->channels.reg_classes = 1;
-			p2p->channels.reg_class[0].channels = 1;
-			p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
-			p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
-		} else {
-			os_memcpy(&p2p->channels, &p2p->cfg->channels,
-				sizeof(struct p2p_channels));
-		}
-#else
-		if(p2p->cfg->p2p_concurrency == P2P_MULTI_CHANNEL_CONCURRENT) {
-			/* We we are requesting for a preferred channel. But since
-			 * are multichannel concurrent, we have to poplulate the
-			 * p2p_channels with list of channels that we support.
-			 */
-#ifdef ANDROID_P2P
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "Full channel list");
-#endif
-			os_memcpy(&p2p->channels, &p2p->cfg->channels,
-				sizeof(struct p2p_channels));
-		} else {
-#ifdef ANDROID_P2P
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "Single channel list %d", p2p->op_channel);
-#endif
-			if (force_freq) {
-				p2p->channels.reg_classes = 1;
-				p2p->channels.reg_class[0].channels = 1;
-				p2p->channels.reg_class[0].reg_class = p2p->op_reg_class;
-				p2p->channels.reg_class[0].channel[0] = p2p->op_channel;
-			} else{
-				os_memcpy(&p2p->channels, &p2p->cfg->channels,
-					sizeof(struct p2p_channels));
-			}
-		}
-#endif
 	} else {
-		u8 op_reg_class, op_channel;
-
-		if (!p2p->cfg->cfg_op_channel && p2p->best_freq_overall > 0 &&
-		    p2p_supported_freq(p2p, p2p->best_freq_overall) &&
-		    p2p_freq_to_channel(p2p->cfg->country,
-					p2p->best_freq_overall,
-					&op_reg_class, &op_channel) == 0) {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
-				"P2P: Select best overall channel as "
-				"operating channel preference");
-			p2p->op_reg_class = op_reg_class;
-			p2p->op_channel = op_channel;
-		} else if (!p2p->cfg->cfg_op_channel && p2p->best_freq_5 > 0 &&
-			   p2p_supported_freq(p2p, p2p->best_freq_5) &&
-			   p2p_freq_to_channel(p2p->cfg->country,
-					       p2p->best_freq_5,
-					       &op_reg_class, &op_channel) ==
-			   0) {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
-				"P2P: Select best 5 GHz channel as "
-				"operating channel preference");
-			p2p->op_reg_class = op_reg_class;
-			p2p->op_channel = op_channel;
-		} else if (!p2p->cfg->cfg_op_channel &&
-			   p2p->best_freq_24 > 0 &&
-			   p2p_supported_freq(p2p, p2p->best_freq_24) &&
-			   p2p_freq_to_channel(p2p->cfg->country,
-					       p2p->best_freq_24,
-					       &op_reg_class, &op_channel) ==
-			   0) {
-			wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
-				"P2P: Select best 2.4 GHz channel as "
-				"operating channel preference");
-			p2p->op_reg_class = op_reg_class;
-			p2p->op_channel = op_channel;
-		} else {
-			p2p->op_reg_class = p2p->cfg->op_reg_class;
-			p2p->op_channel = p2p->cfg->op_channel;
-		}
-
-		os_memcpy(&p2p->channels, &p2p->cfg->channels,
-			  sizeof(struct p2p_channels));
+		p2p_prepare_channel_best(p2p);
 	}
 	wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
 		"P2P: Own preference for operation channel: "
