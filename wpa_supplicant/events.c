@@ -1707,6 +1707,7 @@ static void wpa_supplicant_event_disassoc(struct wpa_supplicant *wpa_s,
 	    wpa_key_mgmt_wpa_psk(wpa_s->key_mgmt)) {
 		wpa_msg(wpa_s, MSG_INFO, "WPA: 4-Way Handshake failed - "
 			"pre-shared key may be incorrect");
+                wpa_supplicant_set_state(wpa_s, WPA_KEYFAIL);
 	}
 	if (!wpa_s->auto_reconnect_disabled ||
 	    wpa_s->key_mgmt == WPA_KEY_MGMT_WPS) {
