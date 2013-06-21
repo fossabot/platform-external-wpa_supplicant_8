@@ -2131,8 +2131,8 @@ void wpa_supplicant_rx_eapol(void *ctx, const u8 *src_addr,
                 else
                    keyfailcount = 0;
                 if (keyfailcount > 2) {
-                   wpa_supplicant_set_state(wpa_s, WPA_KEYFAIL);
                    keyfailcount = 0;
+                   wpa_supplicant_set_state(wpa_s, WPA_KEYFAIL);
                 }
 	} else if (wpa_key_mgmt_wpa_ieee8021x(wpa_s->key_mgmt)) {
 		/*
