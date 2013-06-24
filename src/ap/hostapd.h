@@ -215,6 +215,8 @@ struct hostapd_iface {
 	 */
 	unsigned int probe_resp_offloads;
 
+	unsigned int drv_max_acl_mac_addrs;
+
 	struct hostapd_hw_modes *hw_features;
 	int num_hw_features;
 	struct hostapd_hw_modes *current_mode;
