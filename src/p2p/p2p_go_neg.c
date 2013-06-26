@@ -353,7 +353,7 @@ void p2p_reselect_channel(struct p2p_data *p2p,
 	unsigned int i;
 
 	if (p2p->own_freq_preference > 0 &&
-	    p2p_freq_to_channel(p2p->cfg->country, p2p->own_freq_preference,
+	    p2p_freq_to_channel(p2p->own_freq_preference,
 				&op_reg_class, &op_channel) == 0 &&
 	    p2p_channels_includes(intersection, op_reg_class, op_channel)) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Pick own channel "
@@ -365,7 +365,7 @@ void p2p_reselect_channel(struct p2p_data *p2p,
 	}
 
 	if (p2p->best_freq_overall > 0 &&
-	    p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_overall,
+	    p2p_freq_to_channel(p2p->best_freq_overall,
 				&op_reg_class, &op_channel) == 0 &&
 	    p2p_channels_includes(intersection, op_reg_class, op_channel)) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Pick best overall "
@@ -377,12 +377,11 @@ void p2p_reselect_channel(struct p2p_data *p2p,
 	}
 
 	/* First, try to pick the best channel from another band */
-	freq = p2p_channel_to_freq(p2p->cfg->country, p2p->op_reg_class,
-				   p2p->op_channel);
+	freq = p2p_channel_to_freq(p2p->op_reg_class, p2p->op_channel);
 	if (freq >= 2400 && freq < 2500 && p2p->best_freq_5 > 0 &&
 	    !p2p_channels_includes(intersection, p2p->op_reg_class,
 				   p2p->op_channel) &&
-	    p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_5,
+	    p2p_freq_to_channel(p2p->best_freq_5,
 				&op_reg_class, &op_channel) == 0 &&
 	    p2p_channels_includes(intersection, op_reg_class, op_channel)) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Pick best 5 GHz "
@@ -396,7 +395,7 @@ void p2p_reselect_channel(struct p2p_data *p2p,
 	if (freq >= 4900 && freq < 6000 && p2p->best_freq_24 > 0 &&
 	    !p2p_channels_includes(intersection, p2p->op_reg_class,
 				   p2p->op_channel) &&
-	    p2p_freq_to_channel(p2p->cfg->country, p2p->best_freq_24,
+	    p2p_freq_to_channel(p2p->best_freq_24,
 				&op_reg_class, &op_channel) == 0 &&
 	    p2p_channels_includes(intersection, op_reg_class, op_channel)) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Pick best 2.4 GHz "
@@ -723,9 +722,7 @@ void p2p_process_go_neg_req(struct p2p_data *p2p, const u8 *sa,
 			goto fail;
 
 		dev->go_state = go ? LOCAL_GO : REMOTE_GO;
-		dev->oper_freq = p2p_channel_to_freq((const char *)
-						     msg.operating_channel,
-						     msg.operating_channel[3],
+		dev->oper_freq = p2p_channel_to_freq(msg.operating_channel[3],
 						     msg.operating_channel[4]);
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Peer operating "
 			"channel preference: %d MHz", dev->oper_freq);
@@ -760,8 +757,7 @@ fail:
 	if (rx_freq > 0)
 		freq = rx_freq;
 	else
-		freq = p2p_channel_to_freq(p2p->cfg->country,
-					   p2p->cfg->reg_class,
+		freq = p2p_channel_to_freq(p2p->cfg->reg_class,
 					   p2p->cfg->channel);
 	if (freq < 0) {
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG,
@@ -1037,9 +1033,7 @@ void p2p_process_go_neg_resp(struct p2p_data *p2p, const u8 *sa,
 	}
 
 	if (msg.operating_channel) {
-		dev->oper_freq = p2p_channel_to_freq((const char *)
-						     msg.operating_channel,
-						     msg.operating_channel[3],
+		dev->oper_freq = p2p_channel_to_freq(msg.operating_channel[3],
 						     msg.operating_channel[4]);
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Peer operating "
 			"channel preference: %d MHz", dev->oper_freq);
@@ -1218,10 +1212,8 @@ void p2p_process_go_neg_conf(struct p2p_data *p2p, const u8 *sa,
 
 #ifdef ANDROID_P2P
 	if (msg.operating_channel) {
-		dev->oper_freq = p2p_channel_to_freq((const char *)
-						     msg.operating_channel,
-						     msg.operating_channel[3],
-						     msg.operating_channel[4]);
+		dev->oper_freq = p2p_channel_to_freq(msg.operating_channel[3],
+						msg.operating_channel[4]);
 		wpa_msg(p2p->cfg->msg_ctx, MSG_DEBUG, "P2P: Peer operating "
 			"channel preference: %d MHz", dev->oper_freq);
 	} else
