@@ -970,6 +970,9 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 		fprintf(f, "okc=%d\n", config->okc);
 	if (config->pmf)
 		fprintf(f, "pmf=%d\n", config->pmf);
+	if (config->sched_scan_interval)
+		fprintf(f, "sched_scan_interval=%u\n",
+			config->sched_scan_interval);
 }
 
 #endif /* CONFIG_NO_CONFIG_WRITE */

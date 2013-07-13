@@ -788,6 +788,11 @@ struct wpa_config {
 	 * this default behavior.
 	 */
 	enum mfp_options pmf;
+
+	/**
+	 * sched_scan_interval - schedule scan interval
+	 */
+	unsigned int sched_scan_interval;
 };
 
 

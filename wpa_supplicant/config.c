@@ -3068,6 +3068,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT_RANGE(auto_interworking, 0, 1), 0 },
 	{ INT(okc), 0 },
 	{ INT(pmf), 0 },
+	{ INT(sched_scan_interval), 0 },
 };
 
 #undef FUNC
