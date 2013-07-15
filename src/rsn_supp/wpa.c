@@ -2591,7 +2591,7 @@ void wpa_sm_pmksa_cache_flush(struct wpa_sm *sm, void *network_ctx)
 }
 
 
-#ifdef CONFIG_IEEE80211V
+#ifdef CONFIG_WNM
 int wpa_wnmsleep_install_key(struct wpa_sm *sm, u8 subelem_id, u8 *buf)
 {
 	struct wpa_gtk_data gd;
@@ -2663,4 +2663,4 @@ int wpa_wnmsleep_install_key(struct wpa_sm *sm, u8 subelem_id, u8 *buf)
 
 	return 0;
 }
-#endif /* CONFIG_IEEE80211V */
+#endif /* CONFIG_WNM */

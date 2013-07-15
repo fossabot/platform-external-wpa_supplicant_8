@@ -2232,10 +2232,20 @@ static void wpas_prov_disc_fail(void *ctx, const u8 *peer,
 }
 
 
+static int freq_included(const struct p2p_channels *channels, unsigned int freq)
+{
+	if (channels == NULL)
+		return 1; /* Assume no restrictions */
+	return p2p_channels_includes_freq(channels, freq);
+
+}
+
+
 static u8 wpas_invitation_process(void *ctx, const u8 *sa, const u8 *bssid,
 				  const u8 *go_dev_addr, const u8 *ssid,
 				  size_t ssid_len, int *go, u8 *group_bssid,
-				  int *force_freq, int persistent_group)
+				  int *force_freq, int persistent_group,
+				  const struct p2p_channels *channels)
 {
 	struct wpa_supplicant *wpa_s = ctx;
 	struct wpa_ssid *s;
@@ -2331,6 +2341,25 @@ accept_inv:
 			   "shared interface");
 		*force_freq = res;
 		wpas_p2p_set_own_freq_preference(wpa_s, res);
+	}
+
+	if (*force_freq > 0 &&
+	    (wpa_s->drv_flags & WPA_DRIVER_FLAGS_MULTI_CHANNEL_CONCURRENT)) {
+		if (*go == 0) {
+			/* We are the client */
+			wpa_printf(MSG_DEBUG, "P2P: Peer was found to be "
+				   "running a GO but we are capable of MCC, "
+				   "figure out the best channel to use");
+			*force_freq = 0;
+		} else if (!freq_included(channels, *force_freq)) {
+			/* We are the GO, and *force_freq is not in the
+			 * intersection */
+			wpa_printf(MSG_DEBUG, "P2P: Forced GO freq %d MHz not "
+				   "in intersection but we are capable of MCC, "
+				   "figure out the best channel to use",
+				   *force_freq);
+			*force_freq = 0;
+		}
 	}
 
 	return P2P_SC_SUCCESS;
@@ -2922,6 +2951,12 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 		wpa_printf(MSG_DEBUG, "P2P: Random operating channel: "
 			   "%d:%d", p2p.op_reg_class, p2p.op_channel);
 	}
+
+	if (wpa_s->conf->p2p_pref_chan && wpa_s->conf->num_p2p_pref_chan) {
+		p2p.pref_chan = wpa_s->conf->p2p_pref_chan;
+		p2p.num_pref_chan = wpa_s->conf->num_p2p_pref_chan;
+	}
+
 	if (wpa_s->conf->country[0] && wpa_s->conf->country[1]) {
 		os_memcpy(p2p.country, wpa_s->conf->country, 2);
 		p2p.country[2] = 0x04;
@@ -3883,14 +3918,6 @@ int wpas_p2p_group_remove(struct wpa_supplicant *wpa_s, const char *ifname)
 }
 
 
-static int freq_included(const struct p2p_channels *channels, unsigned int freq)
-{
-	if (channels == NULL)
-		return 1; /* Assume no restrictions */
-	return p2p_channels_includes_freq(channels, freq);
-}
-
-
 static int wpas_p2p_init_go_params(struct wpa_supplicant *wpa_s,
 				   struct p2p_go_neg_results *params,
 				   int freq, int ht40,
@@ -3898,6 +3925,7 @@ static int wpas_p2p_init_go_params(struct wpa_supplicant *wpa_s,
 {
 	u8 bssid[ETH_ALEN];
 	int res;
+	unsigned int pref_freq;
 
 	os_memset(params, 0, sizeof(*params));
 	params->role_go = 1;
@@ -3954,6 +3982,11 @@ static int wpas_p2p_init_go_params(struct wpa_supplicant *wpa_s,
 		params->freq = wpa_s->best_5_freq;
 		wpa_printf(MSG_DEBUG, "P2P: Set GO freq based on best 5 GHz "
 			   "channel %d MHz", params->freq);
+	} else if ((pref_freq = p2p_get_pref_freq(wpa_s->global->p2p,
+						  channels))) {
+		params->freq = pref_freq;
+		wpa_printf(MSG_DEBUG, "P2P: Set GO freq %d MHz from preferred "
+			   "channels", params->freq);
 	} else {
 		int chan;
 		for (chan = 0; chan < 11; chan++) {
