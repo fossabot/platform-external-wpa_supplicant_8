@@ -49,6 +49,7 @@
 #include "scan.h"
 #include "offchannel.h"
 #include "hs20_supplicant.h"
+#include "wnm_sta.h"
 
 const char *wpa_supplicant_version =
 "wpa_supplicant v" VERSION_STR "\n"
@@ -126,8 +127,8 @@ int wpa_set_wep_keys(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
 }
 
 
-static int wpa_supplicant_set_wpa_none_key(struct wpa_supplicant *wpa_s,
-					   struct wpa_ssid *ssid)
+int wpa_supplicant_set_wpa_none_key(struct wpa_supplicant *wpa_s,
+				    struct wpa_ssid *ssid)
 {
 	u8 key[32];
 	size_t keylen;
@@ -467,6 +468,9 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	wpa_s->disallow_aps_ssid = NULL;
 
 	wnm_bss_keep_alive_deinit(wpa_s);
+#ifdef CONFIG_WNM
+	wnm_deallocate_memory(wpa_s);
+#endif /* CONFIG_WNM */
 
 	ext_password_deinit(wpa_s->ext_pw);
 	wpa_s->ext_pw = NULL;
@@ -2980,6 +2984,7 @@ next_driver:
 static void wpa_supplicant_deinit_iface(struct wpa_supplicant *wpa_s,
 					int notify, int terminate)
 {
+	wpa_s->disconnected = 1;
 	if (wpa_s->drv_priv) {
 		wpa_supplicant_deauthenticate(wpa_s,
 					      WLAN_REASON_DEAUTH_LEAVING);
@@ -3487,6 +3492,17 @@ void wpas_connection_failed(struct wpa_supplicant *wpa_s, const u8 *bssid)
 	 * Remove possible authentication timeout since the connection failed.
 	 */
 	eloop_cancel_timeout(wpa_supplicant_timeout, wpa_s, NULL);
+
+	if (wpa_s->disconnected) {
+		/*
+		 * There is no point in blacklisting the AP if this event is
+		 * generated based on local request to disconnect.
+		 */
+		wpa_dbg(wpa_s, MSG_DEBUG, "Ignore connection failure "
+			"indication since interface has been put into "
+			"disconnected state");
+		return;
+	}
 
 	/*
 	 * Add the failed BSSID into the blacklist and speed up next scan

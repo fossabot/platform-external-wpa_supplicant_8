@@ -273,6 +273,7 @@ static int hostapd_driver_init(struct hostapd_iface *iface)
 	    hapd->driver->get_capa(hapd->drv_priv, &capa) == 0) {
 		iface->drv_flags = capa.flags;
 		iface->probe_resp_offloads = capa.probe_resp_offloads;
+		iface->drv_max_acl_mac_addrs = capa.max_acl_mac_addrs;
 	}
 
 	return 0;
