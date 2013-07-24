@@ -244,6 +244,31 @@ CONFIG_IPV6=y
 # can be enabled to enable use of stronger crypto algorithms.
 #CONFIG_TLSV12=y
 
+
+# Enable this to get Automatic Channel Selection support. This will allow
+# hostapd to pick the channel automatically for you when you set the channel to
+# "acs_survey" or "0". Eventually, other ACS algorithms can be added in similar
+# way.
+#
+# Automatic selection is currently only done through initialization, later on
+# we hope to do background checks to keep us moving to more ideal channels as
+# time goes by. ACS is currently only supported through the nl80211 driver, and
+# your driver must have offchannel TX support and survey dump capablities.
+#
+# You can customize the ACS survey algorithm with the hostapd.conf variable
+# acs_chan_time_ms.
+#
+# Supported ACS drivers:
+#
+# * ath9k
+# * ath5k
+# * ath10k
+#
+# For more details refer to:
+#
+# http://wireless.kernel.org/en/users/Documentation/acs
+#
+#CONFIG_ACS=y
 # If CONFIG_TLS=internal is used, additional library and include paths are
 # needed for LibTomMath. Alternatively, an integrated, minimal version of
 # LibTomMath can be used. See beginning of libtommath.c for details on benefits

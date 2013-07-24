@@ -2314,7 +2314,18 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 				errors++;
 			}
 		} else if (os_strcmp(buf, "channel") == 0) {
-			conf->channel = atoi(pos);
+			if (os_strcmp(pos, "acs_survey") == 0) {
+				conf->channel = 0;
+			} else
+				conf->channel = atoi(pos);
+#ifndef CONFIG_ACS
+			if (!conf->channel) {
+				wpa_printf(MSG_ERROR, "Line %d: set as '%s' "
+					   "tries to enable ACS but "
+					   "CONFIG_ACS disabled", line, pos);
+				errors++;
+			}
+#endif /* CONFIG_ACS */
 		} else if (os_strcmp(buf, "beacon_int") == 0) {
 			int val = atoi(pos);
 			/* MIB defines range as 1..65535, but very small values
@@ -2329,6 +2340,17 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 				errors++;
 			} else
 				conf->beacon_int = val;
+#ifdef CONFIG_ACS
+		} else if (os_strcmp(buf, "acs_chan_time_ms") == 0) {
+			int val = atoi(pos);
+			if (val <= 0 || val > 5000) {
+				errors++;
+				wpa_printf(MSG_ERROR, "Line %d: invalid "
+					   "acs_chan_time_ms %d (expected "
+					   "1..5000)", line, val);
+			} else
+				conf->acs_chan_time_ms = val;
+#endif /* CONFIG_ACS */
 		} else if (os_strcmp(buf, "dtim_period") == 0) {
 			bss->dtim_period = atoi(pos);
 			if (bss->dtim_period < 1 || bss->dtim_period > 255) {

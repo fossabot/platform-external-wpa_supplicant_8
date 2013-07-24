@@ -25,6 +25,7 @@
 #include "ap_config.h"
 #include "ap_drv_ops.h"
 #include "hw_features.h"
+#include "acs.h"
 
 
 void hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
@@ -693,10 +694,18 @@ hostapd_check_chans(struct hostapd_iface *iface)
 	}
 
 	/*
-	 * The user set channel=0 which is used to trigger ACS,
-	 * which we do not yet support.
+	 * The user set channel=0 or channel=acs_survey
+	 * which is used to trigger ACS.
 	 */
-	return HOSTAPD_CHAN_INVALID;
+
+	switch (acs_init(iface)) {
+	case HOSTAPD_CHAN_ACS:
+		return HOSTAPD_CHAN_ACS;
+	case HOSTAPD_CHAN_VALID:
+	case HOSTAPD_CHAN_INVALID:
+	default:
+		return HOSTAPD_CHAN_INVALID;
+	}
 }
 
 static void hostapd_notify_bad_chans(struct hostapd_iface *iface)
@@ -712,6 +721,38 @@ static void hostapd_notify_bad_chans(struct hostapd_iface *iface)
 	hostapd_logger(iface->bss[0], NULL, HOSTAPD_MODULE_IEEE80211,
 		       HOSTAPD_LEVEL_WARNING,
 		       "Hardware does not support configured channel");
+}
+
+
+int hostapd_acs_completed(struct hostapd_iface *iface)
+{
+	int ret;
+
+	switch (hostapd_check_chans(iface)) {
+	case HOSTAPD_CHAN_VALID:
+		break;
+	case HOSTAPD_CHAN_ACS:
+		wpa_printf(MSG_ERROR, "ACS error - reported complete, but no "
+			   "result available");
+		hostapd_notify_bad_chans(iface);
+		return -1;
+	case HOSTAPD_CHAN_INVALID:
+	default:
+		wpa_printf(MSG_ERROR, "ACS picked unusable channels");
+		hostapd_notify_bad_chans(iface);
+		return -1;
+	}
+
+	ret = hostapd_check_ht_capab(iface);
+	if (ret < 0)
+		return -1;
+	if (ret == 1) {
+		wpa_printf(MSG_DEBUG, "Interface initialization will "
+			   "be completed in a callback");
+		return 0;
+	}
+
+	return hostapd_setup_interface_complete(iface, 0);
 }
 
 
@@ -753,7 +794,8 @@ int hostapd_select_hw_mode(struct hostapd_iface *iface)
 	switch (hostapd_check_chans(iface)) {
 	case HOSTAPD_CHAN_VALID:
 		return 0;
-	case HOSTAPD_CHAN_ACS: /* ACS not supported yet */
+	case HOSTAPD_CHAN_ACS: /* ACS will run and later complete */
+		return 1;
 	case HOSTAPD_CHAN_INVALID:
 	default:
 		hostapd_notify_bad_chans(iface);
