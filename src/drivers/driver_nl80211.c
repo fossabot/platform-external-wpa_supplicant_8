@@ -4256,6 +4256,10 @@ nl80211_scan_common(struct wpa_driver_nl80211_data *drv, u8 cmd,
 		nla_nest_end(msg, freqs);
 	}
 
+	if (params->chan_time)
+		nla_put_u32(msg, NL80211_ATTR_SCAN_CHAN_TIME,
+			    params->chan_time);
+
 	os_free(drv->filter_ssids);
 	drv->filter_ssids = params->filter_ssids;
 	params->filter_ssids = NULL;
@@ -4280,7 +4284,7 @@ static int wpa_driver_nl80211_scan(struct i802_bss *bss,
 				   struct wpa_driver_scan_params *params)
 {
 	struct wpa_driver_nl80211_data *drv = bss->drv;
-	int ret = -1, timeout;
+	int ret = -1, timeout, n_freqs = 0, *freq;
 	struct nl_msg *msg = NULL;
 
 	wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: scan request");
@@ -4354,6 +4358,17 @@ static int wpa_driver_nl80211_scan(struct i802_bss *bss,
 		 */
 		timeout = 30;
 	}
+
+	if (params->chan_time && params->freqs) {
+		for (freq = params->freqs; *freq; freq++)
+			n_freqs++;
+
+		/* Give it twice the time each frequency is visited for
+		 * to provide enough grace period for channel
+		 * switching, etc. Also round up. */
+		timeout = ((params->chan_time * n_freqs) * 2 + 1) / 1000;
+	}
+
 	wpa_printf(MSG_DEBUG, "Scan requested (ret=%d) - scan timeout %d "
 		   "seconds", ret, timeout);
 	eloop_cancel_timeout(wpa_driver_nl80211_scan_timeout, drv, drv->ctx);

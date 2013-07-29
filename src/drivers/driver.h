@@ -318,6 +318,13 @@ struct wpa_driver_scan_params {
 	 * and not to transmit the frames at any of those rates.
 	 */
 	u8 p2p_probe;
+
+	/**
+	 * chan_time - How many msecs driver should stay on each channel
+	 *
+	 * This is intended for either long passive scans or ACS.
+	 */
+	u32 chan_time;
 };
 
 /**
