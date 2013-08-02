@@ -16,8 +16,8 @@
 static int wpa_debug_syslog = 0;
 #endif /* CONFIG_DEBUG_SYSLOG */
 
-
-int wpa_debug_level = MSG_INFO;
+int wpa_debug_level = MSG_ERROR;
+int wpa_debug_level_n = MSG_ERROR;
 int wpa_debug_show_keys = 0;
 int wpa_debug_timestamp = 0;
 
@@ -123,7 +123,7 @@ void wpa_printf(int level, const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	if (level >= wpa_debug_level) {
+	if (level >= wpa_debug_level_n) {
 #ifdef CONFIG_ANDROID_LOG
 		__android_log_vprint(wpa_to_android_level(level),
 				     ANDROID_LOG_NAME, fmt, ap);
@@ -158,7 +158,7 @@ static void _wpa_hexdump(int level, const char *title, const u8 *buf,
 			 size_t len, int show)
 {
 	size_t i;
-	if (level < wpa_debug_level)
+	if (level < wpa_debug_level_n)
 		return;
 #ifdef CONFIG_ANDROID_LOG
 	{
@@ -281,7 +281,7 @@ static void _wpa_hexdump_ascii(int level, const char *title, const u8 *buf,
 	const u8 *pos = buf;
 	const size_t line_len = 16;
 
-	if (level < wpa_debug_level)
+	if (level < wpa_debug_level_n)
 		return;
 #ifdef CONFIG_ANDROID_LOG
 	_wpa_hexdump(level, title, buf, len, show);
