@@ -2193,6 +2193,13 @@ static void nl80211_tdls_oper_event(struct wpa_driver_nl80211_data *drv,
 }
 
 
+static void nl80211_stop_ap(struct wpa_driver_nl80211_data *drv,
+			    struct nlattr **tb)
+{
+	wpa_supplicant_event(drv->ctx, EVENT_INTERFACE_UNAVAILABLE, NULL);
+}
+
+
 static void nl80211_connect_failed_event(struct wpa_driver_nl80211_data *drv,
 					 struct nlattr **tb)
 {
@@ -2373,6 +2380,9 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 		break;
 	case NL80211_CMD_FT_EVENT:
 		mlme_event_ft_event(drv, tb);
+		break;
+	case NL80211_CMD_STOP_AP:
+		nl80211_stop_ap(drv, tb);
 		break;
 	default:
 		wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: Ignored unknown event "
@@ -4811,12 +4821,20 @@ nla_put_failure:
 static int wpa_driver_nl80211_disconnect(struct wpa_driver_nl80211_data *drv,
 					 int reason_code)
 {
+	int ret;
+
 	wpa_printf(MSG_DEBUG, "%s(reason_code=%d)", __func__, reason_code);
 	drv->associated = 0;
-	drv->ignore_next_local_disconnect = 0;
 	/* Disconnect command doesn't need BSSID - it uses cached value */
-	return wpa_driver_nl80211_mlme(drv, NULL, NL80211_CMD_DISCONNECT,
-				       reason_code, 0);
+	ret = wpa_driver_nl80211_mlme(drv, NULL, NL80211_CMD_DISCONNECT,
+					reason_code, 0);
+	/*
+	 * For locally generated disconnect, supplicant already generates a
+	 * DEAUTH event, so ignore the event from NL80211.
+	 */
+	drv->ignore_next_local_disconnect = ret == 0;
+
+	return ret;
 }
 
 
@@ -7456,8 +7474,6 @@ static int wpa_driver_nl80211_connect(
 		if (wpa_driver_nl80211_disconnect(
 			    drv, WLAN_REASON_PREV_AUTH_NOT_VALID))
 			return -1;
-		/* Ignore the next local disconnect message. */
-		drv->ignore_next_local_disconnect = 1;
 		ret = wpa_driver_nl80211_try_connect(drv, params);
 	}
 	return ret;
