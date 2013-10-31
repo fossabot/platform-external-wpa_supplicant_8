@@ -146,13 +146,28 @@ static void wpas_p2p_scan_res_handler(struct wpa_supplicant *wpa_s,
 	for (i = 0; i < scan_res->num; i++) {
 		struct wpa_scan_res *bss = scan_res->res[i];
 		struct os_time time_tmp_age, entry_ts;
+		const u8 *ies;
+		size_t ies_len;
+
 		time_tmp_age.sec = bss->age / 1000;
 		time_tmp_age.usec = (bss->age % 1000) * 1000;
 		os_time_sub(&scan_res->fetch_time, &time_tmp_age, &entry_ts);
+
+		ies = (const u8 *) (bss + 1);
+		ies_len = bss->ie_len;
+		if (bss->beacon_ie_len > 0 &&
+		    !wpa_scan_get_vendor_ie(bss, P2P_IE_VENDOR_TYPE) &&
+		    wpa_scan_get_vendor_ie_beacon(bss, P2P_IE_VENDOR_TYPE)) {
+			wpa_printf(MSG_DEBUG, "P2P: Use P2P IE(s) from Beacon frame since no P2P IE(s) in Probe Response frames received for "
+				   MACSTR, MAC2STR(bss->bssid));
+			ies = ies + ies_len;
+			ies_len = bss->beacon_ie_len;
+		}
+
+
 		if (p2p_scan_res_handler(wpa_s->global->p2p, bss->bssid,
 					 bss->freq, &entry_ts, bss->level,
-					 (const u8 *) (bss + 1),
-					 bss->ie_len) > 0)
+					 ies, ies_len) > 0)
 			break;
 	}
 
@@ -467,6 +482,9 @@ static int wpas_p2p_persistent_group(struct wpa_supplicant *wpa_s,
 	}
 
 	p2p = wpa_bss_get_vendor_ie_multi(bss, P2P_IE_VENDOR_TYPE);
+	if (p2p == NULL)
+		p2p = wpa_bss_get_vendor_ie_multi_beacon(bss,
+							 P2P_IE_VENDOR_TYPE);
 	if (p2p == NULL) {
 		wpa_printf(MSG_DEBUG, "P2P: Could not figure out whether "
 			   "group is persistent - BSS " MACSTR
@@ -894,6 +912,7 @@ static void p2p_go_configured(void *ctx, void *data)
 				"");
 		}
 
+		os_get_time(&wpa_s->global->p2p_go_wait_client);
 		if (params->persistent_group)
 			network_id = wpas_p2p_store_persistent_group(
 				wpa_s->parent, ssid,
