@@ -18,6 +18,7 @@
 #include "eap_common/eap_defs.h"
 #include "eap_peer/eap.h"
 #include "eap_peer/eap_methods.h"
+#include "eapol_supp/eapol_supp_sm.h"
 #include "wpa_supplicant_i.h"
 #include "config.h"
 #include "config_ssid.h"
@@ -601,19 +602,29 @@ static struct nai_realm_eap * nai_realm_find_eap(struct wpa_cred *cred,
 
 static int plmn_id_match(struct wpabuf *anqp, const char *imsi, int mnc_len)
 {
-	u8 plmn[3];
+	u8 plmn[3], plmn2[3];
 	const u8 *pos, *end;
 	u8 udhl;
 
-	/* See Annex A of 3GPP TS 24.234 v8.1.0 for description */
+	/*
+	 * See Annex A of 3GPP TS 24.234 v8.1.0 for description. The network
+	 * operator is allowed to include only two digits of the MNC, so allow
+	 * matches based on both two and three digit MNC assumptions. Since some
+	 * SIM/USIM cards may not expose MNC length conveniently, we may be
+	 * provided the default MNC length 3 here and as such, checking with MNC
+	 * length 2 is justifiable even though 3GPP TS 24.234 does not mention
+	 * that case. Anyway, MCC/MNC pair where both 2 and 3 digit MNC is used
+	 * with otherwise matching values would not be good idea in general, so
+	 * this should not result in selecting incorrect networks.
+	 */
+	/* Match with 3 digit MNC */
 	plmn[0] = (imsi[0] - '0') | ((imsi[1] - '0') << 4);
-	plmn[1] = imsi[2] - '0';
-	/* default to MNC length 3 if unknown */
-	if (mnc_len != 2)
-		plmn[1] |= (imsi[5] - '0') << 4;
-	else
-		plmn[1] |= 0xf0;
+	plmn[1] = (imsi[2] - '0') | ((imsi[5] - '0') << 4);
 	plmn[2] = (imsi[3] - '0') | ((imsi[4] - '0') << 4);
+	/* Match with 2 digit MNC */
+	plmn2[0] = (imsi[0] - '0') | ((imsi[1] - '0') << 4);
+	plmn2[1] = (imsi[2] - '0') | 0xf0;
+	plmn2[2] = (imsi[3] - '0') | ((imsi[4] - '0') << 4);
 
 	if (anqp == NULL)
 		return 0;
@@ -633,6 +644,10 @@ static int plmn_id_match(struct wpabuf *anqp, const char *imsi, int mnc_len)
 	}
 	end = pos + udhl;
 
+	wpa_printf(MSG_DEBUG, "Interworking: Matching against MCC/MNC alternatives: %02x:%02x:%02x or %02x:%02x:%02x (IMSI %s, MNC length %d)",
+		   plmn[0], plmn[1], plmn[2], plmn2[0], plmn2[1], plmn2[2],
+		   imsi, mnc_len);
+
 	while (pos + 2 <= end) {
 		u8 iei, len;
 		const u8 *l_end;
@@ -645,14 +660,20 @@ static int plmn_id_match(struct wpabuf *anqp, const char *imsi, int mnc_len)
 		if (iei == 0 && len > 0) {
 			/* PLMN List */
 			u8 num, i;
+			wpa_hexdump(MSG_DEBUG, "Interworking: PLMN List information element",
+				    pos, len);
 			num = *pos++;
 			for (i = 0; i < num; i++) {
-				if (pos + 3 > end)
+				if (pos + 3 > l_end)
 					break;
-				if (os_memcmp(pos, plmn, 3) == 0)
+				if (os_memcmp(pos, plmn, 3) == 0 ||
+				    os_memcmp(pos, plmn2, 3) == 0)
 					return 1; /* Found matching PLMN */
 				pos += 3;
 			}
+		} else {
+			wpa_hexdump(MSG_DEBUG, "Interworking: Unrecognized 3GPP information element",
+				    pos, len);
 		}
 
 		pos = l_end;
@@ -1335,10 +1356,29 @@ static struct wpa_cred * interworking_credentials_available_3gpp(
 	if (bss->anqp == NULL || bss->anqp->anqp_3gpp == NULL)
 		return NULL;
 
+#ifdef CONFIG_EAP_PROXY
+	if (!wpa_s->imsi[0]) {
+		size_t len;
+		wpa_printf(MSG_DEBUG, "Interworking: IMSI not available - try to read again through eap_proxy");
+		wpa_s->mnc_len = eapol_sm_get_eap_proxy_imsi(wpa_s->eapol,
+							     wpa_s->imsi,
+							     &len);
+		if (wpa_s->mnc_len > 0) {
+			wpa_s->imsi[len] = '\0';
+			wpa_printf(MSG_DEBUG, "eap_proxy: IMSI %s (MNC length %d)",
+				   wpa_s->imsi, wpa_s->mnc_len);
+		} else {
+			wpa_printf(MSG_DEBUG, "eap_proxy: IMSI not available");
+		}
+	}
+#endif /* CONFIG_EAP_PROXY */
+
 	for (cred = wpa_s->conf->cred; cred; cred = cred->next) {
 		char *sep;
 		const char *imsi;
 		int mnc_len;
+		char imsi_buf[16];
+		size_t msin_len;
 
 #ifdef PCSC_FUNCS
 		if (cred->pcsc && wpa_s->conf->pcsc_reader && wpa_s->scard &&
@@ -1348,6 +1388,13 @@ static struct wpa_cred * interworking_credentials_available_3gpp(
 			goto compare;
 		}
 #endif /* PCSC_FUNCS */
+#ifdef CONFIG_EAP_PROXY
+		if (cred->pcsc && wpa_s->mnc_len > 0 && wpa_s->imsi[0]) {
+			imsi = wpa_s->imsi;
+			mnc_len = wpa_s->mnc_len;
+			goto compare;
+		}
+#endif /* CONFIG_EAP_PROXY */
 
 		if (cred->imsi == NULL || !cred->imsi[0] ||
 		    cred->milenage == NULL || !cred->milenage[0])
@@ -1358,11 +1405,18 @@ static struct wpa_cred * interworking_credentials_available_3gpp(
 		    (sep - cred->imsi != 5 && sep - cred->imsi != 6))
 			continue;
 		mnc_len = sep - cred->imsi - 3;
-		imsi = cred->imsi;
+		os_memcpy(imsi_buf, cred->imsi, 3 + mnc_len);
+		sep++;
+		msin_len = os_strlen(cred->imsi);
+		if (3 + mnc_len + msin_len >= sizeof(imsi_buf) - 1)
+			msin_len = sizeof(imsi_buf) - 3 - mnc_len - 1;
+		os_memcpy(&imsi_buf[3 + mnc_len], sep, msin_len);
+		imsi_buf[3 + mnc_len + msin_len] = '\0';
+		imsi = imsi_buf;
 
-#ifdef PCSC_FUNCS
+#if defined(PCSC_FUNCS) || defined(CONFIG_EAP_PROXY)
 	compare:
-#endif /* PCSC_FUNCS */
+#endif /* PCSC_FUNCS || CONFIG_EAP_PROXY */
 		wpa_printf(MSG_DEBUG, "Interworking: Parsing 3GPP info from "
 			   MACSTR, MAC2STR(bss->bssid));
 		ret = plmn_id_match(bss->anqp->anqp_3gpp, imsi, mnc_len);
@@ -1480,6 +1534,8 @@ int interworking_home_sp_cred(struct wpa_supplicant *wpa_s,
 			      struct wpa_cred *cred,
 			      struct wpabuf *domain_names)
 {
+	size_t i;
+	int ret = -1;
 #ifdef INTERWORKING_3GPP
 	char nai[100], *realm;
 
@@ -1494,6 +1550,12 @@ int interworking_home_sp_cred(struct wpa_supplicant *wpa_s,
 		mnc_len = wpa_s->mnc_len;
 	}
 #endif /* CONFIG_PCSC */
+#ifdef CONFIG_EAP_PROXY
+	else if (cred->pcsc && wpa_s->mnc_len > 0 && wpa_s->imsi[0]) {
+		imsi = wpa_s->imsi;
+		mnc_len = wpa_s->mnc_len;
+	}
+#endif /* CONFIG_EAP_PROXY */
 	if (domain_names &&
 	    imsi && build_root_nai(nai, sizeof(nai), imsi, mnc_len, 0) == 0) {
 		realm = os_strchr(nai, '@');
@@ -1504,16 +1566,20 @@ int interworking_home_sp_cred(struct wpa_supplicant *wpa_s,
 		if (realm &&
 		    domain_name_list_contains(domain_names, realm))
 			return 1;
+		if (realm)
+			ret = 0;
 	}
 #endif /* INTERWORKING_3GPP */
 
 	if (domain_names == NULL || cred->domain == NULL)
-		return 0;
+		return ret;
 
-	wpa_printf(MSG_DEBUG, "Interworking: Search for match with "
-		   "home SP FQDN %s", cred->domain);
-	if (domain_name_list_contains(domain_names, cred->domain))
-		return 1;
+	for (i = 0; i < cred->num_domain; i++) {
+		wpa_printf(MSG_DEBUG, "Interworking: Search for match with "
+			   "home SP FQDN %s", cred->domain[i]);
+		if (domain_name_list_contains(domain_names, cred->domain[i]))
+			return 1;
+	}
 
 	return 0;
 }
