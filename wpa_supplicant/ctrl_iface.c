@@ -58,6 +58,12 @@ static int pno_start(struct wpa_supplicant *wpa_s)
 	if (wpa_s->pno)
 		return 0;
 
+	if ((wpa_s->wpa_state > WPA_SCANNING) &&
+	    (wpa_s->wpa_state <= WPA_COMPLETED)) {
+		wpa_printf(MSG_ERROR, "PNO: In assoc process");
+		return -EAGAIN;
+	}
+
 	if (wpa_s->wpa_state == WPA_SCANNING) {
 		wpa_supplicant_cancel_sched_scan(wpa_s);
 		wpa_supplicant_cancel_scan(wpa_s);
@@ -565,6 +571,11 @@ static int wpa_supplicant_ctrl_iface_tdls_setup(
 	wpa_printf(MSG_DEBUG, "CTRL_IFACE TDLS_SETUP " MACSTR,
 		   MAC2STR(peer));
 
+	if ((wpa_s->conf->tdls_external_control) &&
+	     wpa_tdls_is_external_setup(wpa_s->wpa)) {
+		return wpa_drv_tdls_oper(wpa_s, TDLS_SETUP, peer);
+	}
+
 	wpa_tdls_remove(wpa_s->wpa, peer);
 
 	if (wpa_tdls_is_external_setup(wpa_s->wpa))
@@ -590,6 +601,11 @@ static int wpa_supplicant_ctrl_iface_tdls_teardown(
 
 	wpa_printf(MSG_DEBUG, "CTRL_IFACE TDLS_TEARDOWN " MACSTR,
 		   MAC2STR(peer));
+
+	if ((wpa_s->conf->tdls_external_control) &&
+	     wpa_tdls_is_external_setup(wpa_s->wpa)) {
+		return wpa_drv_tdls_oper(wpa_s, TDLS_TEARDOWN, peer);
+	}
 
 	if (wpa_tdls_is_external_setup(wpa_s->wpa))
 		ret = wpa_tdls_teardown_link(
@@ -5166,7 +5182,27 @@ static int wpa_supplicant_driver_cmd(struct wpa_supplicant *wpa_s, char *cmd,
 {
 	int ret;
 
-	ret = wpa_drv_driver_cmd(wpa_s, cmd, buf, buflen);
+	if (os_strncasecmp(cmd, "SETBAND ", 8) == 0) {
+		int val = atoi(cmd + 8);
+		/*
+		 * Use driver_cmd for drivers that support it, but ignore the
+		 * return value since scan requests from wpa_supplicant will
+		 * provide a list of channels to scan for based on the SETBAND
+		 * setting.
+		 */
+		wpa_printf(MSG_DEBUG, "SETBAND: %d", val);
+		wpa_drv_driver_cmd(wpa_s, cmd, buf, buflen);
+		ret = 0;
+		if (val == 0)
+			wpa_s->setband = WPA_SETBAND_AUTO;
+		else if (val == 1)
+			wpa_s->setband = WPA_SETBAND_5G;
+		else if (val == 2)
+			wpa_s->setband = WPA_SETBAND_2G;
+		else
+			ret = -1;
+	} else
+		ret = wpa_drv_driver_cmd(wpa_s, cmd, buf, buflen);
 	if (ret == 0) {
 		if (os_strncasecmp(cmd, "COUNTRY", 7) == 0) {
 			struct p2p_data *p2p = wpa_s->global->p2p;
