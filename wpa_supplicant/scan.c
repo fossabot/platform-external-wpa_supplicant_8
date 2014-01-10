@@ -1460,3 +1460,9 @@ int wpa_supplicant_update_scan_results(struct wpa_supplicant *wpa_s)
 
 	return 0;
 }
+
+
+int wpas_scan_scheduled(struct wpa_supplicant *wpa_s)
+{
+	return eloop_is_timeout_registered(wpa_supplicant_scan, wpa_s, NULL);
+}

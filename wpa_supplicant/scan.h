@@ -34,5 +34,6 @@ struct wpabuf * wpa_scan_get_vendor_ie_multi_beacon(
 	const struct wpa_scan_res *res, u32 vendor_type);
 int wpa_supplicant_filter_bssid_match(struct wpa_supplicant *wpa_s,
 				      const u8 *bssid);
+int wpas_scan_scheduled(struct wpa_supplicant *wpa_s);
 
 #endif /* SCAN_H */
