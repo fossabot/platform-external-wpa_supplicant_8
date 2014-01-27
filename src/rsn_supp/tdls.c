@@ -1931,6 +1931,8 @@ static int wpa_tdls_process_tpk_m2(struct wpa_sm *sm, const u8 *src_addr,
 
 	peer->aid = kde.aid;
 
+	peer->aid = kde.aid;
+
 	if (!wpa_tdls_get_privacy(sm)) {
 		peer->rsnie_p_len = 0;
 		peer->cipher = WPA_CIPHER_NONE;
