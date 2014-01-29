@@ -319,6 +319,7 @@ static int wpas_p2p_scan(void *ctx, enum p2p_scan_type type, int freq,
 	} else {
 		os_get_time(&wpa_s->scan_trigger_time);
 		wpa_s->scan_res_handler = wpas_p2p_scan_res_handler;
+		wpa_s->own_scan_requested = 1;
 	}
 
 	return ret;
@@ -3238,6 +3239,21 @@ static int wpas_go_connected(void *ctx, const u8 *dev_addr)
 }
 
 
+static int wpas_is_concurrent_session_active(void *ctx)
+{
+	struct wpa_supplicant *wpa_s = ctx;
+	struct wpa_supplicant *ifs;
+
+	for (ifs = wpa_s->global->ifaces; ifs; ifs = ifs->next) {
+		if (ifs == wpa_s)
+			continue;
+		if (ifs->wpa_state > WPA_ASSOCIATED)
+			return 1;
+	}
+	return 0;
+}
+
+
 static void wpas_p2p_debug_print(void *ctx, int level, const char *msg)
 {
 	struct wpa_supplicant *wpa_s = ctx;
@@ -3348,6 +3364,7 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	p2p.invitation_result = wpas_invitation_result;
 	p2p.get_noa = wpas_get_noa;
 	p2p.go_connected = wpas_go_connected;
+	p2p.is_concurrent_session_active = wpas_is_concurrent_session_active;
 
 	os_memcpy(wpa_s->global->p2p_dev_addr, wpa_s->own_addr, ETH_ALEN);
 	os_memcpy(p2p.dev_addr, wpa_s->global->p2p_dev_addr, ETH_ALEN);
@@ -3940,6 +3957,7 @@ static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq)
 	if (!ret) {
 		os_get_time(&wpa_s->scan_trigger_time);
 		wpa_s->scan_res_handler = wpas_p2p_scan_res_join;
+		wpa_s->own_scan_requested = 1;
 	}
 
 	wpabuf_free(ies);
