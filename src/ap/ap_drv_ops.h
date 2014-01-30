@@ -225,4 +225,11 @@ static inline void hostapd_drv_poll_client(struct hostapd_data *hapd,
 	hapd->driver->poll_client(hapd->drv_priv, own_addr, addr, qos);
 }
 
+static inline int hostapd_get_country(struct hostapd_data *hapd, char *alpha2)
+{
+	if (hapd->driver == NULL || hapd->driver->get_country == NULL)
+		return -1;
+	return hapd->driver->get_country(hapd->drv_priv, alpha2);
+}
+
 #endif /* AP_DRV_OPS */
