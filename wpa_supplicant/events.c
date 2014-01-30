@@ -3199,6 +3199,7 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 					 data->driver_gtk_rekey.replay_ctr);
 		break;
 	case EVENT_SCHED_SCAN_STOPPED:
+		wpa_s->pno = 0;
 		wpa_s->sched_scanning = 0;
 		wpa_supplicant_notify_scanning(wpa_s, 0);
 
@@ -3206,11 +3207,20 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			break;
 
 		/*
-		 * If we timed out, start a new sched scan to continue
-		 * searching for more SSIDs.
+		 * Start a new sched scan to continue searching for more SSIDs
+		 * either if timed out or PNO schedule scan is pending.
 		 */
-		if (wpa_s->sched_scan_timed_out)
-			wpa_supplicant_req_sched_scan(wpa_s);
+		if (wpa_s->sched_scan_timed_out || wpa_s->pno_sched_pending) {
+
+			if (wpa_supplicant_req_sched_scan(wpa_s) < 0 &&
+			    wpa_s->pno_sched_pending) {
+				wpa_msg(wpa_s, MSG_ERROR, "Failed to schedule PNO");
+			} else if (wpa_s->pno_sched_pending) {
+				wpa_s->pno_sched_pending = 0;
+				wpa_s->pno = 1;
+			}
+		}
+
 		break;
 	case EVENT_WPS_BUTTON_PUSHED:
 #ifdef CONFIG_WPS
