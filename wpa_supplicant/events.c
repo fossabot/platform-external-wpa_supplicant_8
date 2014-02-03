@@ -1219,7 +1219,8 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 	}
 #endif /* CONFIG_NO_RANDOM_POOL */
 
-	if (own_request && wpa_s->scan_res_handler) {
+	if (own_request && wpa_s->scan_res_handler &&
+	    (wpa_s->own_scan_running || !wpa_s->external_scan_running)) {
 		void (*scan_res_handler)(struct wpa_supplicant *wpa_s,
 					 struct wpa_scan_results *scan_res);
 
@@ -1241,11 +1242,19 @@ static int _wpa_supplicant_event_scan_results(struct wpa_supplicant *wpa_s,
 		return 0;
 	}
 
-	wpa_dbg(wpa_s, MSG_DEBUG, "New scan results available");
+	wpa_dbg(wpa_s, MSG_DEBUG, "New scan results available (own=%u ext=%u)",
+		wpa_s->own_scan_running, wpa_s->external_scan_running);
 	wpa_msg_ctrl(wpa_s, MSG_INFO, WPA_EVENT_SCAN_RESULTS);
 	wpas_notify_scan_results(wpa_s);
 
 	wpas_notify_scan_done(wpa_s, 1);
+
+	if (!wpa_s->own_scan_running && wpa_s->external_scan_running) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "Do not use results from externally"
+                        "requested scan operation for network selection");
+		wpa_scan_results_free(scan_res);
+		return 0;
+	}
 
 	if (sme_proc_obss_scan(wpa_s) > 0) {
 		wpa_scan_results_free(scan_res);
@@ -2701,8 +2710,22 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpa_supplicant_event_michael_mic_failure(wpa_s, data);
 		break;
 #ifndef CONFIG_NO_SCAN_PROCESSING
+	case EVENT_SCAN_STARTED:
+		if (wpa_s->own_scan_requested) {
+			wpa_dbg(wpa_s, MSG_DEBUG, "Own scan request started a scan");
+			wpa_s->own_scan_requested = 0;
+			wpa_s->own_scan_running = 1;
+			wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED);
+		} else {
+			wpa_dbg(wpa_s, MSG_DEBUG, "External program started a scan");
+			wpa_s->external_scan_running = 1;
+			wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED);
+		}
+		break;
 	case EVENT_SCAN_RESULTS:
 		wpa_supplicant_event_scan_results(wpa_s, data);
+		wpa_s->own_scan_running = 0;
+		wpa_s->external_scan_running = 0;
 		if (wpa_s->wpa_state != WPA_AUTHENTICATING &&
 		    wpa_s->wpa_state != WPA_ASSOCIATING)
 			wpas_p2p_continue_after_scan(wpa_s);
@@ -3176,6 +3199,7 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 					 data->driver_gtk_rekey.replay_ctr);
 		break;
 	case EVENT_SCHED_SCAN_STOPPED:
+		wpa_s->pno = 0;
 		wpa_s->sched_scanning = 0;
 		wpa_supplicant_notify_scanning(wpa_s, 0);
 
@@ -3183,11 +3207,20 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			break;
 
 		/*
-		 * If we timed out, start a new sched scan to continue
-		 * searching for more SSIDs.
+		 * Start a new sched scan to continue searching for more SSIDs
+		 * either if timed out or PNO schedule scan is pending.
 		 */
-		if (wpa_s->sched_scan_timed_out)
-			wpa_supplicant_req_sched_scan(wpa_s);
+		if (wpa_s->sched_scan_timed_out || wpa_s->pno_sched_pending) {
+
+			if (wpa_supplicant_req_sched_scan(wpa_s) < 0 &&
+			    wpa_s->pno_sched_pending) {
+				wpa_msg(wpa_s, MSG_ERROR, "Failed to schedule PNO");
+			} else if (wpa_s->pno_sched_pending) {
+				wpa_s->pno_sched_pending = 0;
+				wpa_s->pno = 1;
+			}
+		}
+
 		break;
 	case EVENT_WPS_BUTTON_PUSHED:
 #ifdef CONFIG_WPS
