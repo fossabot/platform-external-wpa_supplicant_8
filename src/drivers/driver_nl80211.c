@@ -28,6 +28,7 @@
 #include "common.h"
 #include "eloop.h"
 #include "utils/list.h"
+#include "common/qca-vendor.h"
 #include "common/ieee802_11_defs.h"
 #include "common/ieee802_11_common.h"
 #include "l2_packet/l2_packet.h"
@@ -472,6 +473,11 @@ static const char * nl80211_command_to_string(enum nl80211_commands cmd)
 	C2S(NL80211_CMD_FT_EVENT)
 	C2S(NL80211_CMD_CRIT_PROTOCOL_START)
 	C2S(NL80211_CMD_CRIT_PROTOCOL_STOP)
+	C2S(NL80211_CMD_GET_COALESCE)
+	C2S(NL80211_CMD_SET_COALESCE)
+	C2S(NL80211_CMD_CHANNEL_SWITCH)
+	C2S(NL80211_CMD_VENDOR)
+	C2S(NL80211_CMD_SET_QOS_MAP)
 	default:
 		return "NL80211_CMD_UNKNOWN";
 	}
@@ -2560,6 +2566,114 @@ static void nl80211_spurious_frame(struct i802_bss *bss, struct nlattr **tb,
 }
 
 
+static void qca_nl80211_avoid_freq(struct wpa_driver_nl80211_data *drv,
+				   const u8 *data, size_t len)
+{
+	u32 i, count;
+	union wpa_event_data event;
+	struct wpa_freq_range *range = NULL;
+	const struct qca_avoid_freq_list *freq_range;
+
+	freq_range = (const struct qca_avoid_freq_list *) data;
+	if (len < sizeof(freq_range->count))
+		return;
+
+	count = freq_range->count;
+	if (len < sizeof(freq_range->count) +
+	    count * sizeof(struct qca_avoid_freq_range)) {
+		wpa_printf(MSG_DEBUG, "nl80211: Ignored too short avoid frequency list (len=%u)",
+			   (unsigned int) len);
+		return;
+	}
+
+	if (count > 0) {
+		range = os_calloc(count, sizeof(struct wpa_freq_range));
+		if (range == NULL)
+			return;
+	}
+
+	os_memset(&event, 0, sizeof(event));
+	for (i = 0; i < count; i++) {
+		unsigned int idx = event.freq_range.num;
+		range[idx].min = freq_range->range[i].start_freq;
+		range[idx].max = freq_range->range[i].end_freq;
+		wpa_printf(MSG_DEBUG, "nl80211: Avoid frequency range: %u-%u",
+			   range[idx].min, range[idx].max);
+		if (range[idx].min > range[idx].max) {
+			wpa_printf(MSG_DEBUG, "nl80211: Ignore invalid frequency range");
+			continue;
+		}
+		event.freq_range.num++;
+	}
+	event.freq_range.range = range;
+
+	wpa_supplicant_event(drv->ctx, EVENT_AVOID_FREQUENCIES, &event);
+
+	os_free(range);
+}
+
+
+static void nl80211_vendor_event_qca(struct wpa_driver_nl80211_data *drv,
+				     u32 subcmd, u8 *data, size_t len)
+{
+	switch (subcmd) {
+	case QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY:
+		qca_nl80211_avoid_freq(drv, data, len);
+		break;
+	default:
+		wpa_printf(MSG_DEBUG,
+			   "nl80211: Ignore unsupported QCA vendor event %u",
+			   subcmd);
+		break;
+	}
+}
+
+
+static void nl80211_vendor_event(struct wpa_driver_nl80211_data *drv,
+				 struct nlattr **tb)
+{
+	u32 vendor_id, subcmd, wiphy = 0;
+	int wiphy_idx;
+	u8 *data = NULL;
+	size_t len = 0;
+
+	if (!tb[NL80211_ATTR_VENDOR_ID] ||
+	    !tb[NL80211_ATTR_VENDOR_SUBCMD])
+		return;
+
+	vendor_id = nla_get_u32(tb[NL80211_ATTR_VENDOR_ID]);
+	subcmd = nla_get_u32(tb[NL80211_ATTR_VENDOR_SUBCMD]);
+
+	if (tb[NL80211_ATTR_WIPHY])
+		wiphy = nla_get_u32(tb[NL80211_ATTR_WIPHY]);
+
+	wpa_printf(MSG_DEBUG, "nl80211: Vendor event: wiphy=%u vendor_id=0x%x subcmd=%u",
+		   wiphy, vendor_id, subcmd);
+
+	if (tb[NL80211_ATTR_VENDOR_DATA]) {
+		data = nla_data(tb[NL80211_ATTR_VENDOR_DATA]);
+		len = nla_len(tb[NL80211_ATTR_VENDOR_DATA]);
+		wpa_hexdump(MSG_MSGDUMP, "nl80211: Vendor data", data, len);
+	}
+
+	wiphy_idx = nl80211_get_wiphy_index(drv->first_bss);
+	if (wiphy_idx >= 0 && wiphy_idx != (int) wiphy) {
+		wpa_printf(MSG_DEBUG, "nl80211: Ignore vendor event for foreign wiphy %u (own: %d)",
+			   wiphy, wiphy_idx);
+		return;
+	}
+
+	switch (vendor_id) {
+	case OUI_QCA:
+		nl80211_vendor_event_qca(drv, subcmd, data, len);
+		break;
+	default:
+		wpa_printf(MSG_DEBUG, "nl80211: Ignore unsupported vendor event");
+		break;
+	}
+}
+
+
 static void do_process_drv_event(struct i802_bss *bss, int cmd,
 				 struct nlattr **tb)
 {
@@ -2721,6 +2835,9 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 		break;
 	case NL80211_CMD_STOP_AP:
 		nl80211_stop_ap(drv, tb);
+		break;
+	case NL80211_CMD_VENDOR:
+		nl80211_vendor_event(drv, tb);
 		break;
 	default:
 		wpa_dbg(drv->ctx, MSG_DEBUG, "nl80211: Ignored unknown event "
@@ -3296,6 +3413,38 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 		}
 	}
 
+	if (tb[NL80211_ATTR_VENDOR_DATA]) {
+		struct nlattr *nl;
+		int rem;
+
+		nla_for_each_nested(nl, tb[NL80211_ATTR_VENDOR_DATA], rem) {
+			struct nl80211_vendor_cmd_info *vinfo;
+			if (nla_len(nl) != sizeof(*vinfo)) {
+				wpa_printf(MSG_DEBUG, "nl80211: Unexpected vendor data info");
+				continue;
+			}
+			vinfo = nla_data(nl);
+			wpa_printf(MSG_DEBUG, "nl80211: Supported vendor command: vendor_id=0x%x subcmd=%u",
+				   vinfo->vendor_id, vinfo->subcmd);
+		}
+	}
+
+	if (tb[NL80211_ATTR_VENDOR_EVENTS]) {
+		struct nlattr *nl;
+		int rem;
+
+		nla_for_each_nested(nl, tb[NL80211_ATTR_VENDOR_EVENTS], rem) {
+			struct nl80211_vendor_cmd_info *vinfo;
+			if (nla_len(nl) != sizeof(*vinfo)) {
+				wpa_printf(MSG_DEBUG, "nl80211: Unexpected vendor data info");
+				continue;
+			}
+			vinfo = nla_data(nl);
+			wpa_printf(MSG_DEBUG, "nl80211: Supported vendor event: vendor_id=0x%x subcmd=%u",
+				   vinfo->vendor_id, vinfo->subcmd);
+		}
+	}
+
 	return NL_SKIP;
 }
 
@@ -3533,6 +3682,16 @@ static int wpa_driver_nl80211_init_nl_global(struct nl80211_global *global)
 			   "membership for regulatory events: %d (%s)",
 			   ret, strerror(-ret));
 		/* Continue without regulatory events */
+	}
+
+	ret = nl_get_multicast_id(global, "nl80211", "vendor");
+	if (ret >= 0)
+		ret = nl_socket_add_membership(global->nl_event, ret);
+	if (ret < 0) {
+		wpa_printf(MSG_DEBUG, "nl80211: Could not add multicast "
+			   "membership for vendor events: %d (%s)",
+			   ret, strerror(-ret));
+		/* Continue without vendor events */
 	}
 
 	nl_cb_set(global->nl_cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM,
