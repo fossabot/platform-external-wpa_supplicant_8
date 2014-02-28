@@ -3133,7 +3133,17 @@ enum wpa_event_type {
 	 * with the specified client (for example, max client reached, etc.) in
 	 * AP mode.
 	 */
-	EVENT_CONNECT_FAILED_REASON
+	EVENT_CONNECT_FAILED_REASON,
+
+	/**
+	 * EVENT_SCAN_STARTED - Scan started
+	 *
+	 * This indicates that driver has started a scan operation either based
+	 * on a request from wpa_supplicant/hostapd or from another application.
+	 * EVENT_SCAN_RESULTS is used to indicate when the scan has been
+	 * completed (either successfully or by getting cancelled).
+	 */
+	EVENT_SCAN_STARTED
 };
 
 
