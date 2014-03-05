@@ -464,7 +464,7 @@ struct wpa_supplicant {
 		 * to be run.
 		 */
 		MANUAL_SCAN_REQ
-	} scan_req;
+	} scan_req, last_scan_req;
 	struct os_time scan_trigger_time;
 	int scan_runs; /* number of scan runs since WPS was started */
 	int *next_scan_freqs;
@@ -607,6 +607,8 @@ struct wpa_supplicant {
 	u8 pending_join_iface_addr[ETH_ALEN];
 	u8 pending_join_dev_addr[ETH_ALEN];
 	int pending_join_wps_method;
+	u8 p2p_join_ssid[32];
+	size_t p2p_join_ssid_len;
 	int p2p_join_scan_count;
 	int auto_pd_scan_retry;
 	int force_long_sd;
