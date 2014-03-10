@@ -4446,3 +4446,20 @@ void p2p_err(struct p2p_data *p2p, const char *fmt, ...)
 	va_end(ap);
 	p2p->cfg->debug_print(p2p->cfg->cb_ctx, MSG_ERROR, buf);
 }
+
+
+void p2p_update_device_info_capabilities(struct p2p_data *p2p, const u8 *addr,
+		      struct p2p_device *dev, struct p2p_message *msg)
+{
+	os_get_time(&dev->last_seen);
+
+	p2p_copy_wps_info(p2p, dev, 0, msg);
+
+	p2p_dbg(p2p, "Updated device capability based on GO Neg Req: "
+		MACSTR " dev_capab=0x%x group_capab=0x%x name='%s' ",
+		MAC2STR(dev->info.p2p_device_addr),
+		dev->info.dev_capab, dev->info.group_capab,
+		dev->info.device_name);
+	p2p->cfg->dev_found(p2p->cfg->cb_ctx, addr, &dev->info,
+			    !(dev->flags & P2P_DEV_REPORTED_ONCE));
+}
