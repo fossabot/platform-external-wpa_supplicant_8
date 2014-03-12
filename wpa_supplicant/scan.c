@@ -480,7 +480,6 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 {
 	struct wpa_supplicant *wpa_s = eloop_ctx;
 	struct wpa_ssid *ssid;
-	enum scan_req_type scan_req = NORMAL_SCAN_REQ;
 	int ret;
 	struct wpabuf *extra_ie = NULL;
 	struct wpa_driver_scan_params params;
@@ -566,7 +565,7 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 			max_ssids = WPAS_MAX_SCAN_SSIDS;
 	}
 
-	scan_req = wpa_s->scan_req;
+	wpa_s->last_scan_req = wpa_s->scan_req;
 	wpa_s->scan_req = NORMAL_SCAN_REQ;
 
 	os_memset(&params, 0, sizeof(params));
@@ -584,7 +583,8 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 		goto scan;
 	}
 
-	if (scan_req != MANUAL_SCAN_REQ && wpa_s->connect_without_scan) {
+	if (wpa_s->last_scan_req != MANUAL_SCAN_REQ &&
+	    wpa_s->connect_without_scan) {
 		for (ssid = wpa_s->conf->ssid; ssid; ssid = ssid->next) {
 			if (ssid == wpa_s->connect_without_scan)
 				break;
@@ -622,7 +622,8 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 		}
 	}
 
-	if (scan_req != MANUAL_SCAN_REQ && wpa_s->conf->ap_scan == 2) {
+	if (wpa_s->last_scan_req != MANUAL_SCAN_REQ &&
+	    wpa_s->conf->ap_scan == 2) {
 		wpa_s->connect_without_scan = NULL;
 		wpa_s->prev_scan_wildcard = 0;
 		wpa_supplicant_assoc_try(wpa_s, ssid);
@@ -715,6 +716,13 @@ ssid_list_set:
 	wpa_supplicant_optimize_freqs(wpa_s, &params);
 	extra_ie = wpa_supplicant_extra_ies(wpa_s);
 
+	if (wpa_s->last_scan_req == MANUAL_SCAN_REQ && params.freqs == NULL &&
+	    wpa_s->manual_scan_freqs) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "Limit manual scan to specified channels");
+		params.freqs = wpa_s->manual_scan_freqs;
+		wpa_s->manual_scan_freqs = NULL;
+	}
+
 	if (params.freqs == NULL && wpa_s->next_scan_freqs) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "Optimize scan based on previously "
 			"generated frequency list");
@@ -780,7 +788,8 @@ scan:
 	 * station interface when we are not configured to prefer station
 	 * connection and a concurrent operation is already in process.
 	 */
-	if (wpa_s->scan_for_connection && scan_req == NORMAL_SCAN_REQ &&
+	if (wpa_s->scan_for_connection &&
+	    wpa_s->last_scan_req == NORMAL_SCAN_REQ &&
 	    !scan_params->freqs && !params.freqs &&
 	    wpas_is_p2p_prioritized(wpa_s) &&
 	    wpa_s->p2p_group_interface == NOT_P2P_GROUP_INTERFACE &&
@@ -802,6 +811,13 @@ scan:
 
 	ret = wpa_supplicant_trigger_scan(wpa_s, scan_params);
 
+	if (ret && wpa_s->last_scan_req == MANUAL_SCAN_REQ && params.freqs &&
+	    !wpa_s->manual_scan_freqs) {
+		/* Restore manual_scan_freqs for the next attempt */
+		wpa_s->manual_scan_freqs = params.freqs;
+		params.freqs = NULL;
+	}
+
 	wpabuf_free(extra_ie);
 	os_free(params.freqs);
 	os_free(params.filter_ssids);
@@ -811,7 +827,7 @@ scan:
 		if (prev_state != wpa_s->wpa_state)
 			wpa_supplicant_set_state(wpa_s, prev_state);
 		/* Restore scan_req since we will try to scan again */
-		wpa_s->scan_req = scan_req;
+		wpa_s->scan_req = wpa_s->last_scan_req;
 		wpa_supplicant_req_scan(wpa_s, 1, 0);
 	} else {
 		wpa_s->scan_for_connection = 0;
