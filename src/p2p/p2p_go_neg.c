@@ -599,6 +599,18 @@ void p2p_process_go_neg_req(struct p2p_data *p2p, const u8 *sa,
 			" based on GO Neg Req since listen/oper freq not known",
 			MAC2STR(dev->info.p2p_device_addr));
 		p2p_add_dev_info(p2p, sa, dev, &msg);
+	} else if (msg.capability && (dev->info.dev_capab != msg.capability[0] ||
+		dev->info.group_capab != msg.capability[1])) {
+		/*
+		 * This may happen if the peer entry was added based on a Probe
+		 * Response, then device capability and/or group capability
+		 * changed and peer sends a GO-NEG-REQ before another Probe
+		 * Response with new capability attribute value is received.
+		 */
+		p2p_dbg(p2p, "Update capab attribute for peer " MACSTR
+			" based on GO Neg Req ",
+			MAC2STR(dev->info.p2p_device_addr));
+		p2p_update_device_info_capabilities(p2p, sa, dev, &msg);
 	}
 
 	if (dev && dev->flags & P2P_DEV_USER_REJECTED) {
