@@ -81,12 +81,16 @@ int hostapd_get_hw_features(struct hostapd_iface *iface)
 			 * since that (in addition to full DFS) is not yet
 			 * supported.
 			 */
-			if (feature->channels[j].flag &
-			    (HOSTAPD_CHAN_NO_IBSS |
-			     HOSTAPD_CHAN_PASSIVE_SCAN |
-			     HOSTAPD_CHAN_RADAR))
+			if (((feature->channels[j].flag &
+			      HOSTAPD_CHAN_RADAR) &&
+			     !(iface->drv_flags &
+			       WPA_DRIVER_FLAGS_DFS_OFFLOAD)) ||
+			    (feature->channels[j].flag &
+			     (HOSTAPD_CHAN_NO_IBSS |
+			      HOSTAPD_CHAN_PASSIVE_SCAN))) {
 				feature->channels[j].flag |=
 					HOSTAPD_CHAN_DISABLED;
+			}
 			if (feature->channels[j].flag & HOSTAPD_CHAN_DISABLED)
 				continue;
 			wpa_printf(MSG_MSGDUMP, "Allowed channel: mode=%d "
