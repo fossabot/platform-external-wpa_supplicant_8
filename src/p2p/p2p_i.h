@@ -12,6 +12,8 @@
 #include "utils/list.h"
 #include "p2p.h"
 
+#define P2P_GO_NEG_CNF_MAX_RETRY_COUNT 1
+
 enum p2p_go_state {
 	UNKNOWN_GO,
 	LOCAL_GO,
@@ -105,6 +107,22 @@ struct p2p_device {
 
 	u8 go_timeout;
 	u8 client_timeout;
+
+	/**
+	 * go_neg_conf_sent - Number of GO Negotiation Confirmation retries
+	 */
+	u8 go_neg_conf_sent;
+
+	/**
+	 * freq - Frquency on which the GO Negotiation Confirmation is sent
+	 */
+	int go_neg_conf_freq;
+
+	/**
+	 * go_neg_conf - GO Negotiation Confirmation frame
+	 */
+	struct wpabuf *go_neg_conf;
+
 };
 
 struct p2p_sd_query {
