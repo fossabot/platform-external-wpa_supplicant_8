@@ -229,9 +229,9 @@ static int wpa_tdls_tpk_send(struct wpa_sm *sm, const u8 *dest, u8 action_code,
 	struct wpa_tdls_peer *peer;
 
 	wpa_printf(MSG_DEBUG, "TDLS: TPK send dest=" MACSTR " action_code=%u "
-		   "dialog_token=%u status_code=%u msg_len=%u",
+		   "dialog_token=%u status_code=%u peer_capab=%u msg_len=%u",
 		   MAC2STR(dest), action_code, dialog_token, status_code,
-		   (unsigned int) msg_len);
+		   peer_capab, (unsigned int) msg_len);
 
 	if (wpa_tdls_send_tpk_msg(sm, dest, action_code, dialog_token,
 				  status_code, peer_capab, msg, msg_len)) {
@@ -1275,14 +1275,15 @@ static int wpa_tdls_send_tpk_m3(struct wpa_sm *sm,
 	wpa_tdls_ftie_mic(peer->tpk.kck, 3, (u8 *) lnkid, peer->rsnie_p,
 			  (u8 *) &timeoutie, (u8 *) ftie, ftie->mic);
 
+skip_ies:
+
 	if (peer->vht_capabilities)
 		peer_capab |= TDLS_PEER_VHT;
-	else if (peer->ht_capabilities)
+	if (peer->ht_capabilities)
 		peer_capab |= TDLS_PEER_HT;
-	else if (peer->wmm_capable)
+	if (peer->wmm_capable)
 		peer_capab |= TDLS_PEER_WMM;
 
-skip_ies:
 	status = wpa_tdls_tpk_send(sm, src_addr, WLAN_TDLS_SETUP_CONFIRM,
 				   dtoken, 0, peer_capab, rbuf, pos - rbuf);
 	os_free(rbuf);
