@@ -484,14 +484,24 @@ retry_send:
 #endif /* CTRL_IFACE_SOCKET */
 
 
+#define GUARD1 'a'
+#define GUARD2 'b'
+
 static int wpa_ctrl_attach_helper(struct wpa_ctrl *ctrl, int attach)
 {
+	volatile char guard1 = GUARD1;
 	char buf[10];
+	volatile char guard2 = GUARD2;
 	int ret;
 	size_t len = 10;
 
 	ret = wpa_ctrl_request(ctrl, attach ? "ATTACH" : "DETACH", 6,
 			       buf, &len, NULL);
+	if (guard1 != GUARD1 || guard2 != GUARD2) {
+		wpa_printf(MSG_ERROR, "guard1=%c, guard2=%c, len=%d", guard1, guard2, len);
+		// Crash!
+		*(int *) 0 = 0;
+	}
 	if (ret < 0)
 		return ret;
 	if (len == 3 && os_memcmp(buf, "OK\n", 3) == 0)
