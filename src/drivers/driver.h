@@ -42,6 +42,15 @@ enum reg_change_initiator {
 	REGDOM_SET_BY_USER,
 	REGDOM_SET_BY_DRIVER,
 	REGDOM_SET_BY_COUNTRY_IE,
+	REGDOM_BEACON_HINT,
+};
+
+enum reg_type {
+	REGDOM_TYPE_UNKNOWN,
+	REGDOM_TYPE_COUNTRY,
+	REGDOM_TYPE_WORLD,
+	REGDOM_TYPE_CUSTOM_WORLD,
+	REGDOM_TYPE_INTERSECTION,
 };
 
 /**
@@ -4029,9 +4038,13 @@ union wpa_event_data {
 	/**
 	 * channel_list_changed - Data for EVENT_CHANNEL_LIST_CHANGED
 	 * @initiator: Initiator of the regulatory change
+	 * @type: Regulatory change type
+	 * @alpha2: Country code (or "" if not available)
 	 */
 	struct channel_list_changed {
 		enum reg_change_initiator initiator;
+		enum reg_type type;
+		char alpha2[3];
 	} channel_list_changed;
 
 	/**
