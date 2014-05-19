@@ -32,6 +32,7 @@
 #include "ap_config.h"
 #include "p2p_hostapd.h"
 #include "gas_serv.h"
+#include "ieee802_11.h"
 
 
 static int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason);
@@ -1162,6 +1163,11 @@ void hostapd_interface_deinit(struct hostapd_iface *iface)
 	if (iface == NULL)
 		return;
 
+#ifdef CONFIG_IEEE80211N
+#ifdef NEED_AP_MLME
+	eloop_cancel_timeout(ap_ht2040_timeout, iface, NULL);
+#endif /* NEED_AP_MLME */
+#endif /* CONFIG_IEEE80211N */
 	eloop_cancel_timeout(channel_list_update_timeout, iface, NULL);
 	iface->wait_channel_update = 0;
 

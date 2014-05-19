@@ -820,6 +820,11 @@ struct wpa_driver_ap_params {
 	 * disable_dgaf - Whether group-addressed frames are disabled
 	 */
 	int disable_dgaf;
+
+	/**
+	 * freq - Channel parameters for dynamic bandwidth changes
+	 */
+	struct hostapd_freq_params *freq;
 };
 
 /**
@@ -877,7 +882,8 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_P2P_DEDICATED_INTERFACE	0x00000400
 /* This interface is P2P capable (P2P GO or P2P Client) */
 #define WPA_DRIVER_FLAGS_P2P_CAPABLE	0x00000800
-/* unused: 0x00001000 */
+/* Driver supports dynamic HT 20/40 MHz channel changes during BSS lifetime */
+#define WPA_DRIVER_FLAGS_HT_2040_COEX			0x00001000
 /*
  * Driver uses the initial interface for P2P management interface and non-P2P
  * purposes (e.g., connect to infra AP), but this interface cannot be used for
