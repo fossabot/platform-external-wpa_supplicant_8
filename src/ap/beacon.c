@@ -578,6 +578,9 @@ void ieee802_11_set_beacon(struct hostapd_data *hapd)
 	u8 *resp = NULL;
 	size_t resp_len = 0;
 	struct wpa_driver_ap_params params;
+	struct hostapd_freq_params freq;
+	struct hostapd_iface *iface = hapd->iface;
+	struct hostapd_config *iconf = iface->conf;
 	struct wpabuf *beacon, *proberesp, *assocresp;
 #ifdef NEED_AP_MLME
 	u16 capab_info;
@@ -761,6 +764,18 @@ void ieee802_11_set_beacon(struct hostapd_data *hapd)
 	params.proberesp_ies = proberesp;
 	params.assocresp_ies = assocresp;
 	params.isolate = hapd->conf->isolate;
+
+	if (iface->current_mode &&
+	    hostapd_set_freq_params(&freq, iconf->hw_mode, iface->freq,
+				    iconf->channel, iconf->ieee80211n,
+				    iconf->ieee80211ac,
+				    iconf->secondary_channel,
+				    iconf->vht_oper_chwidth,
+				    iconf->vht_oper_centr_freq_seg0_idx,
+				    iconf->vht_oper_centr_freq_seg1_idx,
+				    iface->current_mode->vht_capab) == 0)
+		params.freq = &freq;
+
 #ifdef NEED_AP_MLME
 	params.cts_protect = !!(ieee802_11_erp_info(hapd) &
 				ERP_INFO_USE_PROTECTION);
