@@ -361,6 +361,36 @@ static int ieee80211n_check_40mhz_5g(struct hostapd_iface *iface,
 }
 
 
+static int ieee80211n_check_20mhz_bss(struct wpa_scan_res *bss, int pri_freq,
+				      int start, int end)
+{
+	struct ieee802_11_elems elems;
+	struct ieee80211_ht_operation *oper;
+
+	if (bss->freq < start || bss->freq > end || bss->freq == pri_freq)
+		return 0;
+
+	ieee802_11_parse_elems((u8 *) (bss + 1), bss->ie_len, &elems, 0);
+	if (!elems.ht_capabilities) {
+		wpa_printf(MSG_DEBUG, "Found overlapping legacy BSS: "
+			   MACSTR " freq=%d", MAC2STR(bss->bssid), bss->freq);
+		return 1;
+	}
+
+	if (elems.ht_operation &&
+	    elems.ht_operation_len >= sizeof(*oper)) {
+		oper = (struct ieee80211_ht_operation *) elems.ht_operation;
+		if (oper->ht_param & HT_INFO_HT_PARAM_SECONDARY_CHNL_OFF_MASK)
+			return 0;
+
+		wpa_printf(MSG_DEBUG, "Found overlapping 20 MHz HT BSS: "
+			   MACSTR " freq=%d", MAC2STR(bss->bssid), bss->freq);
+		return 1;
+	}
+	return 0;
+}
+
+
 static int ieee80211n_check_40mhz_2g4(struct hostapd_iface *iface,
 				      struct wpa_scan_results *scan_res)
 {
@@ -383,6 +413,14 @@ static int ieee80211n_check_40mhz_2g4(struct hostapd_iface *iface,
 		int sec = pri;
 		int sec_chan, pri_chan;
 		struct ieee802_11_elems elems;
+
+		/* Check for overlapping 20 MHz BSS */
+		if (ieee80211n_check_20mhz_bss(bss, pri_freq, affected_start,
+					       affected_end)) {
+			wpa_printf(MSG_DEBUG,
+				   "Overlapping 20 MHz BSS is found");
+			return 0;
+		}
 
 		ieee80211n_get_pri_sec_chan(bss, &pri_chan, &sec_chan);
 
@@ -568,9 +606,55 @@ static void ieee80211n_scan_channels_5g(struct hostapd_iface *iface,
 }
 
 
+static void ap_ht40_scan_retry(void *eloop_data, void *user_data)
+{
+#define HT2040_COEX_SCAN_RETRY 15
+	struct hostapd_iface *iface = eloop_data;
+	struct wpa_driver_scan_params params;
+	int ret;
+
+	os_memset(&params, 0, sizeof(params));
+	if (iface->current_mode->mode == HOSTAPD_MODE_IEEE80211G)
+		ieee80211n_scan_channels_2g4(iface, &params);
+	else
+		ieee80211n_scan_channels_5g(iface, &params);
+
+	ret = hostapd_driver_scan(iface->bss[0], &params);
+	iface->num_ht40_scan_tries++;
+	os_free(params.freqs);
+
+	if (ret == -EBUSY &&
+	    iface->num_ht40_scan_tries < HT2040_COEX_SCAN_RETRY) {
+		wpa_printf(MSG_ERROR,
+			   "Failed to request a scan of neighboring BSSes ret=%d (%s) - try to scan again (attempt %d)",
+			   ret, strerror(-ret), iface->num_ht40_scan_tries);
+		eloop_register_timeout(1, 0, ap_ht40_scan_retry, iface, NULL);
+		return;
+	}
+
+	if (ret == 0) {
+		iface->scan_cb = ieee80211n_check_scan;
+		return;
+	}
+
+	wpa_printf(MSG_DEBUG,
+		   "Failed to request a scan in device, bringing up in HT20 mode");
+	iface->conf->secondary_channel = 0;
+	iface->conf->ht_capab &= ~HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET;
+	hostapd_setup_interface_complete(iface, 0);
+}
+
+
+void hostapd_stop_setup_timers(struct hostapd_iface *iface)
+{
+	eloop_cancel_timeout(ap_ht40_scan_retry, iface, NULL);
+}
+
+
 static int ieee80211n_check_40mhz(struct hostapd_iface *iface)
 {
 	struct wpa_driver_scan_params params;
+	int ret;
 
 	if (!iface->conf->secondary_channel)
 		return 0; /* HT40 not used */
@@ -582,13 +666,26 @@ static int ieee80211n_check_40mhz(struct hostapd_iface *iface)
 		ieee80211n_scan_channels_2g4(iface, &params);
 	else
 		ieee80211n_scan_channels_5g(iface, &params);
-	if (hostapd_driver_scan(iface->bss[0], &params) < 0) {
-		wpa_printf(MSG_ERROR, "Failed to request a scan of "
-			   "neighboring BSSes");
-		os_free(params.freqs);
+
+	ret = hostapd_driver_scan(iface->bss[0], &params);
+	os_free(params.freqs);
+
+	if (ret == -EBUSY) {
+		wpa_printf(MSG_ERROR,
+			   "Failed to request a scan of neighboring BSSes ret=%d (%s) - try to scan again",
+			   ret, strerror(-ret));
+		iface->num_ht40_scan_tries = 1;
+		eloop_cancel_timeout(ap_ht40_scan_retry, iface, NULL);
+		eloop_register_timeout(1, 0, ap_ht40_scan_retry, iface, NULL);
+		return 1;
+	}
+
+	if (ret < 0) {
+		wpa_printf(MSG_ERROR,
+			   "Failed to request a scan of neighboring BSSes ret=%d (%s)",
+			   ret, strerror(-ret));
 		return -1;
 	}
-	os_free(params.freqs);
 
 	iface->scan_cb = ieee80211n_check_scan;
 	return 1;
