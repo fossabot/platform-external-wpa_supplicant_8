@@ -38,9 +38,11 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "user_identity_module_v01.h"
 #include "eap_config.h"
 #include "common/wpa_ctrl.h"
+#if defined(ANDROID)
 #include <cutils/properties.h>
 #if defined(__BIONIC_FORTIFY)
 #include <sys/system_properties.h>
+#endif
 #endif
 
 #define IMSI_LENGTH 15
@@ -210,13 +212,13 @@ static Boolean wpa_qmi_register_events(int sim_num)
 		wpa_printf(MSG_ERROR,
 			"Error for QMI_UIM_EVENT_REG_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		return FALSE;
 	}
 	/* Free the allocated response buffer */
 	if (qmi_response_ptr)
 	{
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		qmi_response_ptr = NULL;
 	}
 
@@ -262,7 +264,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 		wpa_printf(MSG_ERROR,
 			"Error for QMI_UIM_GET_CARD_STATUS_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		return FALSE;
 	}
 
@@ -270,7 +272,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	if (!qmi_response_ptr->card_status_valid ||
 	  (qmi_response_ptr->resp.result != QMI_RESULT_SUCCESS_V01)) {
 		wpa_printf(MSG_ERROR, "card_status is not valid !\n");
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		return FALSE;
 	}
 	/* Update global in case of new card state or error code */
@@ -347,7 +349,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	if ((!card_found) || (i ==QMI_UIM_CARDS_MAX_V01) ||
 		(j == QMI_UIM_APPS_MAX_V01)) {
 		if (qmi_response_ptr) {
-			free(qmi_response_ptr);
+			os_free(qmi_response_ptr);
 			qmi_response_ptr = NULL;
 		}
 		wpa_printf(MSG_ERROR, "SIM/USIM not ready\n");
@@ -359,7 +361,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 
 	/* Free the allocated response buffer */
 	if (qmi_response_ptr) {
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		wpa_printf(MSG_ERROR, "Free the allocated response buffer\n");
 		qmi_response_ptr = NULL;
 	}
@@ -392,7 +394,7 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			"Couldn't allocate memory for qmi_read_trans_resp_ptr !\n");
 
 		if (qmi_read_trans_req_ptr) {
-			free(qmi_read_trans_req_ptr);
+			os_free(qmi_read_trans_req_ptr);
 			qmi_read_trans_req_ptr = NULL;
 		}
 		return FALSE;
@@ -435,11 +437,11 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 	}
 	else {
 		if (qmi_read_trans_req_ptr) {
-			free(qmi_read_trans_req_ptr);
+			os_free(qmi_read_trans_req_ptr);
 			qmi_read_trans_req_ptr = NULL;
 		}
 		if (qmi_read_trans_resp_ptr) {
-			free(qmi_read_trans_resp_ptr);
+			os_free(qmi_read_trans_resp_ptr);
 			qmi_read_trans_resp_ptr = NULL;
 		}
 		return FALSE;
@@ -535,13 +537,13 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 
 	/* Free the allocated read request buffer */
 	if (qmi_read_trans_req_ptr) {
-		free(qmi_read_trans_req_ptr);
+		os_free(qmi_read_trans_req_ptr);
 		qmi_read_trans_req_ptr = NULL;
 	}
 
 	/* Free the allocated read response buffer */
 	if (qmi_read_trans_resp_ptr) {
-		free(qmi_read_trans_resp_ptr);
+		os_free(qmi_read_trans_resp_ptr);
 		qmi_read_trans_resp_ptr = NULL;
 	}
 	return qmi_status;
@@ -552,10 +554,10 @@ const char * eap_proxy_get_port(void)
 {
 	int ret = 0;
 	const char* eap_proxy_port = NULL;
-
 	char args[EAP_PROXY_PROPERTY_BASEBAND_SIZE] = {0};
 	char def[EAP_PROXY_PROPERTY_BASEBAND_SIZE] = {0};
 
+#ifdef ANDROID
 	ret = property_get(EAP_PROXY_PROPERTY_BASEBAND, args, def);
 	if (ret > EAP_PROXY_PROPERTY_BASEBAND_SIZE){
 		wpa_printf(MSG_ERROR,"property [%s] has size [%d] that exceeds max [%d]",
@@ -564,6 +566,7 @@ const char * eap_proxy_get_port(void)
 				   EAP_PROXY_PROPERTY_BASEBAND_SIZE);
 		return NULL;
 	   }
+#endif
 
 	if(!os_strncmp(EAP_PROXY_BASEBAND_VALUE_MSM, args, 3)) {
 	   wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
@@ -592,13 +595,16 @@ const char * eap_proxy_get_port(void)
 		wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
 		eap_proxy_port = QMI_PORT_RMNET_1;
 	}
+	else {
+		wpa_printf(MSG_ERROR,"baseband property is set to [%s]",
+			EAP_PROXY_BASEBAND_VALUE_MDMUSB);
+		eap_proxy_port = QMI_PORT_RMNET_0;
+	}
+
 	return eap_proxy_port;
 }
 
-
-struct eap_proxy_sm *
-eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
-	       void *msg_ctx)
+static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 {
 	int qmiErrorCode;
 	int qmiRetCode;
@@ -608,17 +614,6 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	int index;
 	static Boolean flag = FALSE;
 
-	eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
-	if (NULL == eap_proxy) {
-		wpa_printf(MSG_ERROR, "Error memory alloc  for eap_proxy"
-						"eap_proxy_init\n");
-		return NULL;
-	}
-	os_memset(eap_proxy, 0, sizeof(*eap_proxy));
-
-	eap_proxy->ctx = eapol_ctx;
-	eap_proxy->eapol_cb = eapol_cb;
-	eap_proxy->msg_ctx = msg_ctx;
 	eap_proxy->proxy_state = EAP_PROXY_INITIALIZE;
 	eap_proxy->qmi_state = QMI_STATE_IDLE;
 	eap_proxy->key = NULL;
@@ -626,7 +621,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	eap_proxy->is_state_changed = FALSE;
 	eap_proxy->isEap = FALSE;
 	eap_proxy->eap_type = EAP_TYPE_NONE;
-        eap_proxy->user_selected_sim = 0;
+	eap_proxy->user_selected_sim = 0;
 
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
 	wpa_printf (MSG_ERROR, "eap_proxy Initializing for DUAL SIM build %d ", MAX_NO_OF_SIM_SUPPORTED);
@@ -713,6 +708,43 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapResp, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, FALSE);
 	wpa_printf (MSG_ERROR, "Eap_proxy initialized successfully\n");
+
+}
+
+struct eap_proxy_sm *
+eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
+	       void *msg_ctx)
+{
+	int qmiErrorCode;
+	int qmiRetCode;
+	struct eap_proxy_sm *eap_proxy;
+	qmi_idl_service_object_type    qmi_client_service_obj;
+	const char *eap_qmi_port;
+
+	eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
+	if (NULL == eap_proxy) {
+		wpa_printf(MSG_ERROR, "Error memory alloc  for eap_proxy"
+						"eap_proxy_init\n");
+		return NULL;
+	}
+	os_memset(eap_proxy, 0, sizeof(*eap_proxy));
+
+	eap_proxy->ctx = eapol_ctx;
+	eap_proxy->eapol_cb = eapol_cb;
+	eap_proxy->msg_ctx = msg_ctx;
+	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
+	eap_proxy->qmi_state = QMI_STATE_IDLE;
+	eap_proxy->key = NULL;
+	eap_proxy->iskey_valid = FALSE;
+	eap_proxy->is_state_changed = FALSE;
+	eap_proxy->isEap = FALSE;
+	eap_proxy->eap_type = EAP_TYPE_NONE;
+
+	/* delay the qmi client initialization after the eloop_run starts,
+	* in order to avoid the case of daemonize enabled, which exits the
+	* parent process that created the qmi client context.
+	*/
+	eloop_register_timeout(0, 0, eap_proxy_post_init, eap_proxy, NULL);
 
 	return eap_proxy;
 }
