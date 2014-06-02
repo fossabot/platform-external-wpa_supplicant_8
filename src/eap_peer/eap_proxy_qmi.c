@@ -608,7 +608,7 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 {
 	int qmiErrorCode;
 	int qmiRetCode;
-	struct eap_proxy_sm *eap_proxy;
+	struct eap_proxy_sm *eap_proxy = eloop_ctx;
 	qmi_idl_service_object_type    qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
 	const char *eap_qmi_port[MAX_NO_OF_SIM_SUPPORTED];
 	int index;
