@@ -292,7 +292,7 @@ static void wpa_supplicant_optimize_freqs(
 		 * Optimize scan based on GO information during persistent
 		 * group reinvocation
 		 */
-		if (wpa_s->p2p_in_invitation < 5 ||
+		if (wpa_s->p2p_in_invitation < 5 &&
 		    wpa_s->p2p_invite_go_freq > 0) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Scan only GO preferred frequency %d MHz during invitation",
 				wpa_s->p2p_invite_go_freq);
@@ -862,7 +862,7 @@ scan:
 
 void wpa_supplicant_update_scan_int(struct wpa_supplicant *wpa_s, int sec)
 {
-	struct os_time remaining, new_int;
+	struct os_reltime remaining, new_int;
 	int cancelled;
 
 	cancelled = eloop_cancel_timeout_one(wpa_supplicant_scan, wpa_s, NULL,
@@ -870,7 +870,7 @@ void wpa_supplicant_update_scan_int(struct wpa_supplicant *wpa_s, int sec)
 
 	new_int.sec = sec;
 	new_int.usec = 0;
-	if (cancelled && os_time_before(&remaining, &new_int)) {
+	if (cancelled && os_reltime_before(&remaining, &new_int)) {
 		new_int.sec = remaining.sec;
 		new_int.usec = remaining.usec;
 	}
@@ -892,6 +892,13 @@ void wpa_supplicant_update_scan_int(struct wpa_supplicant *wpa_s, int sec)
  */
 void wpa_supplicant_req_scan(struct wpa_supplicant *wpa_s, int sec, int usec)
 {
+	if (eloop_deplete_timeout(sec, usec, wpa_supplicant_scan, wpa_s, NULL))
+	{
+		wpa_dbg(wpa_s, MSG_DEBUG, "Rescheduling scan request: %d sec %d usec",
+			sec, usec);
+		return;
+	}
+
 #ifndef ANDROID
 	/* If there's at least one network that should be specifically scanned
 	 * then don't cancel the scan and reschedule.  Some drivers do
