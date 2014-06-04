@@ -27,7 +27,7 @@
 
 #include "wpa_ctrl.h"
 #include "common.h"
-
+#include <sys/poll.h>
 
 #if defined(CONFIG_CTRL_IFACE_UNIX) || defined(CONFIG_CTRL_IFACE_UDP)
 #define CTRL_IFACE_SOCKET
@@ -390,10 +390,9 @@ int wpa_ctrl_request(struct wpa_ctrl *ctrl, const char *cmd, size_t cmd_len,
 		     char *reply, size_t *reply_len,
 		     void (*msg_cb)(char *msg, size_t len))
 {
-	struct timeval tv;
 	struct os_time started_at;
 	int res;
-	fd_set rfds;
+	struct pollfd rfds;
 	const char *_cmd;
 	char *cmd_buf = NULL;
 	size_t _cmd_len;
@@ -448,14 +447,14 @@ retry_send:
 	os_free(cmd_buf);
 
 	for (;;) {
-		tv.tv_sec = 10;
-		tv.tv_usec = 0;
-		FD_ZERO(&rfds);
-		FD_SET(ctrl->s, &rfds);
-		res = select(ctrl->s + 1, &rfds, NULL, NULL, &tv);
-		if (res < 0)
+		memset(&rfds, 0, sizeof(rfds));
+		rfds.fd = ctrl->s;
+		rfds.events |= POLLIN;
+		res = poll(&rfds, 1, 10000);
+		if (res < 0) {
 			return res;
-		if (FD_ISSET(ctrl->s, &rfds)) {
+		}
+		if (rfds.revents & POLLIN) {
 			res = recv(ctrl->s, reply, *reply_len, 0);
 			if (res < 0)
 				return res;
@@ -529,14 +528,12 @@ int wpa_ctrl_recv(struct wpa_ctrl *ctrl, char *reply, size_t *reply_len)
 
 int wpa_ctrl_pending(struct wpa_ctrl *ctrl)
 {
-	struct timeval tv;
-	fd_set rfds;
-	tv.tv_sec = 0;
-	tv.tv_usec = 0;
-	FD_ZERO(&rfds);
-	FD_SET(ctrl->s, &rfds);
-	select(ctrl->s + 1, &rfds, NULL, NULL, &tv);
-	return FD_ISSET(ctrl->s, &rfds);
+	struct pollfd rfds;
+	memset(&rfds, 0, sizeof(rfds));
+	rfds.fd = ctrl->s;
+	rfds.events |= POLLIN;
+	int res = poll(&rfds, 1, 0);
+	return (rfds.revents & POLLIN);
 }
 
 
