@@ -1596,7 +1596,7 @@ include $(BUILD_EXECUTABLE)
 include $(CLEAR_VARS)
 LOCAL_MODULE = libwpa_client
 LOCAL_CFLAGS = $(L_CFLAGS)
-LOCAL_SRC_FILES = src/common/wpa_ctrl.c src/utils/os_$(CONFIG_OS).c
+LOCAL_SRC_FILES = src/common/wpa_ctrl.c src/utils/os_$(CONFIG_OS).c src/utils/wpa_debug.c
 LOCAL_C_INCLUDES = $(INCLUDES)
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 LOCAL_COPY_HEADERS_TO := libwpa_client
