@@ -213,6 +213,7 @@ static Boolean wpa_qmi_register_events(int sim_num)
 			"Error for QMI_UIM_EVENT_REG_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
 		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 	/* Free the allocated response buffer */
@@ -265,6 +266,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 			"Error for QMI_UIM_GET_CARD_STATUS_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
 		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 
@@ -273,6 +275,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	  (qmi_response_ptr->resp.result != QMI_RESULT_SUCCESS_V01)) {
 		wpa_printf(MSG_ERROR, "card_status is not valid !\n");
 		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 	/* Update global in case of new card state or error code */
@@ -634,6 +637,7 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 	if (eap_proxy_qmi_init_handle < 0) {
 		wpa_printf(MSG_ERROR, "Error in qmi_init\n");
 		os_free(eap_proxy);
+		eap_proxy = NULL;
 		return NULL;
 	}
 
@@ -698,6 +702,7 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 	if ( flag == FALSE ) {
 		wpa_printf(MSG_ERROR, "eap_proxy: flag = %d proxy init failed\n", flag);
 		os_free(eap_proxy);
+		eap_proxy = NULL;
 		return NULL;
 	}
 
@@ -810,8 +815,10 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 		}
 	}
 
-	if (NULL != eap_proxy->key)
+	if (NULL != eap_proxy->key) {
 		os_free(eap_proxy->key);
+		eap_proxy->key = NULL;
+	}
 
 	/* Release QMI */
 	qmi_release(eap_proxy_qmi_init_handle);
@@ -1160,6 +1167,7 @@ static u8 *eap_proxy_getKey(struct eap_proxy_sm *eap_proxy)
 		wpa_printf(MSG_ERROR, "Unable to get session keys;"
 				 " qmiErrorCode=%d", qmiErrorCode);
 		os_free(eap_proxy->key);
+		eap_proxy->key = NULL;
 		return NULL;
 	}
 	eap_proxy->iskey_valid = TRUE;
@@ -1546,10 +1554,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 		wpa_printf(MSG_ERROR, "eap_proxy: EAP_IDENTITY_IMSI_3GPP_REALM is selected\n");
 		if (!wpa_qmi_read_card_status(sim_num)) {
 			wpa_printf(MSG_INFO, "Read Card Status failed, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1559,10 +1571,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 		if (!wpa_qmi_read_card_imsi(sim_num)) {
 			wpa_printf(MSG_INFO, "Read Card IMSI failed, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1572,10 +1588,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 		if (imsi == NULL) {
 			wpa_printf(MSG_INFO, "IMSI not available, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1607,10 +1627,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 				if (NULL == imsi_identity) {
 					wpa_printf(MSG_ERROR, "Memory not available\n");
-					if (eap_auth_start.eap_meta_id != NULL)
+					if (eap_auth_start.eap_meta_id != NULL) {
 						os_free(eap_auth_start.eap_meta_id);
-					if (eap_auth_start.user_id != NULL)
+						eap_auth_start.eap_meta_id = NULL;
+					}
+					if (eap_auth_start.user_id != NULL) {
 						os_free(eap_auth_start.user_id);
+						eap_auth_start.user_id = NULL;
+					}
 					if (NULL != identity) {
 						os_free(identity);
 						identity = NULL;
