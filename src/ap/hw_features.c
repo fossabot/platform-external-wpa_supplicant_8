@@ -479,6 +479,9 @@ static int ieee80211n_check_40mhz(struct hostapd_iface *iface)
 	struct wpa_driver_scan_params params;
 	int ret;
 
+	if (iface->conf->ht2040_coex_disable == 1)
+		return 0;
+
 	/* Check that HT40 is used and PRI / SEC switch is allowed */
 	if (!iface->conf->secondary_channel || iface->conf->no_pri_sec_switch)
 		return 0;

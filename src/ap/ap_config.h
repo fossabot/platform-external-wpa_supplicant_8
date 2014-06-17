@@ -752,6 +752,7 @@ struct hostapd_config {
 	int no_pri_sec_switch;
 	int require_ht;
 	int obss_interval;
+	int ht2040_coex_disable;
 	u32 vht_capab;
 	int ieee80211ac;
 	int require_vht;
