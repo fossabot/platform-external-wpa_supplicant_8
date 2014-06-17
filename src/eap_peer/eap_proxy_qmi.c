@@ -210,13 +210,14 @@ static Boolean wpa_qmi_register_events(int sim_num)
 		wpa_printf(MSG_ERROR,
 			"Error for QMI_UIM_EVENT_REG_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 	/* Free the allocated response buffer */
 	if (qmi_response_ptr)
 	{
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		qmi_response_ptr = NULL;
 	}
 
@@ -262,7 +263,8 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 		wpa_printf(MSG_ERROR,
 			"Error for QMI_UIM_GET_CARD_STATUS_REQ_V01, qmi_err_code: 0x%x\n",
 			qmi_err_code);
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 
@@ -270,7 +272,8 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	if (!qmi_response_ptr->card_status_valid ||
 	  (qmi_response_ptr->resp.result != QMI_RESULT_SUCCESS_V01)) {
 		wpa_printf(MSG_ERROR, "card_status is not valid !\n");
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
+		qmi_response_ptr = NULL;
 		return FALSE;
 	}
 	/* Update global in case of new card state or error code */
@@ -347,7 +350,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	if ((!card_found) || (i ==QMI_UIM_CARDS_MAX_V01) ||
 		(j == QMI_UIM_APPS_MAX_V01)) {
 		if (qmi_response_ptr) {
-			free(qmi_response_ptr);
+			os_free(qmi_response_ptr);
 			qmi_response_ptr = NULL;
 		}
 		wpa_printf(MSG_ERROR, "SIM/USIM not ready\n");
@@ -359,7 +362,7 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 
 	/* Free the allocated response buffer */
 	if (qmi_response_ptr) {
-		free(qmi_response_ptr);
+		os_free(qmi_response_ptr);
 		wpa_printf(MSG_ERROR, "Free the allocated response buffer\n");
 		qmi_response_ptr = NULL;
 	}
@@ -392,7 +395,7 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			"Couldn't allocate memory for qmi_read_trans_resp_ptr !\n");
 
 		if (qmi_read_trans_req_ptr) {
-			free(qmi_read_trans_req_ptr);
+			os_free(qmi_read_trans_req_ptr);
 			qmi_read_trans_req_ptr = NULL;
 		}
 		return FALSE;
@@ -435,11 +438,11 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 	}
 	else {
 		if (qmi_read_trans_req_ptr) {
-			free(qmi_read_trans_req_ptr);
+			os_free(qmi_read_trans_req_ptr);
 			qmi_read_trans_req_ptr = NULL;
 		}
 		if (qmi_read_trans_resp_ptr) {
-			free(qmi_read_trans_resp_ptr);
+			os_free(qmi_read_trans_resp_ptr);
 			qmi_read_trans_resp_ptr = NULL;
 		}
 		return FALSE;
@@ -466,6 +469,18 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			/* Received IMSI is in the 3GPP format
 				converting it into ascii string */
 			imsi = os_malloc((2 * length));
+			if (NULL == imsi) {
+				wpa_printf(MSG_ERROR, "eap_proxy: Error memory alloc for imsi");
+				if (qmi_read_trans_req_ptr) {
+					os_free(qmi_read_trans_req_ptr);
+					qmi_read_trans_req_ptr = NULL;
+				}
+				if (qmi_read_trans_resp_ptr) {
+					os_free(qmi_read_trans_resp_ptr);
+					qmi_read_trans_resp_ptr = NULL;
+				}
+				return FALSE;
+			}
 			os_memset(imsi, 0, (2 * length));
 			for (src = 1, dst = 0;
 				(src < length) && (dst < (length * 2));
@@ -535,13 +550,13 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 
 	/* Free the allocated read request buffer */
 	if (qmi_read_trans_req_ptr) {
-		free(qmi_read_trans_req_ptr);
+		os_free(qmi_read_trans_req_ptr);
 		qmi_read_trans_req_ptr = NULL;
 	}
 
 	/* Free the allocated read response buffer */
 	if (qmi_read_trans_resp_ptr) {
-		free(qmi_read_trans_resp_ptr);
+		os_free(qmi_read_trans_resp_ptr);
 		qmi_read_trans_resp_ptr = NULL;
 	}
 	return qmi_status;
@@ -639,6 +654,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	if (eap_proxy_qmi_init_handle < 0) {
 		wpa_printf(MSG_ERROR, "Error in qmi_init\n");
 		os_free(eap_proxy);
+		eap_proxy = NULL;
 		return NULL;
 	}
 
@@ -703,6 +719,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	if ( flag == FALSE ) {
 		wpa_printf(MSG_ERROR, "eap_proxy: flag = %d proxy init failed\n", flag);
 		os_free(eap_proxy);
+		eap_proxy = NULL;
 		return NULL;
 	}
 
@@ -778,8 +795,10 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 		}
 	}
 
-	if (NULL != eap_proxy->key)
+	if (NULL != eap_proxy->key) {
 		os_free(eap_proxy->key);
+		eap_proxy->key = NULL;
+	}
 
 	/* Release QMI */
 	qmi_release(eap_proxy_qmi_init_handle);
@@ -864,9 +883,14 @@ static void handle_qmi_eap_reply(
 	u8 *resp_data;
 	u32 length;
 
+	if (NULL == eap_proxy) {
+		wpa_printf(MSG_ERROR, "eap_proxy: QMI reply data is NULL");
+		return;
+	}
+
 	if (QMI_STATE_RESP_PENDING == eap_proxy->qmi_state) {
-		if (NULL == eap_proxy || QMI_EAP_SERVICE != serviceId ||
-				QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
+		if (QMI_EAP_SERVICE != serviceId ||
+		    QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
 			wpa_printf(MSG_ERROR, "Bad Param: serviceId=%d;"
 				 " rspId=%d\n", serviceId, rspId);
 			eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
@@ -1128,6 +1152,7 @@ static u8 *eap_proxy_getKey(struct eap_proxy_sm *eap_proxy)
 		wpa_printf(MSG_ERROR, "Unable to get session keys;"
 				 " qmiErrorCode=%d", qmiErrorCode);
 		os_free(eap_proxy->key);
+		eap_proxy->key = NULL;
 		return NULL;
 	}
 	eap_proxy->iskey_valid = TRUE;
@@ -1357,6 +1382,11 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 	const char *realm_3gpp = "@wlan.mnc000.mcc000.3gppnetwork.org";
 	int sim_num;
 
+	if(config == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy: peer config is null");
+		return FALSE;
+	}
+
 	wpa_printf(MSG_ERROR, "eap_proxy: %s\n", __func__);
 	sim_num = config->sim_num - 1;
 	eap_auth_start.params_mask = 0;
@@ -1443,6 +1473,9 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 				os_memset(identity, 0, config->identity_len);
 				os_memcpy(identity, config->identity,
 						config->identity_len);
+			} else {
+				wpa_printf(MSG_ERROR, "Failed to allocat memory for identity");
+				return FALSE;
 			}
 
 			/* To Do for 3GPP realm */
@@ -1461,6 +1494,9 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 				os_memset(identity, 0, config->identity_len);
 				os_memcpy(identity, config->identity,
 						config->identity_len);
+			} else {
+				wpa_printf(MSG_ERROR, "Failed to allocat memory for identity");
+				return FALSE;
 			}
 
 			identity_format = EAP_IDENTITY_CFG_RAW;
@@ -1476,6 +1512,9 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 				os_memset(identity, 0, config->identity_len);
 				os_memcpy(identity, config->identity,
 					 config->identity_len);
+			} else {
+				wpa_printf(MSG_ERROR, "Failed to allocat memory for identity");
+				return FALSE;
 			}
 
 			identity_format = EAP_IDENTITY_IMSI_3GPP_REALM;
@@ -1493,6 +1532,9 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 				os_memcpy(eap_auth_start.eap_meta_id ,
 						config->anonymous_identity ,
 						config->anonymous_identity_len);
+			} else {
+				wpa_printf(MSG_ERROR, "Failed to allocat memory for eap_meta_id");
+				return FALSE;
 			}
 
 			identity_format = EAP_IDENTITY_ANNONYMOUS;
@@ -1514,10 +1556,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 		wpa_printf(MSG_ERROR, "eap_proxy: EAP_IDENTITY_IMSI_3GPP_REALM is selected\n");
 		if (!wpa_qmi_read_card_status(sim_num)) {
 			wpa_printf(MSG_INFO, "Read Card Status failed, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1527,10 +1573,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 		if (!wpa_qmi_read_card_imsi(sim_num)) {
 			wpa_printf(MSG_INFO, "Read Card IMSI failed, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1540,10 +1590,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 		if (imsi == NULL) {
 			wpa_printf(MSG_INFO, "IMSI not available, return\n");
-			if (eap_auth_start.eap_meta_id != NULL)
+			if (eap_auth_start.eap_meta_id != NULL) {
 				os_free(eap_auth_start.eap_meta_id);
-			if (eap_auth_start.user_id != NULL)
+				eap_auth_start.eap_meta_id = NULL;
+			}
+			if (eap_auth_start.user_id != NULL) {
 				os_free(eap_auth_start.user_id);
+				eap_auth_start.user_id = NULL;
+			}
 			if (NULL != identity) {
 				os_free(identity);
 				identity = NULL;
@@ -1575,10 +1629,14 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 
 				if (NULL == imsi_identity) {
 					wpa_printf(MSG_ERROR, "Memory not available\n");
-					if (eap_auth_start.eap_meta_id != NULL)
+					if (eap_auth_start.eap_meta_id != NULL) {
 						os_free(eap_auth_start.eap_meta_id);
-					if (eap_auth_start.user_id != NULL)
+						eap_auth_start.eap_meta_id = NULL;
+					}
+					if (eap_auth_start.user_id != NULL) {
 						os_free(eap_auth_start.user_id);
+						eap_auth_start.user_id = NULL;
+					}
 					if (NULL != identity) {
 						os_free(identity);
 						identity = NULL;
