@@ -5948,6 +5948,7 @@ int wpas_p2p_notif_pbc_overlap(struct wpa_supplicant *wpa_s)
 void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s)
 {
 	struct p2p_channels chan;
+	struct wpa_supplicant *ifs;
 
 	if (wpa_s->global == NULL || wpa_s->global->p2p == NULL)
 		return;
@@ -5960,6 +5961,28 @@ void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s)
 	}
 
 	p2p_update_channel_list(wpa_s->global->p2p, &chan);
+
+	for (ifs = wpa_s->global->ifaces; ifs; ifs = ifs->next) {
+		int freq;
+		if (!ifs->current_ssid ||
+		    !ifs->current_ssid->p2p_group ||
+		    (ifs->current_ssid->mode != WPAS_MODE_P2P_GO &&
+		     ifs->current_ssid->mode != WPAS_MODE_P2P_GROUP_FORMATION))
+				continue;
+		freq = ifs->current_ssid->frequency;
+		if (freq_included(&chan, freq)) {
+			wpa_dbg(ifs, MSG_DEBUG,
+				"P2P GO operating frequency %d MHz in valid range",
+				freq);
+			continue;
+		}
+
+		wpa_dbg(ifs, MSG_DEBUG,
+			"P2P GO operating in invalid frequency %d MHz",	freq);
+		/* TODO: Consider using CSA or removing the group within
+		 * wpa_supplicant */
+		wpa_msg(ifs, MSG_INFO, P2P_EVENT_REMOVE_AND_REFORM_GROUP);
+	}
 }
 
 
