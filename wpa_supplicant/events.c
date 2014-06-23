@@ -974,8 +974,12 @@ int wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
 		wpa_msg(wpa_s, MSG_INFO, WPS_EVENT_OVERLAP
 			"PBC session overlap");
 #ifdef CONFIG_P2P
-		if (wpas_p2p_notif_pbc_overlap(wpa_s) == 1)
+		if (wpa_s->p2p_group_interface == P2P_GROUP_INTERFACE_CLIENT ||
+		    wpa_s->p2p_in_provisioning) {
+			eloop_register_timeout(0, 0, wpas_p2p_pbc_overlap_cb,
+					       wpa_s, NULL);
 			return -1;
+		}
 #endif /* CONFIG_P2P */
 
 #ifdef CONFIG_WPS
@@ -2481,10 +2485,52 @@ static void wpa_supplicant_event_unprot_disassoc(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_IEEE80211W */
 }
 
-static void wpa_supplicant_update_channel_list(struct wpa_supplicant *wpa_s)
+static const char * reg_init_str(enum reg_change_initiator init)
+{
+	switch (init) {
+	case REGDOM_SET_BY_CORE:
+		return "CORE";
+	case REGDOM_SET_BY_USER:
+		return "USER";
+	case REGDOM_SET_BY_DRIVER:
+		return "DRIVER";
+	case REGDOM_SET_BY_COUNTRY_IE:
+		return "COUNTRY_IE";
+	case REGDOM_BEACON_HINT:
+		return "BEACON_HINT";
+	}
+	return "?";
+}
+
+
+static const char * reg_type_str(enum reg_type type)
+{
+	switch (type) {
+	case REGDOM_TYPE_UNKNOWN:
+		return "UNKNOWN";
+	case REGDOM_TYPE_COUNTRY:
+		return "COUNTRY";
+	case REGDOM_TYPE_WORLD:
+		return "WORLD";
+	case REGDOM_TYPE_CUSTOM_WORLD:
+		return "CUSTOM_WORLD";
+	case REGDOM_TYPE_INTERSECTION:
+		return "INTERSECTION";
+	}
+	return "?";
+}
+
+
+static void wpa_supplicant_update_channel_list(
+	struct wpa_supplicant *wpa_s, struct channel_list_changed *info)
 {
 	const char *rn, *rn2;
 	struct wpa_supplicant *ifs;
+
+	wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_REGDOM_CHANGE "init=%s type=%s%s%s",
+		reg_init_str(info->type), reg_type_str(info->type),
+		info->alpha2[0] ? " alpha2=" : "",
+		info->alpha2[0] ? info->alpha2 : "");
 
 	if (wpa_s->drv_priv == NULL)
 		return; /* Ignore event during drv initialization */
@@ -3197,7 +3243,8 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpa_supplicant_set_state(wpa_s, WPA_INTERFACE_DISABLED);
 		break;
 	case EVENT_CHANNEL_LIST_CHANGED:
-		wpa_supplicant_update_channel_list(wpa_s);
+		wpa_supplicant_update_channel_list(
+			wpa_s, &data->channel_list_changed);
 		break;
 	case EVENT_INTERFACE_UNAVAILABLE:
 #ifdef CONFIG_P2P
