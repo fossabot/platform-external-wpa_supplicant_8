@@ -1629,6 +1629,15 @@ static void handle_action(struct hostapd_data *hapd,
 		return;
 #endif /* CONFIG_WNM */
 	case WLAN_ACTION_PUBLIC:
+#ifdef CONFIG_IEEE80211N
+		if (mgmt->u.action.u.public_action.action ==
+		    WLAN_PA_20_40_BSS_COEX) {
+			wpa_printf(MSG_DEBUG,
+				   "HT20/40 coex mgmt frame received from STA "
+				   MACSTR, MAC2STR(mgmt->sa));
+			hostapd_2040_coex_action(hapd, mgmt, len);
+		}
+#endif /* CONFIG_IEEE80211N */
 		if (hapd->public_action_cb) {
 			hapd->public_action_cb(hapd->public_action_cb_ctx,
 					       (u8 *) mgmt, len,
