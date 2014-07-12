@@ -623,7 +623,7 @@ static char ** wpa_cli_complete_set(const char *str, int pos)
 		"wps_nfc_dev_pw", "ext_password_backend",
 		"p2p_go_max_inactivity", "auto_interworking", "okc", "pmf",
 		"sae_groups", "dtim_period", "beacon_int", "ap_vendor_elements",
-		"ignore_old_scan_res", "freq_list"
+		"ignore_old_scan_res", "freq_list", "p2p_search_delay"
 	};
 	int i, num_fields = sizeof(fields) / sizeof(fields[0]);
 
