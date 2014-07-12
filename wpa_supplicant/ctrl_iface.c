@@ -5347,6 +5347,25 @@ static int set_scan_freqs(struct wpa_supplicant *wpa_s, char *val)
 }
 
 
+static int scan_id_list_parse(struct wpa_supplicant *wpa_s, const char *value)
+{
+	const char *pos = value;
+
+	while (pos) {
+		if (*pos == ' ' || *pos == '\0')
+			break;
+		if (wpa_s->scan_id_count == MAX_SCAN_ID)
+			return -1;
+		wpa_s->scan_id[wpa_s->scan_id_count++] = atoi(pos);
+		pos = os_strchr(pos, ',');
+		if (pos)
+			pos++;
+	}
+
+	return 0;
+}
+
+
 static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 			   char *reply, int reply_size, int *reply_len)
 {
@@ -5357,12 +5376,18 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 		return;
 	}
 
+	wpa_s->scan_id_count = 0;
 	if (params) {
 		if (os_strncasecmp(params, "TYPE=ONLY", 9) == 0)
 			wpa_s->scan_res_handler = scan_only_handler;
 
 		pos = os_strstr(params, "freq=");
 		if (pos && set_scan_freqs(wpa_s, pos + 5) < 0) {
+			*reply_len = -1;
+			return;
+		}
+		pos = os_strstr(params, "scan_id=");
+		if (pos && scan_id_list_parse(wpa_s, pos + 8) < 0) {
 			*reply_len = -1;
 			return;
 		}
