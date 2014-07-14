@@ -486,11 +486,12 @@ static int compare_scan_neighbor_results(struct wpa_supplicant *wpa_s,
 
 	u8 i, j;
 
-	if (scan_res == NULL || num_neigh_rep == 0 || !wpa_s->current_bss)
+	if (scan_res == NULL || num_neigh_rep == 0)
 		return 0;
 
 	wpa_printf(MSG_DEBUG, "WNM: Current BSS " MACSTR " RSSI %d",
-		   MAC2STR(wpa_s->bssid), wpa_s->current_bss->level);
+		   MAC2STR(wpa_s->bssid),
+		   wpa_s->current_bss ? wpa_s->current_bss->level : 0);
 
 	for (i = 0; i < num_neigh_rep; i++) {
 		for (j = 0; j < scan_res->num; j++) {
