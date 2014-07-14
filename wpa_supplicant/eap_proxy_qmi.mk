@@ -3,7 +3,7 @@ LOCAL_PATH := $(call my-dir)
 
 ifeq ($(BOARD_HAS_QCOM_WLAN), true)
 L_CFLAGS += -DSIM_AKA_IDENTITY_IMSI
-L_CFLAGS += -DSIM_AKA_IMSI_RAW_ENABLED
+#L_CFLAGS += -DSIM_AKA_IMSI_RAW_ENABLED
 
 ifdef CONFIG_EAP_PROXY_DUAL_SIM
 L_CFLAGS += -DCONFIG_EAP_PROXY_DUAL_SIM
@@ -16,6 +16,12 @@ INCLUDES += $(TARGET_OUT_HEADERS)/qmi/platform
 INCLUDES += $(TARGET_OUT_HEADERS)/qmi/src
 INCLUDES += $(TARGET_OUT_HEADERS)/qmi/services
 INCLUDES += $(TARGET_OUT_HEADERS)/qmi/core/lib/inc
+
+ifneq ($(wildcard $(LOCAL_PATH)/../../../vendor/qcom/proprietary/mdm-helper/libmdmdetect),)
+L_CFLAGS += -DCONFIG_EAP_PROXY_MDM_DETECT
+INCLUDES += $(TARGET_OUT_HEADERS)/libmdmdetect/inc
+LIB_SHARED_EAP_PROXY += libmdmdetect
+endif
 
 # EAP-AKA' (enable CONFIG_PCSC, if EAP-AKA' is used).
 # This requires CONFIG_EAP_AKA to be enabled, too.
