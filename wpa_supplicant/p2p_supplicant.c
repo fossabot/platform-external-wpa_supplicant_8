@@ -83,6 +83,10 @@
 #define P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE 15
 #endif /* P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE */
 
+#ifndef P2P_CONCURRENT_SEARCH_DELAY
+#define P2P_CONCURRENT_SEARCH_DELAY 500
+#endif /* P2P_CONCURRENT_SEARCH_DELAY */
+
 #define P2P_MGMT_DEVICE_PREFIX		"p2p-dev-"
 
 enum p2p_group_removal_reason {
@@ -5949,13 +5953,6 @@ int wpas_p2p_notif_pbc_overlap(struct wpa_supplicant *wpa_s)
 }
 
 
-void wpas_p2p_pbc_overlap_cb(void *eloop_ctx, void *timeout_ctx)
-{
-	struct wpa_supplicant *wpa_s = eloop_ctx;
-	wpas_p2p_notif_pbc_overlap(wpa_s);
-}
-
-
 void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s)
 {
 	struct p2p_channels chan;
@@ -6284,8 +6281,8 @@ unsigned int wpas_p2p_search_delay(struct wpa_supplicant *wpa_s)
 	if (wpa_s->wpa_state > WPA_SCANNING) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Use %u ms search delay due to "
 			"concurrent operation",
-			wpa_s->conf->p2p_search_delay);
-		return wpa_s->conf->p2p_search_delay;
+			P2P_CONCURRENT_SEARCH_DELAY);
+		return P2P_CONCURRENT_SEARCH_DELAY;
 	}
 
 	if (!wpa_s->driver->get_radio_name)
@@ -6305,9 +6302,8 @@ unsigned int wpas_p2p_search_delay(struct wpa_supplicant *wpa_s)
 			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Use %u ms search "
 				"delay due to concurrent operation on "
 				"interface %s",
-				wpa_s->conf->p2p_search_delay,
-				ifs->ifname);
-			return wpa_s->conf->p2p_search_delay;
+				P2P_CONCURRENT_SEARCH_DELAY, ifs->ifname);
+			return P2P_CONCURRENT_SEARCH_DELAY;
 		}
 	}
 
