@@ -844,7 +844,8 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_DRIVER_IE	0x00000001
 /* Driver needs static WEP key setup after association command */
 #define WPA_DRIVER_FLAGS_SET_KEYS_AFTER_ASSOC 0x00000002
-/* unused: 0x00000004 */
+/* Driver takes care of all DFS operations */
+#define WPA_DRIVER_FLAGS_DFS_OFFLOAD			0x00000004
 /* Driver takes care of RSN 4-way handshake internally; PMK is configured with
  * struct wpa_driver_ops::set_key using alg = WPA_ALG_PMK */
 #define WPA_DRIVER_FLAGS_4WAY_HANDSHAKE 0x00000008
@@ -1165,6 +1166,13 @@ struct wpa_signal_info {
 	enum chan_width chanwidth;
 	int center_frq1;
 	int center_frq2;
+};
+
+/* TDLS peer capabilities for send_tdls_mgmt() */
+enum tdls_peer_capability {
+	TDLS_PEER_HT = BIT(0),
+	TDLS_PEER_VHT = BIT(1),
+	TDLS_PEER_WMM = BIT(2),
 };
 
 /**
@@ -2560,6 +2568,7 @@ struct wpa_driver_ops {
 	 * @action_code: TDLS action code for the mssage
 	 * @dialog_token: Dialog Token to use in the message (if needed)
 	 * @status_code: Status Code or Reason Code to use (if needed)
+	 * @peer_capab: TDLS peer capability (TDLS_PEER_* bitfield)
 	 * @buf: TDLS IEs to add to the message
 	 * @len: Length of buf in octets
 	 * Returns: 0 on success, negative (<0) on failure
@@ -2568,7 +2577,7 @@ struct wpa_driver_ops {
 	 * responsible for receiving and sending all TDLS packets.
 	 */
 	int (*send_tdls_mgmt)(void *priv, const u8 *dst, u8 action_code,
-			      u8 dialog_token, u16 status_code,
+			      u8 dialog_token, u16 status_code, u32 peer_capab,
 			      const u8 *buf, size_t len);
 
 	/**

@@ -31,7 +31,6 @@ endif
 
 ifeq ($(BOARD_WLAN_DEVICE), bcmdhd)
 L_CFLAGS += -DANDROID_P2P
-L_CFLAGS += -DP2P_CONCURRENT_SEARCH_DELAY=0
 endif
 
 ifeq ($(BOARD_WLAN_DEVICE), qcwcn)
@@ -1601,4 +1600,5 @@ LOCAL_C_INCLUDES = $(INCLUDES)
 LOCAL_SHARED_LIBRARIES := libcutils liblog
 LOCAL_COPY_HEADERS_TO := libwpa_client
 LOCAL_COPY_HEADERS := src/common/wpa_ctrl.h
+LOCAL_COPY_HEADERS += src/common/qca-vendor.h
 include $(BUILD_SHARED_LIBRARY)
