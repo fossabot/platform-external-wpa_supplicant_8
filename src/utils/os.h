@@ -46,6 +46,18 @@ int os_get_time(struct os_time *t);
 	} \
 } while (0)
 
+static inline int os_reltime_expired(struct os_reltime *now,
+				     struct os_reltime *ts,
+				     os_time_t timeout_secs)
+{
+	struct os_reltime age;
+
+	os_reltime_sub(now, ts, &age);
+	return (age.sec > timeout_secs) ||
+	       (age.sec == timeout_secs && age.usec > 0);
+}
+
+
 /**
  * os_mktime - Convert broken-down time into seconds since 1970-01-01
  * @year: Four digit year
