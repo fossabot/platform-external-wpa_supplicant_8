@@ -469,6 +469,19 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			/* Received IMSI is in the 3GPP format
 				converting it into ascii string */
 			imsi = os_malloc((2 * length));
+			if (!imsi) {
+				wpa_printf(MSG_ERROR, "eap_proxy: IMSI allocation failed");
+				if (qmi_read_trans_req_ptr) {
+					os_free(qmi_read_trans_req_ptr);
+					qmi_read_trans_req_ptr = NULL;
+				}
+				if (qmi_read_trans_resp_ptr) {
+					os_free(qmi_read_trans_resp_ptr);
+					qmi_read_trans_resp_ptr = NULL;
+				}
+				return FALSE;
+			}
+
 			os_memset(imsi, 0, (2 * length));
 			for (src = 1, dst = 0;
 				(src < length) && (dst < (length * 2));
@@ -871,9 +884,14 @@ static void handle_qmi_eap_reply(
 	u8 *resp_data;
 	u32 length;
 
+	if (!eap_proxy) {
+		wpa_printf(MSG_ERROR, "eap_proxy: userdata is NULL");
+		return;
+	}
+
 	if (QMI_STATE_RESP_PENDING == eap_proxy->qmi_state) {
-		if (NULL == eap_proxy || QMI_EAP_SERVICE != serviceId ||
-				QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
+		if (QMI_EAP_SERVICE != serviceId ||
+		    QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
 			wpa_printf(MSG_ERROR, "Bad Param: serviceId=%d;"
 				 " rspId=%d\n", serviceId, rspId);
 			eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
@@ -1890,6 +1908,12 @@ int eap_proxy_get_imsi(struct eap_proxy_sm *eap_proxy, char *imsi_buf,
 #ifdef SIM_AKA_IDENTITY_IMSI
 	int mnc_len;
 	int sim_num = eap_proxy->user_selected_sim;
+
+	if (sim_num >= MAX_NO_OF_SIM_SUPPORTED || sim_num < 0) {
+		wpa_printf (MSG_ERROR, "eap_proxy: Invalid SIM selected by "
+			    "user = %d\n", sim_num+1);
+		return -1;
+	}
 
 	if (!wpa_qmi_read_card_status(sim_num)) {
 	wpa_printf(MSG_INFO, "eap_proxy: Card not ready");
