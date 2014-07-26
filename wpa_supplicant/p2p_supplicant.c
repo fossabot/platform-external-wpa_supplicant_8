@@ -83,6 +83,10 @@
 #define P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE 15
 #endif /* P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE */
 
+#ifndef P2P_CONCURRENT_SEARCH_DELAY
+#define P2P_CONCURRENT_SEARCH_DELAY 500
+#endif /* P2P_CONCURRENT_SEARCH_DELAY */
+
 #define P2P_MGMT_DEVICE_PREFIX		"p2p-dev-"
 
 enum p2p_group_removal_reason {
@@ -3311,13 +3315,6 @@ int wpas_p2p_add_p2pdev_interface(struct wpa_supplicant *wpa_s)
 }
 
 
-static int _wpas_p2p_in_progress(void *ctx)
-{
-	struct wpa_supplicant *wpa_s = ctx;
-	return wpas_p2p_in_progress(wpa_s);
-}
-
-
 /**
  * wpas_p2p_init - Initialize P2P module for %wpa_supplicant
  * @global: Pointer to global data from wpa_supplicant_init()
@@ -3383,7 +3380,6 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	p2p.get_noa = wpas_get_noa;
 	p2p.go_connected = wpas_go_connected;
 	p2p.is_concurrent_session_active = wpas_is_concurrent_session_active;
-	p2p.is_p2p_in_progress = _wpas_p2p_in_progress;
 
 	os_memcpy(wpa_s->global->p2p_dev_addr, wpa_s->own_addr, ETH_ALEN);
 	os_memcpy(p2p.dev_addr, wpa_s->global->p2p_dev_addr, ETH_ALEN);
@@ -5949,13 +5945,6 @@ int wpas_p2p_notif_pbc_overlap(struct wpa_supplicant *wpa_s)
 }
 
 
-void wpas_p2p_pbc_overlap_cb(void *eloop_ctx, void *timeout_ctx)
-{
-	struct wpa_supplicant *wpa_s = eloop_ctx;
-	wpas_p2p_notif_pbc_overlap(wpa_s);
-}
-
-
 void wpas_p2p_update_channel_list(struct wpa_supplicant *wpa_s)
 {
 	struct p2p_channels chan;
@@ -6284,8 +6273,8 @@ unsigned int wpas_p2p_search_delay(struct wpa_supplicant *wpa_s)
 	if (wpa_s->wpa_state > WPA_SCANNING) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Use %u ms search delay due to "
 			"concurrent operation",
-			wpa_s->conf->p2p_search_delay);
-		return wpa_s->conf->p2p_search_delay;
+			P2P_CONCURRENT_SEARCH_DELAY);
+		return P2P_CONCURRENT_SEARCH_DELAY;
 	}
 
 	if (!wpa_s->driver->get_radio_name)
@@ -6305,9 +6294,8 @@ unsigned int wpas_p2p_search_delay(struct wpa_supplicant *wpa_s)
 			wpa_dbg(wpa_s, MSG_DEBUG, "P2P: Use %u ms search "
 				"delay due to concurrent operation on "
 				"interface %s",
-				wpa_s->conf->p2p_search_delay,
-				ifs->ifname);
-			return wpa_s->conf->p2p_search_delay;
+				P2P_CONCURRENT_SEARCH_DELAY, ifs->ifname);
+			return P2P_CONCURRENT_SEARCH_DELAY;
 		}
 	}
 
