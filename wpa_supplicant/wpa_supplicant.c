@@ -1609,6 +1609,12 @@ void wpa_supplicant_associate(struct wpa_supplicant *wpa_s,
 			params.psk = ssid->psk;
 	}
 
+	if (wpa_s->conf->key_mgmt_offload &&
+		 (params.key_mgmt_suite == KEY_MGMT_PSK ||
+		  params.key_mgmt_suite == KEY_MGMT_FT_PSK))
+		if (ssid->psk_set)
+			params.psk = ssid->psk;
+
 	params.drop_unencrypted = use_crypt;
 
 #ifdef CONFIG_IEEE80211W

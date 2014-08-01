@@ -3195,6 +3195,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT(sched_scan_interval), 0 },
 	{ INT(tdls_external_control), 0},
 	{ INT(p2p_search_delay), 0},
+	{ INT(key_mgmt_offload), 0},
 };
 
 #undef FUNC
