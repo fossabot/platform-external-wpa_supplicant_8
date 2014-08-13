@@ -12,6 +12,7 @@
 #include "eloop.h"
 #include "common/ieee802_11_defs.h"
 #include "common/ieee802_11_common.h"
+#include "common/wpa_ctrl.h"
 #include "wps/wps_i.h"
 #include "p2p_i.h"
 #include "p2p.h"
@@ -2027,6 +2028,9 @@ struct wpabuf * p2p_build_probe_resp_ies(struct p2p_data *p2p)
 		extra = wpabuf_len(p2p->wfd_ie_probe_resp);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_PROBE_RESP_P2P])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_PROBE_RESP_P2P]);
+
 	buf = wpabuf_alloc(1000 + extra);
 	if (buf == NULL)
 		return NULL;
@@ -2042,6 +2046,10 @@ struct wpabuf * p2p_build_probe_resp_ies(struct p2p_data *p2p)
 	if (p2p->wfd_ie_probe_resp)
 		wpabuf_put_buf(buf, p2p->wfd_ie_probe_resp);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_PROBE_RESP_P2P])
+		wpabuf_put_buf(buf,
+			       p2p->vendor_elem[VENDOR_ELEM_PROBE_RESP_P2P]);
 
 	/* P2P IE */
 	len = p2p_buf_add_ie_hdr(buf);
@@ -2302,6 +2310,9 @@ int p2p_assoc_req_ie(struct p2p_data *p2p, const u8 *bssid, u8 *buf,
 		extra = wpabuf_len(p2p->wfd_ie_assoc_req);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_ASSOC_REQ])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_P2P_ASSOC_REQ]);
+
 	/*
 	 * (Re)Association Request - P2P IE
 	 * P2P Capability attribute (shall be present)
@@ -2316,6 +2327,10 @@ int p2p_assoc_req_ie(struct p2p_data *p2p, const u8 *bssid, u8 *buf,
 	if (p2p->wfd_ie_assoc_req)
 		wpabuf_put_buf(tmp, p2p->wfd_ie_assoc_req);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_ASSOC_REQ])
+		wpabuf_put_buf(tmp,
+			       p2p->vendor_elem[VENDOR_ELEM_P2P_ASSOC_REQ]);
 
 	peer = bssid ? p2p_get_device(p2p, bssid) : NULL;
 
@@ -2736,11 +2751,11 @@ void p2p_continue_find(struct p2p_data *p2p)
 		/* SD_FAIR_POLICY: We need to give chance to all devices in the device list
 		 * There may be a scenario, where a particular peer device have
 		 * not registered any query response. When we send a SD request to such device,
-		 * no response will be received. And if we continue to get probe responses from that device, 
-		 * and if that device happens to be on top in our device list, 
-		 * we will always continue to send SD requests always to that peer only. 
-		 * We will not be able to send SD requests to other devices in that case. 
-		 * This implementation keeps track of last serviced peer device. 
+		 * no response will be received. And if we continue to get probe responses from that device,
+		 * and if that device happens to be on top in our device list,
+		 * we will always continue to send SD requests always to that peer only.
+		 * We will not be able to send SD requests to other devices in that case.
+		 * This implementation keeps track of last serviced peer device.
 		 * And then takes the next one from the device list, in the next iteration.
 		 */
 		if (p2p->sd_dev_list && p2p->sd_dev_list != &p2p->devices) {
@@ -2945,6 +2960,10 @@ void p2p_scan_ie(struct p2p_data *p2p, struct wpabuf *ies, const u8 *dev_id)
 		wpabuf_put_buf(ies, p2p->wfd_ie_probe_req);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_PROBE_REQ_P2P])
+		wpabuf_put_buf(ies,
+			       p2p->vendor_elem[VENDOR_ELEM_PROBE_REQ_P2P]);
+
 	len = p2p_buf_add_ie_hdr(ies);
 	p2p_buf_add_capability(ies, p2p->dev_capab &
 			       ~P2P_DEV_CAPAB_CLIENT_DISCOVERABILITY, 0);
@@ -2970,6 +2989,10 @@ size_t p2p_scan_ie_buf_len(struct p2p_data *p2p)
 	if (p2p && p2p->wfd_ie_probe_req)
 		len += wpabuf_len(p2p->wfd_ie_probe_req);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p && p2p->vendor_elem &&
+	    p2p->vendor_elem[VENDOR_ELEM_PROBE_REQ_P2P])
+		len += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_PROBE_REQ_P2P]);
 
 	return len;
 }
@@ -4534,4 +4557,10 @@ void p2p_err(struct p2p_data *p2p, const char *fmt, ...)
 	buf[sizeof(buf) - 1] = '\0';
 	va_end(ap);
 	p2p->cfg->debug_print(p2p->cfg->cb_ctx, MSG_ERROR, buf);
+}
+
+
+void p2p_set_vendor_elems(struct p2p_data *p2p, struct wpabuf **vendor_elem)
+{
+	 p2p->vendor_elem = vendor_elem;
 }

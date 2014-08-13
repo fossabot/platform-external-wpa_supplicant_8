@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "common/ieee802_11_defs.h"
+#include "common/wpa_ctrl.h"
 #include "wps/wps_defs.h"
 #include "p2p_i.h"
 #include "p2p.h"
@@ -137,6 +138,9 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
 		extra = wpabuf_len(p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_REQ])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_REQ]);
+
 	buf = wpabuf_alloc(1000 + extra);
 	if (buf == NULL)
 		return NULL;
@@ -178,6 +182,9 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
 	if (p2p->wfd_ie_go_neg)
 		wpabuf_put_buf(buf, p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_REQ])
+		wpabuf_put_buf(buf, p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_REQ]);
 
 	return buf;
 }
@@ -253,6 +260,9 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
 		extra = wpabuf_len(p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_RESP])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_RESP]);
+
 	buf = wpabuf_alloc(1000 + extra);
 	if (buf == NULL)
 		return NULL;
@@ -316,6 +326,8 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
 		wpabuf_put_buf(buf, p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_RESP])
+		wpabuf_put_buf(buf, p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_RESP]);
 
 	return buf;
 }
@@ -786,6 +798,9 @@ static struct wpabuf * p2p_build_go_neg_conf(struct p2p_data *p2p,
 		extra = wpabuf_len(p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
 
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_CONF])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_CONF]);
+
 	buf = wpabuf_alloc(1000 + extra);
 	if (buf == NULL)
 		return NULL;
@@ -829,6 +844,9 @@ static struct wpabuf * p2p_build_go_neg_conf(struct p2p_data *p2p,
 	if (p2p->wfd_ie_go_neg)
 		wpabuf_put_buf(buf, p2p->wfd_ie_go_neg);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_CONF])
+		wpabuf_put_buf(buf, p2p->vendor_elem[VENDOR_ELEM_P2P_GO_NEG_CONF]);
 
 	return buf;
 }

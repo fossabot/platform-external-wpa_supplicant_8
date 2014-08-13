@@ -1873,4 +1873,6 @@ int p2p_set_disc_int(struct p2p_data *p2p, int min_disc_int, int max_disc_int,
  */
 const char * p2p_get_state_txt(struct p2p_data *p2p);
 
+void p2p_set_vendor_elems(struct p2p_data *p2p, struct wpabuf **vendor_elem);
+
 #endif /* P2P_H */

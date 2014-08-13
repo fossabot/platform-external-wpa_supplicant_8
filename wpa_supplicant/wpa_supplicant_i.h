@@ -12,6 +12,7 @@
 #include "utils/list.h"
 #include "common/defs.h"
 #include "common/sae.h"
+#include "common/wpa_ctrl.h"
 #include "config_ssid.h"
 
 extern const char *wpa_supplicant_version;
@@ -733,6 +734,8 @@ struct wpa_supplicant {
 #endif /* CONFIG_TESTING_GET_GTK */
 
 	unsigned int num_multichan_concurrent;
+
+	struct wpabuf *vendor_elem[NUM_VENDOR_ELEM_FRAMES];
 };
 
 
