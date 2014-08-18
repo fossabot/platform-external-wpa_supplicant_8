@@ -10,6 +10,7 @@
 
 #include "common.h"
 #include "common/ieee802_11_defs.h"
+#include "common/wpa_ctrl.h"
 #include "p2p_i.h"
 #include "p2p.h"
 
@@ -43,6 +44,9 @@ static struct wpabuf * p2p_build_invitation_req(struct p2p_data *p2p,
 	if (wfd_ie)
 		extra = wpabuf_len(wfd_ie);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_INV_REQ])
+		extra += wpabuf_len(p2p->vendor_elem[VENDOR_ELEM_P2P_INV_REQ]);
 
 	buf = wpabuf_alloc(1000 + extra);
 	if (buf == NULL)
@@ -84,6 +88,9 @@ static struct wpabuf * p2p_build_invitation_req(struct p2p_data *p2p,
 	if (wfd_ie)
 		wpabuf_put_buf(buf, wfd_ie);
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	if (p2p->vendor_elem && p2p->vendor_elem[VENDOR_ELEM_P2P_INV_REQ])
+		wpabuf_put_buf(buf, p2p->vendor_elem[VENDOR_ELEM_P2P_INV_REQ]);
 
 	return buf;
 }

@@ -379,6 +379,8 @@ void free_hw_features(struct wpa_supplicant *wpa_s)
 
 static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 {
+	int i;
+
 	bgscan_deinit(wpa_s);
 	autoscan_deinit(wpa_s);
 	scard_deinit(wpa_s->scard);
@@ -487,6 +489,11 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 
 	os_free(wpa_s->last_scan_res);
 	wpa_s->last_scan_res = NULL;
+
+	for (i = 0; i < NUM_VENDOR_ELEM_FRAMES; i++) {
+		wpabuf_free(wpa_s->vendor_elem[i]);
+		wpa_s->vendor_elem[i] = NULL;
+	}
 }
 
 

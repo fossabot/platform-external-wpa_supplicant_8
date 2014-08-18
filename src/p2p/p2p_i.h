@@ -488,6 +488,8 @@ struct p2p_data {
 	struct wpabuf *wfd_assoc_bssid;
 	struct wpabuf *wfd_coupled_sink_info;
 #endif /* CONFIG_WIFI_DISPLAY */
+
+	struct wpabuf **vendor_elem;
 };
 
 /**
