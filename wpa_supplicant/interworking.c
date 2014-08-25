@@ -1241,6 +1241,7 @@ int interworking_connect(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
 	u16 count, i;
 	char buf[100];
 	const u8 *ie;
+	const char *name;
 
 	if (wpa_s->conf->cred == NULL || bss == NULL)
 		return -1;
@@ -1404,11 +1405,12 @@ int interworking_connect(struct wpa_supplicant *wpa_s, struct wpa_bss *bss)
 		}
 		break;
 	case EAP_TYPE_PEAP:
-		os_snprintf(buf, sizeof(buf), "\"auth=%s\"",
-			    eap_get_name(EAP_VENDOR_IETF,
-					 eap->inner_method ?
-					 eap->inner_method :
-					 EAP_TYPE_MSCHAPV2));
+		name = eap_get_name(EAP_VENDOR_IETF,
+				    eap->inner_method ? eap->inner_method :
+				    EAP_TYPE_MSCHAPV2);
+		if (name == NULL)
+			goto fail;
+		os_snprintf(buf, sizeof(buf), "\"auth=%s\"", name);
 		if (wpa_config_set(ssid, "phase2", buf, 0) < 0)
 			goto fail;
 		break;
