@@ -2012,7 +2012,7 @@ static void wpa_driver_test_scan_cmd(struct wpa_driver_test_data *drv,
 	}
 #endif /* CONFIG_P2P */
 
-	if (!drv->ibss)
+	if (bss == NULL || !drv->ibss)
 		return;
 
 	pos = buf;
