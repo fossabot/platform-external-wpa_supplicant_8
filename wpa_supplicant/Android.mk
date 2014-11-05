@@ -1564,7 +1564,7 @@ endif
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-#include $(BUILD_EXECUTABLE)
+include $(BUILD_EXECUTABLE)
 
 ########################
 #
