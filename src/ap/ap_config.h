@@ -514,6 +514,8 @@ struct hostapd_bss_config {
 	u8 bss_load_test[5];
 	u8 bss_load_test_set;
 #endif /* CONFIG_TESTING_OPTIONS */
+
+	int vendor_vht;
 };
 
 
