@@ -27,7 +27,6 @@
 #define DEFAULT_ACCESS_NETWORK_TYPE 15
 #define DEFAULT_SCAN_CUR_FREQ 0
 #define DEFAULT_P2P_SEARCH_DELAY 500
-#define DEFAULT_KEY_MGMT_OFFLOAD 1
 
 #include "config_ssid.h"
 #include "wps/wps.h"
