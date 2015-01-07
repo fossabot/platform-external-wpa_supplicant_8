@@ -1023,6 +1023,8 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_AP_CSA				0x80000000
 /* Driver supports mesh */
 #define WPA_DRIVER_FLAGS_MESH			0x0000000100000000ULL
+/** Driver supports IBSS with HT datarates */
+#define WPA_DRIVER_FLAGS_HT_IBSS		0x0000001000000000ULL
 	u64 flags;
 
 	int max_scan_ssids;
