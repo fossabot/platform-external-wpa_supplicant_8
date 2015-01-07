@@ -3830,6 +3830,9 @@ static void wiphy_info_feature_flags(struct wiphy_info_data *info,
 
 	if (flags & NL80211_FEATURE_LOW_PRIORITY_SCAN)
 		info->have_low_prio_scan = 1;
+
+	if (flags & NL80211_FEATURE_HT_IBSS)
+		capa->flags |= WPA_DRIVER_FLAGS_HT_IBSS;
 }
 
 
