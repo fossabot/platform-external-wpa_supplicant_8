@@ -4718,7 +4718,7 @@ static int wpa_driver_nl80211_scan(struct i802_bss *bss,
 				goto nla_put_failure;
 
 			if (wpa_driver_nl80211_scan(bss, params)) {
-				wpa_driver_nl80211_set_mode(bss, drv->nlmode);
+				wpa_driver_nl80211_set_mode(bss, old_mode);
 				goto nla_put_failure;
 			}
 
