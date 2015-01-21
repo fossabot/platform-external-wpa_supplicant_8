@@ -1227,6 +1227,13 @@ static void send_assoc_resp(struct hostapd_data *hapd, struct sta_info *sta,
 	if (sta->qos_map_enabled)
 		p = hostapd_eid_qos_map_set(hapd, p);
 
+#ifdef CONFIG_FST
+	if (hapd->iface->fst_ies) {
+		os_memcpy(p, wpabuf_head(hapd->iface->fst_ies),
+			  wpabuf_len(hapd->iface->fst_ies));
+		p += wpabuf_len(hapd->iface->fst_ies);
+	}
+#endif /* CONFIG_FST */
 	if (sta->flags & WLAN_STA_WMM)
 		p = hostapd_eid_wmm(hapd, p);
 
