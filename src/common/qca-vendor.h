@@ -1,6 +1,6 @@
 /*
  * Qualcomm Atheros OUI and vendor specific assignments
- * Copyright (c) 2014, Qualcomm Atheros, Inc.
+ * Copyright (c) 2014-2015, Qualcomm Atheros, Inc.
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -43,6 +43,9 @@ enum qca_radiotap_vendor_ids {
  * @QCA_NL80211_VENDOR_SUBCMD_NAN: NAN command/event which is used to pass
  *	NAN Request/Response and NAN Indication messages. These messages are
  *	interpreted between the framework and the firmware component.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_CAC_STARTED: Event used by driver, which
+ *	supports DFS offloading, to indicate a channel availability check start.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -53,6 +56,7 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_NAN =  12,
 	QCA_NL80211_VENDOR_SUBMCD_STATS_EXT = 13,
 	/* 14..33 - reserved for QCA */
+	QCA_NL80211_VENDOR_SUBCMD_CAC_STARTED = 56,
 };
 
 
