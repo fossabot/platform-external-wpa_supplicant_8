@@ -622,6 +622,10 @@ const char * eap_proxy_get_port(void)
 		wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
 		eap_proxy_port = QMI_PORT_RMNET_MHI_0;
 	}
+	else if(!os_strncmp(EAP_PROXY_TARGET_FUSION4_5_PCIE, args, 14)) {
+		wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
+		eap_proxy_port = QMI_PORT_RMNET_MHI_0;
+	}
 #ifdef CONFIG_EAP_PROXY_MSM8994_TARGET
 	if ((!os_strncmp(EAP_PROXY_BASEBAND_VALUE_MSM, args, 3)) ||
 	    (!os_strncmp(EAP_PROXY_BASEBAND_VALUE_APQ, args, 3)) ||
