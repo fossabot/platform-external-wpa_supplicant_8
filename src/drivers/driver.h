@@ -3468,7 +3468,7 @@ enum wpa_event_type {
 	EVENT_CONNECT_FAILED_REASON,
 
 	/**
-	 * EVENT_RADAR_DETECTED - Notify of radar detection
+	 * EVENT_DFS_RADAR_DETECTED - Notify of radar detection
 	 *
 	 * A radar has been detected on the supplied frequency, hostapd should
 	 * react accordingly (e.g., change channel).
@@ -3476,14 +3476,14 @@ enum wpa_event_type {
 	EVENT_DFS_RADAR_DETECTED,
 
 	/**
-	 * EVENT_CAC_FINISHED - Notify that channel availability check has been completed
+	 * EVENT_DFS_CAC_FINISHED - Notify that channel availability check has been completed
 	 *
 	 * After a successful CAC, the channel can be marked clear and used.
 	 */
 	EVENT_DFS_CAC_FINISHED,
 
 	/**
-	 * EVENT_CAC_ABORTED - Notify that channel availability check has been aborted
+	 * EVENT_DFS_CAC_ABORTED - Notify that channel availability check has been aborted
 	 *
 	 * The CAC was not successful, and the channel remains in the previous
 	 * state. This may happen due to a radar beeing detected or other
@@ -3492,7 +3492,7 @@ enum wpa_event_type {
 	EVENT_DFS_CAC_ABORTED,
 
 	/**
-	 * EVENT_DFS_CAC_NOP_FINISHED - Notify that non-occupancy period is over
+	 * EVENT_DFS_NOP_FINISHED - Notify that non-occupancy period is over
 	 *
 	 * The channel which was previously unavailable is now available again.
 	 */
@@ -3535,7 +3535,16 @@ enum wpa_event_type {
 	 * Indicates a pair of primary and secondary channels chosen by ACS
 	 * in device.
 	 */
-	EVENT_ACS_CHANNEL_SELECTED
+	EVENT_ACS_CHANNEL_SELECTED,
+
+	/**
+	 * EVENT_DFS_CAC_STARTED - Notify that channel availability check has
+	 * been started.
+	 *
+	 * This event indicates that channel availability check has been started
+	 * on a DFS frequency by a driver that supports DFS Offload.
+	 */
+	EVENT_DFS_CAC_STARTED,
 };
 
 
