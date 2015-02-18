@@ -161,7 +161,9 @@
 #define WLAN_STATUS_ANTI_CLOGGING_TOKEN_REQ 76
 #define WLAN_STATUS_FINITE_CYCLIC_GROUP_NOT_SUPPORTED 77
 #define WLAN_STATUS_TRANSMISSION_FAILURE 79
+#define WLAN_STATUS_PENDING_ADMITTING_FST_SESSION 86
 #define WLAN_STATUS_QUERY_RESP_OUTSTANDING 95
+#define WLAN_STATUS_DENIED_WITH_SUGGESTED_BAND_AND_CHANNEL 99
 #define WLAN_STATUS_ASSOC_DENIED_NO_VHT 104
 
 /* Reason codes (IEEE 802.11-2007, 7.3.1.7, Table 7-22) */
@@ -251,6 +253,8 @@
 #define WLAN_EID_ROAMING_CONSORTIUM 111
 #define WLAN_EID_EXT_CAPAB 127
 #define WLAN_EID_CCKM 156
+#define WLAN_EID_MULTI_BAND 158
+#define WLAN_EID_SESSION_TRANSITION 164
 #define WLAN_EID_VHT_CAP 191
 #define WLAN_EID_VHT_OPERATION 192
 #define WLAN_EID_VHT_EXTENDED_BSS_LOAD 193
@@ -278,6 +282,7 @@
 #define WLAN_ACTION_UNPROTECTED_WNM 11
 #define WLAN_ACTION_TDLS 12
 #define WLAN_ACTION_WMM 17 /* WMM Specification 1.1 */
+#define WLAN_ACTION_FST 18
 #define WLAN_ACTION_VENDOR_SPECIFIC 127
 
 /* Public action codes */
@@ -577,6 +582,10 @@ struct ieee80211_mgmt {
 					 * Entries (optional) */
 					u8 variable[0];
 				} STRUCT_PACKED bss_tm_query;
+				struct {
+					u8 action;
+					u8 variable[];
+				} STRUCT_PACKED fst_action;
 			} u;
 		} STRUCT_PACKED action;
 	} u;
@@ -1246,5 +1255,59 @@ enum wnm_sleep_mode_subelement_id {
 /* Channel Switch modes (802.11h) */
 #define CHAN_SWITCH_MODE_ALLOW_TX	0
 #define CHAN_SWITCH_MODE_BLOCK_TX	1
+
+/* IEEE Std 802.11ad-2012 - Multi-band element */
+struct multi_band_ie {
+	u8 eid; /* WLAN_EID_MULTI_BAND */
+	u8 len;
+	u8 mb_ctrl;
+	u8 band_id;
+	u8 op_class;
+	u8 chan;
+	u8 bssid[ETH_ALEN];
+	le16 beacon_int;
+	u8 tsf_offs[8];
+	u8 mb_connection_capability;
+	u8 fst_session_tmout;
+	/* Optional:
+	 *   STA MAC Address
+	 *   Pairwise Cipher Suite Count
+	 *   Pairwise Cipher Suite List
+	 */
+	u8 variable[0];
+} STRUCT_PACKED;
+
+enum mb_ctrl_sta_role {
+	MB_STA_ROLE_AP = 0,
+	MB_STA_ROLE_TDLS_STA = 1,
+	MB_STA_ROLE_IBSS_STA = 2,
+	MB_STA_ROLE_PCP = 3,
+	MB_STA_ROLE_NON_PCP_NON_AP = 4
+};
+
+#define MB_CTRL_STA_MAC_PRESENT ((u8) (BIT(3)))
+#define MB_CTRL_PAIRWISE_CIPHER_SUITE_PRESENT ((u8) (BIT(4)))
+
+enum mb_band_id {
+	MB_BAND_ID_WIFI_2_4GHZ = 2, /* 2.4 GHz */
+	MB_BAND_ID_WIFI_5GHZ = 4, /* 4.9 and 5 GHz */
+	MB_BAND_ID_WIFI_60GHZ = 5, /* 60 GHz */
+};
+
+#define MB_CONNECTION_CAPABILITY_AP ((u8) (BIT(0)))
+#define MB_CONNECTION_CAPABILITY_PCP ((u8) (BIT(1)))
+#define MB_CONNECTION_CAPABILITY_DLS ((u8) (BIT(2)))
+#define MB_CONNECTION_CAPABILITY_TDLS ((u8) (BIT(3)))
+#define MB_CONNECTION_CAPABILITY_IBSS ((u8) (BIT(4)))
+
+/* IEEE Std 802.11ad-2014 - FST Action field */
+enum fst_action {
+	FST_ACTION_SETUP_REQUEST = 0,
+	FST_ACTION_SETUP_RESPONSE = 1,
+	FST_ACTION_TEAR_DOWN = 2,
+	FST_ACTION_ACK_REQUEST = 3,
+	FST_ACTION_ACK_RESPONSE = 4,
+	FST_ACTION_ON_CHANNEL_TUNNEL = 5,
+};
 
 #endif /* IEEE802_11_DEFS_H */
