@@ -2818,17 +2818,19 @@ static void p2p_sd_cb(struct p2p_data *p2p, int success)
 		if (p2p->sd_peer)
 			p2p->cfg->send_action_done(p2p->cfg->cb_ctx);
 		p2p->sd_peer = NULL;
-		p2p_continue_find(p2p);
+		if (p2p->state != P2P_IDLE)
+			p2p_continue_find(p2p);
 		return;
 	}
 
 	if (p2p->sd_peer == NULL) {
 		p2p_dbg(p2p, "No SD peer entry known");
-		p2p_continue_find(p2p);
+		if (p2p->state != P2P_IDLE)
+			p2p_continue_find(p2p);
 		return;
 	}
 
-	if (p2p->sd_query->for_all_peers) {
+	if (p2p->sd_query && p2p->sd_query->for_all_peers) {
 		/* Update the pending broadcast SD query count for this device
 		 */
 		p2p->sd_peer->sd_pending_bcast_queries--;
