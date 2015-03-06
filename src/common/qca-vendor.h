@@ -44,8 +44,25 @@ enum qca_radiotap_vendor_ids {
  *	NAN Request/Response and NAN Indication messages. These messages are
  *	interpreted between the framework and the firmware component.
  *
- * @QCA_NL80211_VENDOR_SUBCMD_CAC_STARTED: Event used by driver, which
- *	supports DFS offloading, to indicate a channel availability check start.
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_STARTED: Event used by driver,
+ *	which supports DFS offloading, to indicate a channel availability check
+ *	start.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_FINISHED: Event used by driver,
+ *	which supports DFS offloading, to indicate a channel availability check
+ *	completion.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_ABORTED: Event used by driver,
+ *	which supports DFS offloading, to indicate that the channel availability
+ *	check aborted, no change to the channel status.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_NOP_FINISHED: Event used by
+ *	driver, which supports DFS offloading, to indicate that the
+ *	Non-Occupancy Period for this channel is over, channel becomes usable.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_RADAR_DETECTED: Event used by driver,
+ *	which supports DFS offloading, to indicate a radar pattern has been
+ *	detected. The channel is now unusable.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -56,7 +73,11 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_NAN =  12,
 	QCA_NL80211_VENDOR_SUBMCD_STATS_EXT = 13,
 	/* 14..33 - reserved for QCA */
-	QCA_NL80211_VENDOR_SUBCMD_CAC_STARTED = 56,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_STARTED = 56,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_FINISHED = 57,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_ABORTED = 58,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_NOP_FINISHED = 59,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_RADAR_DETECTED = 60,
 };
 
 
