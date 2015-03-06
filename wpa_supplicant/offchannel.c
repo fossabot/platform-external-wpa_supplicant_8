@@ -190,11 +190,13 @@ void offchannel_send_action_tx_status(
 			data, data_len, result);
 	}
 
+#ifdef CONFIG_P2P
 	if (wpa_s->p2p_long_listen > 0) {
 		/* Continue the listen */
 		wpa_printf(MSG_DEBUG, "P2P: Continuing long Listen state");
 		wpas_p2p_listen_start(wpa_s, wpa_s->p2p_long_listen);
 	}
+#endif /* CONFIG_P2P */
 }
 
 
