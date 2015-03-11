@@ -2931,10 +2931,8 @@ static void qca_nl80211_acs_select_ch(struct wpa_driver_nl80211_data *drv,
 		   "nl80211: ACS channel selection vendor event received");
 
 	if (nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ACS_MAX,
-		      (struct nlattr *) data, len, NULL))
-		return;
-
-	if (!tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL] ||
+		      (struct nlattr *) data, len, NULL) ||
+	    !tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL] ||
 	    !tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL])
 		return;
 
@@ -2943,6 +2941,25 @@ static void qca_nl80211_acs_select_ch(struct wpa_driver_nl80211_data *drv,
 		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_PRIMARY_CHANNEL]);
 	event.acs_selected_channels.sec_channel =
 		nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_SECONDARY_CHANNEL]);
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL])
+		event.acs_selected_channels.vht_seg0_center_ch =
+			nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL]);
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG0_CENTER_CHANNEL])
+		event.acs_selected_channels.vht_seg1_center_ch =
+			nla_get_u8(tb[QCA_WLAN_VENDOR_ATTR_ACS_VHT_SEG1_CENTER_CHANNEL]);
+	if (tb[QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH])
+		event.acs_selected_channels.ch_width =
+			nla_get_u16(tb[QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH]);
+
+	wpa_printf(MSG_INFO,
+		   "nl80211: ACS Results: PCH: %d SCH: %d BW: %d VHT0: %d VHT1: %d",
+		   event.acs_selected_channels.pri_channel,
+		   event.acs_selected_channels.sec_channel,
+		   event.acs_selected_channels.ch_width,
+		   event.acs_selected_channels.vht_seg0_center_ch,
+		   event.acs_selected_channels.vht_seg1_center_ch);
+
+	/* Ignore ACS channel list check for backwards compatibility */
 
 	wpa_supplicant_event(drv->ctx, EVENT_ACS_CHANNEL_SELECTED, &event);
 }
@@ -12686,20 +12703,33 @@ static int wpa_driver_do_acs(void *priv, struct drv_acs_params *params)
 
 	nl80211_cmd(drv, msg, 0, NL80211_CMD_VENDOR);
 
-	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
-	NLA_PUT_U32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA);
-	NLA_PUT_U32(msg, NL80211_ATTR_VENDOR_SUBCMD,
-		    QCA_NL80211_VENDOR_SUBCMD_DO_ACS);
 
-	data = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA);
-	if (!data)
-		goto nla_put_failure;
-	NLA_PUT_U8(msg, QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE, mode);
-	if (params->ht_enabled)
-		NLA_PUT_FLAG(msg, QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED);
-	if (params->ht40_enabled)
-		NLA_PUT_FLAG(msg, QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED);
+	if (nla_put_u32(msg, NL80211_ATTR_IFINDEX, drv->ifindex) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_ID, OUI_QCA) ||
+	    nla_put_u32(msg, NL80211_ATTR_VENDOR_SUBCMD,
+			QCA_NL80211_VENDOR_SUBCMD_DO_ACS) ||
+	    !(data = nla_nest_start(msg, NL80211_ATTR_VENDOR_DATA)) ||
+	    nla_put_u8(msg, QCA_WLAN_VENDOR_ATTR_ACS_HW_MODE, mode) ||
+	    (params->ht_enabled &&
+	     nla_put_flag(msg, QCA_WLAN_VENDOR_ATTR_ACS_HT_ENABLED)) ||
+	    (params->ht40_enabled &&
+	     nla_put_flag(msg, QCA_WLAN_VENDOR_ATTR_ACS_HT40_ENABLED)) ||
+	    (params->vht_enabled &&
+	     nla_put_flag(msg, QCA_WLAN_VENDOR_ATTR_ACS_VHT_ENABLED)) ||
+	    nla_put_u16(msg, QCA_WLAN_VENDOR_ATTR_ACS_CHWIDTH,
+			params->ch_width) ||
+	    (params->ch_list_len &&
+	     nla_put(msg, QCA_WLAN_VENDOR_ATTR_ACS_CH_LIST, params->ch_list_len,
+		     params->ch_list))) {
+		nlmsg_free(msg);
+		return -ENOBUFS;
+	}
 	nla_nest_end(msg, data);
+
+	wpa_printf(MSG_DEBUG,
+		   "nl80211: ACS Params: HW_MODE: %d HT: %d HT40: %d VHT: %d BW: %d CH_LIST_LEN: %u",
+		   params->hw_mode, params->ht_enabled, params->ht40_enabled,
+		   params->vht_enabled, params->ch_width, params->ch_list_len);
 
 	ret = send_and_recv_msgs(drv, msg, NULL, NULL);
 	msg = NULL;
