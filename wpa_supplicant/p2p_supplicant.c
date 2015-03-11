@@ -4535,13 +4535,28 @@ static int wpas_p2p_init_go_params(struct wpa_supplicant *wpa_s,
 			if (!wpas_p2p_disallowed_freq(wpa_s->global,
 						      params->freq) &&
 			    freq_included(channels, params->freq))
-				break;
+				goto out;
 		}
-		if (chan == 11) {
-			wpa_printf(MSG_DEBUG, "P2P: No 2.4 GHz channel "
-				   "allowed");
-			return -1;
+		/* try all channels in operating class 115 */
+		for (chan = 0; chan < 4; chan++) {
+			params->freq = 5180 + chan * 20;
+			if (!wpas_p2p_disallowed_freq(wpa_s->global, params->freq) &&
+			    freq_included(channels, params->freq) &&
+			    p2p_supported_freq(wpa_s->global->p2p, params->freq))
+				goto out;
 		}
+
+		/* try all channels in operating class 124 */
+		for (chan = 0; chan < 4; chan++) {
+			params->freq = 5745 + chan * 20;
+			if (!wpas_p2p_disallowed_freq(wpa_s->global, params->freq) &&
+			    freq_included(channels, params->freq) &&
+			    p2p_supported_freq(wpa_s->global->p2p, params->freq))
+				goto out;
+		}
+		wpa_printf(MSG_DEBUG, "P2P: No 2.4 or 5 GHz channel allowed");
+		return -1;
+out:
 		wpa_printf(MSG_DEBUG, "P2P: Set GO freq %d MHz (no preference "
 			   "known)", params->freq);
 	}
