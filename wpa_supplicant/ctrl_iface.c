@@ -6064,6 +6064,15 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 	wpa_s->manual_scan_only_new = 0;
 	wpa_s->scan_id_count = 0;
 
+#ifdef CONFIG_INTERWORKING
+	if (wpa_s->fetch_anqp_in_progress || wpa_s->network_select) {
+		wpa_printf(MSG_DEBUG,
+			   "Interworking select in progress - reject new scan");
+		*reply_len = os_snprintf(reply, reply_size, "FAIL-BUSY\n");
+		return;
+	}
+#endif /* CONFIG_INTERWORKING */
+
 	if (params) {
 		if (os_strncasecmp(params, "TYPE=ONLY", 9) == 0)
 			wpa_s->scan_res_handler = scan_only_handler;
