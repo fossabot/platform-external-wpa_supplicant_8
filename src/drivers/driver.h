@@ -411,6 +411,25 @@ enum wps_mode {
 			  */
 };
 
+struct hostapd_freq_params {
+	int mode;
+	int freq;
+	int channel;
+	/* for HT */
+	int ht_enabled;
+	int sec_channel_offset; /* 0 = HT40 disabled, -1 = HT40 enabled,
+				 * secondary channel below primary, 1 = HT40
+				 * enabled, secondary channel above primary */
+
+	/* for VHT */
+	int vht_enabled;
+
+	/* valid for both HT and VHT, center_freq2 is non-zero
+	 * only for bandwidth 80 and an 80+80 channel */
+	int center_freq1, center_freq2;
+	int bandwidth;
+};
+
 /**
  * struct wpa_driver_associate_params - Association parameters
  * Data for struct wpa_driver_ops::associate().
@@ -443,11 +462,9 @@ struct wpa_driver_associate_params {
 	size_t ssid_len;
 
 	/**
-	 * freq - Frequency of the channel the selected AP is using
-	 * Frequency that the selected AP is using (in MHz as
-	 * reported in the scan results)
+	 * freq - channel parameters
 	 */
-	int freq;
+	struct hostapd_freq_params freq;
 
 	/**
 	 * freq_hint - Frequency of the channel the proposed AP is using
@@ -682,14 +699,6 @@ struct wpa_driver_associate_params {
 	const struct ieee80211_vht_capabilities *vhtcaps;
 	const struct ieee80211_vht_capabilities *vhtcaps_mask;
 #endif /* CONFIG_VHT_OVERRIDES */
-
-	/**
-	 * req_key_mgmt_offload - Request key managment offload for connection
-	 *
-	 * Request key managment offload for this connection if the device
-	 * supports it.
-	 */
-	int req_key_mgmt_offload;
 };
 
 enum hide_ssid {
@@ -1051,29 +1060,6 @@ struct wpa_driver_capa {
 	unsigned int num_multichan_concurrent;
 
 	/**
-	 * Supported types of device key management offload
-	 */
-/* WPA/WPA2 PSK key management */
-#define WPA_DRIVER_KEY_MGMT_OFFLOAD_SUPPORT_PSK		0x00000001
-/* 802.11r (FT) PSK key management */
-#define WPA_DRIVER_KEY_MGMT_OFFLOAD_SUPPORT_FT_PSK	0x00000002
-/* Key management on already established PMKSA */
-#define WPA_DRIVER_KEY_MGMT_OFFLOAD_SUPPORT_PMKSA	0x00000004
-/* 802.11r (FT) 802.1X key management */
-#define WPA_DRIVER_KEY_MGMT_OFFLOAD_SUPPORT_FT_802_1X	0x00000008
-	unsigned int key_mgmt_offload_support;
-
-	/**
-	 * Supported types of device key derivation used as
-	 * part of key management offload
-	 */
-/* IGTK key derivation */
-#define WPA_DRIVER_KEY_DERIVE_OFFLOAD_SUPPORT_IGTK	0x00000001
-/* SHA-256 key derivation */
-#define WPA_DRIVER_KEY_DERIVE_OFFLOAD_SUPPORT_SHA256	0x00000002
-	unsigned int key_derive_offload_support;
-
-	/**
 	 * extended_capa - extended capabilities in driver/device
 	 *
 	 * Must be allocated and freed by driver and the pointers must be
@@ -1120,25 +1106,6 @@ struct hostapd_sta_add_params {
 	size_t supp_channels_len;
 	const u8 *supp_oper_classes;
 	size_t supp_oper_classes_len;
-};
-
-struct hostapd_freq_params {
-	int mode;
-	int freq;
-	int channel;
-	/* for HT */
-	int ht_enabled;
-	int sec_channel_offset; /* 0 = HT40 disabled, -1 = HT40 enabled,
-				 * secondary channel below primary, 1 = HT40
-				 * enabled, secondary channel above primary */
-
-	/* for VHT */
-	int vht_enabled;
-
-	/* valid for both HT and VHT, center_freq2 is non-zero
-	 * only for bandwidth 80 and an 80+80 channel */
-	int center_freq1, center_freq2;
-	int bandwidth;
 };
 
 struct mac_address {
@@ -2534,6 +2501,7 @@ struct wpa_driver_ops {
 	 * @dialog_token: Dialog Token to use in the message (if needed)
 	 * @status_code: Status Code or Reason Code to use (if needed)
 	 * @peer_capab: TDLS peer capability (TDLS_PEER_* bitfield)
+	 * @initiator: Is the current end the TDLS link initiator
 	 * @buf: TDLS IEs to add to the message
 	 * @len: Length of buf in octets
 	 * Returns: 0 on success, negative (<0) on failure
@@ -2543,7 +2511,7 @@ struct wpa_driver_ops {
 	 */
 	int (*send_tdls_mgmt)(void *priv, const u8 *dst, u8 action_code,
 			      u8 dialog_token, u16 status_code, u32 peer_capab,
-			      const u8 *buf, size_t len);
+			      int initiator, const u8 *buf, size_t len);
 
 	/**
 	 * tdls_oper - Ask the driver to perform high-level TDLS operations
@@ -2835,6 +2803,30 @@ struct wpa_driver_ops {
 	 */
 	int (*status)(void *priv, char *buf, size_t buflen);
 
+	/**
+	 * roaming - Set roaming policy for driver-based BSS selection
+	 * @priv: Private driver interface data
+	 * @allowed: Whether roaming within ESS is allowed
+	 * @bssid: Forced BSSID if roaming is disabled or %NULL if not set
+	 * Returns: Length of written status information or -1 on failure
+	 *
+	 * This optional callback can be used to update roaming policy from the
+	 * associate() command (bssid being set there indicates that the driver
+	 * should not roam before getting this roaming() call to allow roaming.
+	 * If the driver does not indicate WPA_DRIVER_FLAGS_BSS_SELECTION
+	 * capability, roaming policy is handled within wpa_supplicant and there
+	 * is no need to implement or react to this callback.
+	 */
+	int (*roaming)(void *priv, int allowed, const u8 *bssid);
+
+	/**
+	 * set_mac_addr - Set MAC address
+	 * @priv: Private driver interface data
+	 * @addr: MAC address to use or %NULL for setting back to permanent
+	 * Returns: 0 on success, -1 on failure
+	 */
+	int (*set_mac_addr)(void *priv, const u8 *addr);
+
 #ifdef CONFIG_MACSEC
 	int (*macsec_init)(void *priv, struct macsec_init_params *params);
 
@@ -3031,19 +3023,6 @@ struct wpa_driver_ops {
 	 */
 	int (*disable_transmit_sa)(void *priv, u32 channel, u8 an);
 #endif /* CONFIG_MACSEC */
-
-	/**
-	 * key_mgmt_set_pmk - Set PMK for key management offload
-	 * @priv: Private driver interface data
-	 * @pmk: PMK to send to device
-	 * @pmk_len: length of PMK
-	 * Returns: error code
-	 *
-	 * Used to pass the PMK to the device for key management offload.
-	 * This will be used in the case of key management offload on an
-	 * already established PMKSA.
-	 */
-	int (*key_mgmt_set_pmk)(void *priv, const u8 *pmk, size_t pmk_len);
 };
 
 
@@ -3519,20 +3498,7 @@ enum wpa_event_type {
 	 * to reduce issues due to interference or internal co-existence
 	 * information in the driver.
 	 */
-	EVENT_AVOID_FREQUENCIES,
-
-	/**
-	 * EVENT_AUTHORIZATION - Device offloaded key management
-	 *
-	 *  Indicates that the device offloaded the establishment of
-	 *  temporal keys for an RSN connection.  This is used as part
-	 *  of key managment offload, where a device operating as a
-	 *  station is capable of doing the exchange necessary to establish
-	 *  temporal keys during initial RSN connection or after roaming.  This
-	 *  event might also be sent after the device handles a PTK rekeying
-	 *  operation.
-	 */
-	EVENT_AUTHORIZATION
+	EVENT_AVOID_FREQUENCIES
 };
 
 
@@ -4171,26 +4137,6 @@ union wpa_event_data {
 	 * This is used as the data with EVENT_AVOID_FREQUENCIES.
 	 */
 	struct wpa_freq_range_list freq_range;
-
-	/**
-	 * authorization_info - key management offload information
-	 *
-	 * This is the information that is passed from the device
-	 * when an authorization event is signaled which indicates
-	 * that the device offloaded key management.
-	 * @authorized: Status of key management offload, type
-	 *	 nl80211_authorization_status
-	 * @key_replay_ctr: Key replay counter value last used
-	 *	in a valid EAPOL-Key frame
-	 * @ptk_kck: the derived PTK KCK
-	 * @ptk_kek: the derived PTK KEK
-	 */
-	struct authorization_info {
-		u8 authorized;
-		u8 *key_replay_ctr;
-		u8 *ptk_kck;
-		u8 *ptk_kek;
-	} authorization_info;
 };
 
 /**
@@ -4248,6 +4194,9 @@ void wpa_scan_results_free(struct wpa_scan_results *res);
 
 /* Convert wpa_event_type to a string for logging */
 const char * event_to_string(enum wpa_event_type event);
+
+/* Convert chan_width to a string for logging and control interfaces */
+const char * channel_width_to_string(enum chan_width width);
 
 /* NULL terminated array of linked in driver wrappers */
 extern struct wpa_driver_ops *wpa_drivers[];

@@ -27,7 +27,7 @@
 #define DEFAULT_ACCESS_NETWORK_TYPE 15
 #define DEFAULT_SCAN_CUR_FREQ 0
 #define DEFAULT_P2P_SEARCH_DELAY 500
-#define DEFAULT_KEY_MGMT_OFFLOAD 1
+#define DEFAULT_RAND_ADDR_LIFETIME 60
 
 #include "config_ssid.h"
 #include "wps/wps.h"
@@ -1054,15 +1054,31 @@ struct wpa_config {
 	unsigned int p2p_search_delay;
 
 	/**
-	 * key_mgmt_offload - Use key managment offload
+	 * mac_addr - MAC address policy default
 	 *
-	 * Key managment offload should be used if the device supports it.
-	 * Key managment offload is the capability of a device operating as
-	 * a station to do the exchange necessary to establish temporal keys
-	 * during initial RSN connection, after roaming, or during a PTK
-	 * rekeying operation.
+	 * 0 = use permanent MAC address
+	 * 1 = use random MAC address for each ESS connection
+	 * 2 = like 1, but maintain OUI (with local admin bit set)
+	 *
+	 * By default, permanent MAC address is used unless policy is changed by
+	 * the per-network mac_addr parameter. Global mac_addr=1 can be used to
+	 * change this default behavior.
 	 */
-	int key_mgmt_offload;
+	int mac_addr;
+
+	/**
+	 * rand_addr_lifetime - Lifetime of random MAC address in seconds
+	 */
+	unsigned int rand_addr_lifetime;
+
+	/**
+	 * preassoc_mac_addr - Pre-association MAC address policy
+	 *
+	 * 0 = use permanent MAC address
+	 * 1 = use random MAC address
+	 * 2 = like 1, but maintain OUI (with local admin bit set)
+	 */
+	int preassoc_mac_addr;
 };
 
 
