@@ -3763,7 +3763,8 @@ union wpa_event_data {
 		u8 peer[ETH_ALEN];
 		enum {
 			TDLS_REQUEST_SETUP,
-			TDLS_REQUEST_TEARDOWN
+			TDLS_REQUEST_TEARDOWN,
+			TDLS_REQUEST_DISCOVER,
 		} oper;
 		u16 reason_code; /* for teardown */
 	} tdls;
