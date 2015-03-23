@@ -582,7 +582,7 @@ static int freq_allowed(int *freqs, int freq)
 }
 
 
-static int ht_supported(const struct hostapd_hw_modes *mode)
+int ht_supported(const struct hostapd_hw_modes *mode)
 {
 	if (!(mode->flags & HOSTAPD_MODE_FLAG_HT_INFO_KNOWN)) {
 		/*
@@ -600,7 +600,7 @@ static int ht_supported(const struct hostapd_hw_modes *mode)
 }
 
 
-static int vht_supported(const struct hostapd_hw_modes *mode)
+int vht_supported(const struct hostapd_hw_modes *mode)
 {
 	if (!(mode->flags & HOSTAPD_MODE_FLAG_VHT_INFO_KNOWN)) {
 		/*
@@ -3004,15 +3004,17 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			wpa_s->own_scan_running = 1;
 			if (wpa_s->last_scan_req == MANUAL_SCAN_REQ &&
 			    wpa_s->manual_scan_use_id) {
-				wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED "id=%u",
-					wpa_s->manual_scan_id);
+				wpa_msg_ctrl(wpa_s, MSG_INFO,
+					     WPA_EVENT_SCAN_STARTED "id=%u",
+					     wpa_s->manual_scan_id);
 			} else {
-				wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED);
+				wpa_msg_ctrl(wpa_s, MSG_INFO,
+					     WPA_EVENT_SCAN_STARTED);
 			}
 		} else {
 			wpa_dbg(wpa_s, MSG_DEBUG, "External program started a scan");
 			wpa_s->external_scan_running = 1;
-			wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED);
+			wpa_msg_ctrl(wpa_s, MSG_INFO, WPA_EVENT_SCAN_STARTED);
 		}
 		break;
 	case EVENT_SCAN_RESULTS:
@@ -3477,23 +3479,6 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			data->connect_failed_reason.code);
 #endif /* CONFIG_AP */
 		break;
-	case EVENT_AUTHORIZATION:
-		if (data->authorization_info.authorized) {
-			wpa_dbg(wpa_s, MSG_DEBUG,
-				  "Connection authorized by device, previous state %d",
-				  wpa_s->wpa_state);
-			if (WPA_ASSOCIATED == wpa_s->wpa_state) {
-				wpa_supplicant_cancel_auth_timeout(wpa_s);
-				wpa_supplicant_set_state(wpa_s, WPA_COMPLETED);
-				eapol_sm_notify_portValid(wpa_s->eapol, TRUE);
-				eapol_sm_notify_eap_success(wpa_s->eapol, TRUE);
-			}
-			wpa_sm_set_rx_replay_ctr(wpa_s->wpa,
-				  data->authorization_info.key_replay_ctr);
-			wpa_sm_set_ptk_kck_kek(wpa_s->wpa,
-				  data->authorization_info.ptk_kck,
-				  data->authorization_info.ptk_kek);
-		}
 	default:
 		wpa_msg(wpa_s, MSG_INFO, "Unknown event %d", event);
 		break;
