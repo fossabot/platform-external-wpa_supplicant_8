@@ -3186,7 +3186,6 @@ static int hostapd_config_fill(struct hostapd_config *conf,
 struct hostapd_config * hostapd_config_read(const char *fname)
 {
 	struct hostapd_config *conf;
-	struct hostapd_bss_config *bss;
 	FILE *f;
 	char buf[512], *pos;
 	int line = 0;
@@ -3215,9 +3214,11 @@ struct hostapd_config * hostapd_config_read(const char *fname)
 		return NULL;
 	}
 
-	bss = conf->last_bss = conf->bss[0];
+	conf->last_bss = conf->bss[0];
 
 	while (fgets(buf, sizeof(buf), f)) {
+		struct hostapd_bss_config *bss;
+
 		bss = conf->last_bss;
 		line++;
 
