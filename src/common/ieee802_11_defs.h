@@ -1312,4 +1312,6 @@ enum fst_action {
 	FST_ACTION_ON_CHANNEL_TUNNEL = 5,
 };
 
+#define SSID_MAX_LEN 32
+
 #endif /* IEEE802_11_DEFS_H */
