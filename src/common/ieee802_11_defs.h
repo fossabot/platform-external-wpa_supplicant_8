@@ -1247,4 +1247,6 @@ enum wnm_sleep_mode_subelement_id {
 #define CHAN_SWITCH_MODE_ALLOW_TX	0
 #define CHAN_SWITCH_MODE_BLOCK_TX	1
 
+#define SSID_MAX_LEN 32
+
 #endif /* IEEE802_11_DEFS_H */
