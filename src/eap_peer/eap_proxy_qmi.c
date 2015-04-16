@@ -38,12 +38,14 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "user_identity_module_v01.h"
 #include "eap_config.h"
 #include "common/wpa_ctrl.h"
+#if defined(ANDROID)
 #include <cutils/properties.h>
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
 #include "mdm_detect.h"
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 #if defined(__BIONIC_FORTIFY)
 #include <sys/system_properties.h>
+#endif
 #endif
 
 #define IMSI_LENGTH 15
@@ -478,8 +480,11 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 
 			/* Received IMSI is in the 3GPP format
 				converting it into ascii string */
-			imsi = os_malloc((2 * length));
-			os_memset(imsi, 0, (2 * length));
+			imsi = os_zalloc(2 * length);
+			if (imsi == NULL) {
+				wpa_printf(MSG_ERROR, "Couldn't allocate memmory for imsi");
+				return FALSE;
+			}
 			for (src = 1, dst = 0;
 				(src < length) && (dst < (length * 2));
 				src++) {
@@ -565,10 +570,10 @@ const char * eap_proxy_get_port(void)
 {
 	int ret = 0;
 	const char* eap_proxy_port = NULL;
-
 	char args[EAP_PROXY_PROPERTY_BASEBAND_SIZE] = {0};
 	char def[EAP_PROXY_PROPERTY_BASEBAND_SIZE] = {0};
 
+#ifdef ANDROID
 	ret = property_get(EAP_PROXY_PROPERTY_BASEBAND, args, def);
 	if (ret > EAP_PROXY_PROPERTY_BASEBAND_SIZE) {
 		wpa_printf(MSG_ERROR,"property [%s] has size [%d] that exceeds max [%d]",
@@ -577,6 +582,7 @@ const char * eap_proxy_get_port(void)
 				   EAP_PROXY_PROPERTY_BASEBAND_SIZE);
 		return NULL;
 	}
+#endif
 
 	if(!os_strncmp(EAP_PROXY_BASEBAND_VALUE_MSM, args, 3)) {
 	   wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
@@ -608,6 +614,11 @@ const char * eap_proxy_get_port(void)
 	else if(!os_strncmp(EAP_PROXY_TARGET_FUSION4_5_PCIE, args, 14)) {
 		wpa_printf(MSG_ERROR,"baseband property is set to [%s]", args);
 		eap_proxy_port = QMI_PORT_RMNET_MHI_0;
+	}
+	else {
+		wpa_printf(MSG_ERROR,"baseband property is set to [%s]",
+				   EAP_PROXY_BASEBAND_VALUE_MDMUSB);
+		eap_proxy_port = QMI_PORT_RMNET_0;
 	}
 #ifdef CONFIG_EAP_PROXY_MSM8994_TARGET
 	if ((!os_strncmp(EAP_PROXY_BASEBAND_VALUE_MSM, args, 3)) ||
@@ -655,13 +666,12 @@ static int eap_modem_compatible(struct dev_info *mdm_detect_info)
 }
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 
-struct eap_proxy_sm *
-eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
-	       void *msg_ctx)
+
+static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 {
 	int qmiErrorCode;
 	int qmiRetCode;
-	struct eap_proxy_sm *eap_proxy;
+	struct eap_proxy_sm *eap_proxy = eloop_ctx;
 	qmi_idl_service_object_type    qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
 	const char *eap_qmi_port[MAX_NO_OF_SIM_SUPPORTED];
 	int index;
@@ -691,17 +701,6 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	}
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 
-	eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
-	if (NULL == eap_proxy) {
-		wpa_printf(MSG_ERROR, "Error memory alloc  for eap_proxy"
-						"eap_proxy_init\n");
-		return NULL;
-	}
-	os_memset(eap_proxy, 0, sizeof(*eap_proxy));
-
-	eap_proxy->ctx = eapol_ctx;
-	eap_proxy->eapol_cb = eapol_cb;
-	eap_proxy->msg_ctx = msg_ctx;
 	eap_proxy->proxy_state = EAP_PROXY_INITIALIZE;
 	eap_proxy->qmi_state = QMI_STATE_IDLE;
 	eap_proxy->key = NULL;
@@ -709,7 +708,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	eap_proxy->is_state_changed = FALSE;
 	eap_proxy->isEap = FALSE;
 	eap_proxy->eap_type = EAP_TYPE_NONE;
-        eap_proxy->user_selected_sim = 0;
+	eap_proxy->user_selected_sim = 0;
 
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
 	wpa_printf (MSG_ERROR, "eap_proxy Initializing for DUAL SIM build %d ", MAX_NO_OF_SIM_SUPPORTED);
@@ -808,6 +807,43 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapResp, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, FALSE);
 	wpa_printf (MSG_ERROR, "Eap_proxy initialized successfully\n");
+
+}
+
+struct eap_proxy_sm *
+eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
+	       void *msg_ctx)
+{
+	int qmiErrorCode;
+	int qmiRetCode;
+	struct eap_proxy_sm *eap_proxy;
+	qmi_idl_service_object_type    qmi_client_service_obj;
+	const char *eap_qmi_port;
+
+	eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
+	if (NULL == eap_proxy) {
+		wpa_printf(MSG_ERROR, "Error memory alloc  for eap_proxy"
+						"eap_proxy_init\n");
+		return NULL;
+	}
+	os_memset(eap_proxy, 0, sizeof(*eap_proxy));
+
+	eap_proxy->ctx = eapol_ctx;
+	eap_proxy->eapol_cb = eapol_cb;
+	eap_proxy->msg_ctx = msg_ctx;
+	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
+	eap_proxy->qmi_state = QMI_STATE_IDLE;
+	eap_proxy->key = NULL;
+	eap_proxy->iskey_valid = FALSE;
+	eap_proxy->is_state_changed = FALSE;
+	eap_proxy->isEap = FALSE;
+	eap_proxy->eap_type = EAP_TYPE_NONE;
+
+	/* delay the qmi client initialization after the eloop_run starts,
+	* in order to avoid the case of daemonize enabled, which exits the
+	* parent process that created the qmi client context.
+	*/
+	eloop_register_timeout(0, 0, eap_proxy_post_init, eap_proxy, NULL);
 
 	return eap_proxy;
 }
@@ -961,9 +997,13 @@ static void handle_qmi_eap_reply(
 	u8 *resp_data;
 	u32 length;
 
+	if (eap_proxy == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy is NULL");
+		return;
+	}
 	if (QMI_STATE_RESP_PENDING == eap_proxy->qmi_state) {
-		if (NULL == eap_proxy || QMI_EAP_SERVICE != serviceId ||
-				QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
+		if (QMI_EAP_SERVICE != serviceId ||
+			QMI_EAP_SEND_EAP_PKT_RSP_ID != rspId) {
 			wpa_printf(MSG_ERROR, "Bad Param: serviceId=%d;"
 				 " rspId=%d\n", serviceId, rspId);
 			eap_proxy->qmi_state = QMI_STATE_RESP_TIME_OUT;
@@ -1735,7 +1775,7 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 						/* IMSI RAW */
 						imsi_id_len = imsi_len_g + 1;
 				}
-			} else {
+			} else if (identity) {
 				/* idx is non-zero implies username available */
 				imsi_identity = identity;
 				imsi_id_len = config->identity_len;
@@ -1750,10 +1790,12 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 				idx = imsi_len_g + 1;
 			}
 
-			/* mcc valus */
-			imsi_identity[idx + 16] = imsi[0];
-			imsi_identity[idx + 17] = imsi[1];
-			imsi_identity[idx + 18] = imsi[2];
+			if (imsi_identity != NULL) {
+				/* mcc valus */
+				imsi_identity[idx + 16] = imsi[0];
+				imsi_identity[idx + 17] = imsi[1];
+				imsi_identity[idx + 18] = imsi[2];
+			}
 
 			/* mnc valus */
 			mnc_len = card_mnc_len;
