@@ -429,6 +429,7 @@ static int wpa_driver_nl80211_authenticate_retry(
 
 static int i802_set_freq(void *priv, struct hostapd_freq_params *freq);
 static int i802_set_iface_flags(struct i802_bss *bss, int up);
+static const u8 * nl80211_get_ie(const u8 *ies, size_t ies_len, u8 ie);
 
 
 static const char * nl80211_command_to_string(enum nl80211_commands cmd)
@@ -1591,6 +1592,7 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 			       struct nlattr *resp_ie)
 {
 	union wpa_event_data event;
+	const u8 *ssid;
 	u16 status_code;
 
 	if (drv->capa.flags & WPA_DRIVER_FLAGS_SME) {
@@ -1651,6 +1653,16 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 	if (req_ie) {
 		event.assoc_info.req_ies = nla_data(req_ie);
 		event.assoc_info.req_ies_len = nla_len(req_ie);
+
+		if (cmd == NL80211_CMD_ROAM) {
+			ssid = nl80211_get_ie(event.assoc_info.req_ies,
+					      event.assoc_info.req_ies_len,
+					      WLAN_EID_SSID);
+			if (ssid && ssid[1] > 0 && ssid[1] <= 32) {
+				drv->ssid_len = ssid[1];
+				os_memcpy(drv->ssid, ssid + 2, ssid[1]);
+			}
+		}
 	}
 	if (resp_ie) {
 		event.assoc_info.resp_ies = nla_data(resp_ie);
