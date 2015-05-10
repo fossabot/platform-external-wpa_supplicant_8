@@ -244,9 +244,17 @@ int p2p_connect_send(struct p2p_data *p2p, struct p2p_device *dev)
 	eloop_cancel_timeout(p2p_go_neg_wait_timeout, p2p, NULL);
 	dev->flags |= P2P_DEV_WAIT_GO_NEG_RESPONSE;
 	dev->connect_reqs++;
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	p2p_dbg(p2p, "Increasing send go neg req wait_time to 1s");
+	if (p2p_send_action(p2p, freq, dev->info.p2p_device_addr,
+			    p2p->cfg->dev_addr, dev->info.p2p_device_addr,
+			    wpabuf_head(req), wpabuf_len(req), 1000) < 0) {
+#else
 	if (p2p_send_action(p2p, freq, dev->info.p2p_device_addr,
 			    p2p->cfg->dev_addr, dev->info.p2p_device_addr,
 			    wpabuf_head(req), wpabuf_len(req), 500) < 0) {
+
+#endif
 		p2p_dbg(p2p, "Failed to send Action frame");
 		/* Use P2P find to recover and retry */
 		p2p_set_timeout(p2p, 0, 0);
@@ -834,9 +842,16 @@ fail:
 	} else
 		p2p->pending_action_state =
 			P2P_PENDING_GO_NEG_RESPONSE_FAILURE;
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	p2p_dbg(p2p, "Increasing send go neg resp wait_time 1s");
+	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr,
+			    p2p->cfg->dev_addr,
+			    wpabuf_head(resp), wpabuf_len(resp), 1000) < 0) {
+#else
 	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr,
 			    p2p->cfg->dev_addr,
 			    wpabuf_head(resp), wpabuf_len(resp), 500) < 0) {
+#endif
 		p2p_dbg(p2p, "Failed to send Action frame");
 	}
 
@@ -1151,10 +1166,16 @@ fail:
 
 	dev->go_neg_conf_freq = freq;
 	dev->go_neg_conf_sent = 0;
-
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	p2p_dbg(p2p, "Increasing send confirm  wait_time 1s");
+	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr, sa,
+			    wpabuf_head(dev->go_neg_conf),
+			    wpabuf_len(dev->go_neg_conf), 1000) < 0) {
+#else
 	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr, sa,
 			    wpabuf_head(dev->go_neg_conf),
 			    wpabuf_len(dev->go_neg_conf), 200) < 0) {
+#endif
 		p2p_dbg(p2p, "Failed to send Action frame");
 		p2p_go_neg_failed(p2p, dev, -1);
 		p2p->cfg->send_action_done(p2p->cfg->cb_ctx);

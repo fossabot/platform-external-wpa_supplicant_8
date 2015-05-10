@@ -3060,7 +3060,12 @@ static void p2p_go_neg_req_cb(struct p2p_data *p2p, int success)
 	 * channel.
 	 */
 	p2p_set_state(p2p, P2P_CONNECT);
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	timeout = success ? 2000000 : 500000;
+	p2p_dbg(p2p, "Increasing p2p_go_neg_req_cb timeout=%d", timeout);
+#else
 	timeout = success ? 500000 : 100000;
+#endif
 	if (!success && p2p->go_neg_peer &&
 	    (p2p->go_neg_peer->flags & P2P_DEV_PEER_WAITING_RESPONSE)) {
 		unsigned int r;
@@ -3086,7 +3091,12 @@ static void p2p_go_neg_resp_cb(struct p2p_data *p2p, int success)
 		return;
 	}
 	p2p_set_state(p2p, P2P_CONNECT);
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	p2p_dbg(p2p, "Increasing go_neg_resp_cb wait for confirmation to 3 sec");
+	p2p_set_timeout(p2p, 0, 3000000);
+#else
 	p2p_set_timeout(p2p, 0, 500000);
+#endif
 }
 
 
@@ -3392,11 +3402,21 @@ static void p2p_timeout_wait_peer_connect(struct p2p_data *p2p)
 {
 	p2p_set_state(p2p, P2P_WAIT_PEER_IDLE);
 
-	if (p2p->cfg->is_concurrent_session_active &&
-	    p2p->cfg->is_concurrent_session_active(p2p->cfg->cb_ctx))
+    if (p2p->cfg->is_concurrent_session_active &&
+        p2p->cfg->is_concurrent_session_active(p2p->cfg->cb_ctx)) {
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+		p2p_dbg(p2p, "Increase p2p_timeout_wait_peer_connect wait to 1 sec");
+		p2p_set_timeout(p2p, 0, 1000000);
+#else
 		p2p_set_timeout(p2p, 0, 500000);
-	else
+#endif
+    } else {
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+		p2p_set_timeout(p2p, 0, 1000000);
+#else
 		p2p_set_timeout(p2p, 0, 200000);
+#endif
+    }
 }
 
 

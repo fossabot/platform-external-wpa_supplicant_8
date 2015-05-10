@@ -147,12 +147,21 @@ int wpas_wps_eapol_cb(struct wpa_supplicant *wpa_s)
 		 * first. This makes it less likely for disconnection event to
 		 * cause problems with the following connection.
 		 */
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+		wpa_printf(MSG_DEBUG, "WPS: Continue association from timeout of 100ms");
+		wpas_wps_assoc_with_cred_cancel(wpa_s);
+		eloop_register_timeout(0, 100000,
+				       wpas_wps_assoc_with_cred, wpa_s,
+				       use_fast_assoc ? (void *) 1 :
+				       (void *) 0);
+#else
 		wpa_printf(MSG_DEBUG, "WPS: Continue association from timeout");
 		wpas_wps_assoc_with_cred_cancel(wpa_s);
 		eloop_register_timeout(0, 10000,
 				       wpas_wps_assoc_with_cred, wpa_s,
 				       use_fast_assoc ? (void *) 1 :
 				       (void *) 0);
+#endif
 		return 1;
 	}
 
