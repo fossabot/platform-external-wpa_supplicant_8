@@ -45,9 +45,16 @@ static int wpa_group_config_group_keys(struct wpa_authenticator *wpa_auth,
 
 static const u32 dot11RSNAConfigGroupUpdateCount = 4;
 static const u32 dot11RSNAConfigPairwiseUpdateCount = 4;
+
+#ifndef QCA_WIFI_3_0_EMU_HOSTAPD
 static const u32 eapol_key_timeout_first = 100; /* ms */
 static const u32 eapol_key_timeout_subseq = 1000; /* ms */
 static const u32 eapol_key_timeout_first_group = 500; /* ms */
+#else
+static const u32 eapol_key_timeout_first = 100000; /* ms */
+static const u32 eapol_key_timeout_subseq = 100000; /* ms */
+static const u32 eapol_key_timeout_first_group = 500000; /* ms */
+#endif
 
 /* TODO: make these configurable */
 static const int dot11RSNAConfigPMKLifetime = 43200;
