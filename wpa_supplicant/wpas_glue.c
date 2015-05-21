@@ -879,13 +879,12 @@ static void wpa_supplicant_set_rekey_offload(void *ctx, const u8 *kek,
 #endif /* CONFIG_NO_WPA */
 
 
-static int wpa_supplicant_key_mgmt_set_pmk(void *ctx, const u8 *pmk,
-					   size_t pmk_len)
+static int wpa_supplicant_key_mgmt_set_pmk(void *ctx, const u8 *pmk)
 {
 	struct wpa_supplicant *wpa_s = ctx;
 
 	if (wpa_s->conf->key_mgmt_offload)
-		return wpa_drv_key_mgmt_set_pmk(wpa_s, pmk, pmk_len);
+		return wpa_drv_key_mgmt_set_pmk(wpa_s, pmk);
 	else
 		return 0;
 }
