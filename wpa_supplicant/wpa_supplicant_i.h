@@ -574,6 +574,9 @@ struct wpa_supplicant {
 	int scan_id[MAX_SCAN_ID];
 	unsigned int scan_id_count;
 
+	struct wpa_ssid_value *ssids_from_scan_req;
+	unsigned int num_ssids_from_scan_req;
+
 	u64 drv_flags;
 	unsigned int drv_enc;
 
