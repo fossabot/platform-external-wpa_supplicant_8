@@ -27,6 +27,9 @@ L_CFLAGS += -DANDROID_LOG_NAME=\"wpa_supplicant\"
 # Disable unused parameter warnings
 L_CFLAGS += -Wno-unused-parameter
 
+# Enable P2P workarounds to increase send wait, neg, group formation and auth timeout for emulation
+L_CFLAGS += -DQCA_WIFI_3_0_EMU_SUPPLICANT
+
 # Set Android extended P2P functionality
 L_CFLAGS += -DANDROID_P2P
 ifeq ($(BOARD_WPA_SUPPLICANT_PRIVATE_LIB),)

@@ -315,7 +315,12 @@ int offchannel_send_action(struct wpa_supplicant *wpa_s, unsigned int freq,
 		wait_time = wpa_s->max_remain_on_chan;
 	else if (wait_time == 0)
 		wait_time = 20;
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+        wpa_printf(MSG_ERROR, "Increase ROC wait_time : %d", 1000);
+	if (wpa_drv_remain_on_channel(wpa_s, freq, 1000) < 0) {
+#else
 	if (wpa_drv_remain_on_channel(wpa_s, freq, wait_time) < 0) {
+#endif
 		wpa_printf(MSG_DEBUG, "Off-channel: Failed to request driver "
 			   "to remain on channel (%u MHz) for Action "
 			   "Frame TX", freq);

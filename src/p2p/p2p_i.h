@@ -12,7 +12,11 @@
 #include "utils/list.h"
 #include "p2p.h"
 
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+#define P2P_GO_NEG_CNF_MAX_RETRY_COUNT 2
+#else
 #define P2P_GO_NEG_CNF_MAX_RETRY_COUNT 1
+#endif
 
 enum p2p_role_indication;
 

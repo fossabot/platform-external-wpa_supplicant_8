@@ -217,6 +217,10 @@ void wpa_supplicant_req_auth_timeout(struct wpa_supplicant *wpa_s,
 	if (wpa_s->conf->ap_scan == 0 &&
 	    (wpa_s->drv_flags & WPA_DRIVER_FLAGS_WIRED))
 		return;
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	wpa_dbg(wpa_s, MSG_DEBUG, "Increase auth timeout by 5 sec");
+	sec += 5;
+#endif
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "Setting authentication timeout: %d sec "
 		"%d usec", sec, usec);

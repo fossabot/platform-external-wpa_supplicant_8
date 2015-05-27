@@ -60,7 +60,11 @@
  * WPS provisioning step or after the re-invocation of a persistent group on a
  * P2P Client.
  */
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+#define P2P_MAX_INITIAL_CONN_WAIT 20
+#else
 #define P2P_MAX_INITIAL_CONN_WAIT 10
+#endif
 #endif /* P2P_MAX_INITIAL_CONN_WAIT */
 
 #ifndef P2P_MAX_INITIAL_CONN_WAIT_GO
@@ -70,7 +74,11 @@
  * operation is considered to be in progress (e.g., to delay other scans) after
  * WPS provisioning has been completed on the GO during group formation.
  */
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+#define P2P_MAX_INITIAL_CONN_WAIT_GO 20
+#else
 #define P2P_MAX_INITIAL_CONN_WAIT_GO 10
+#endif
 #endif /* P2P_MAX_INITIAL_CONN_WAIT_GO */
 
 #ifndef P2P_MAX_INITIAL_CONN_WAIT_GO_REINVOKE
@@ -1702,9 +1710,16 @@ static void wpas_go_neg_completed(void *ctx, struct p2p_go_neg_results *res)
 	eloop_cancel_timeout(wpas_p2p_long_listen_timeout, wpa_s, NULL);
 
 	eloop_cancel_timeout(wpas_p2p_group_formation_timeout, wpa_s, NULL);
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	wpa_printf(MSG_ERROR, "P2P: Increase grp formation timeout to 30 s + ");
+	eloop_register_timeout(30 + res->peer_config_timeout / 100,
+			       (res->peer_config_timeout % 100) * 10000,
+			       wpas_p2p_group_formation_timeout, wpa_s, NULL);
+#else
 	eloop_register_timeout(15 + res->peer_config_timeout / 100,
 			       (res->peer_config_timeout % 100) * 10000,
 			       wpas_p2p_group_formation_timeout, wpa_s, NULL);
+#endif
 }
 
 
