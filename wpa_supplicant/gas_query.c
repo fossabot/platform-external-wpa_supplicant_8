@@ -442,6 +442,7 @@ int gas_query_rx(struct gas_query *gas, const u8 *da, const u8 *sa,
 	u16 comeback_delay, resp_len;
 	const u8 *pos, *adv_proto;
 	int prot, pmf;
+	unsigned int left;
 
 	if (gas == NULL || len < 4)
 		return -1;
@@ -543,17 +544,17 @@ int gas_query_rx(struct gas_query *gas, const u8 *da, const u8 *sa,
 	resp_len = WPA_GET_LE16(pos);
 	pos += 2;
 
-	if (pos + resp_len > data + len) {
+	left = data + len - pos;
+	if (resp_len > left) {
 		wpa_printf(MSG_DEBUG, "GAS: Truncated Query Response in "
 			   "response from " MACSTR, MAC2STR(sa));
 		return 0;
 	}
 
-	if (pos + resp_len < data + len) {
+	if (resp_len < left) {
 		wpa_printf(MSG_DEBUG, "GAS: Ignore %u octets of extra data "
 			   "after Query Response from " MACSTR,
-			   (unsigned int) (data + len - pos - resp_len),
-			   MAC2STR(sa));
+			   left - resp_len, MAC2STR(sa));
 	}
 
 	if (action == WLAN_PA_GAS_COMEBACK_RESP)
@@ -597,6 +598,7 @@ static void gas_query_start_cb(struct wpa_radio_work *work, int deinit)
 {
 	struct gas_query_pending *query = work->ctx;
 	struct gas_query *gas = query->gas;
+	struct wpa_supplicant *wpa_s = gas->wpa_s;
 
 	if (deinit) {
 		if (work->started) {
@@ -606,6 +608,14 @@ static void gas_query_start_cb(struct wpa_radio_work *work, int deinit)
 		}
 
 		gas_query_free(query, 1);
+		return;
+	}
+
+	if (wpas_update_random_addr_disassoc(wpa_s) < 0) {
+		wpa_msg(wpa_s, MSG_INFO,
+			"Failed to assign random MAC address for GAS");
+		gas_query_free(query, 1);
+		radio_work_done(work);
 		return;
 	}
 

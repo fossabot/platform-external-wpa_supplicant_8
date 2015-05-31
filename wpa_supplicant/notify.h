@@ -71,6 +71,7 @@ void wpas_notify_bss_ies_changed(struct wpa_supplicant *wpa_s,
 				 unsigned int id);
 void wpas_notify_bss_rates_changed(struct wpa_supplicant *wpa_s,
 				   unsigned int id);
+void wpas_notify_bss_seen(struct wpa_supplicant *wpa_s, unsigned int id);
 void wpas_notify_blob_added(struct wpa_supplicant *wpa_s, const char *name);
 void wpas_notify_blob_removed(struct wpa_supplicant *wpa_s, const char *name);
 
@@ -83,6 +84,7 @@ void wpas_notify_resume(struct wpa_global *global);
 void wpas_notify_sta_authorized(struct wpa_supplicant *wpa_s,
 				const u8 *mac_addr, int authorized,
 				const u8 *p2p_dev_addr);
+void wpas_notify_p2p_find_stopped(struct wpa_supplicant *wpa_s);
 void wpas_notify_p2p_device_found(struct wpa_supplicant *wpa_s,
 				  const u8 *dev_addr, int new_device);
 void wpas_notify_p2p_device_lost(struct wpa_supplicant *wpa_s,
@@ -120,7 +122,8 @@ void wpas_notify_p2p_wps_failed(struct wpa_supplicant *wpa_s,
 				struct wps_event_fail *fail);
 
 void wpas_notify_certification(struct wpa_supplicant *wpa_s, int depth,
-			       const char *subject, const char *cert_hash,
+			       const char *subject, const char *altsubject[],
+			       int num_altsubject, const char *cert_hash,
 			       const struct wpabuf *cert);
 void wpas_notify_preq(struct wpa_supplicant *wpa_s,
 		      const u8 *addr, const u8 *dst, const u8 *bssid,
@@ -129,5 +132,7 @@ void wpas_notify_eap_status(struct wpa_supplicant *wpa_s, const char *status,
 			    const char *parameter);
 void wpas_notify_network_bssid_set_changed(struct wpa_supplicant *wpa_s,
 					   struct wpa_ssid *ssid);
+void wpas_notify_network_type_changed(struct wpa_supplicant *wpa_s,
+				      struct wpa_ssid *ssid);
 
 #endif /* NOTIFY_H */

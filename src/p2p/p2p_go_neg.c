@@ -107,6 +107,8 @@ u16 p2p_wps_method_pw_id(enum p2p_wps_method wps_method)
 		return DEV_PW_PUSHBUTTON;
 	case WPS_NFC:
 		return DEV_PW_NFC_CONNECTION_HANDOVER;
+	case WPS_P2PS:
+		return DEV_PW_P2PS_DEFAULT;
 	default:
 		return DEV_PW_DEFAULT;
 	}
@@ -124,6 +126,8 @@ static const char * p2p_wps_method_str(enum p2p_wps_method wps_method)
 		return "PBC";
 	case WPS_NFC:
 		return "NFC";
+	case WPS_P2PS:
+		return "P2PS";
 	default:
 		return "??";
 	}
@@ -218,10 +222,12 @@ int p2p_connect_send(struct p2p_data *p2p, struct p2p_device *dev)
 			config_method = WPS_CONFIG_DISPLAY;
 		else if (dev->wps_method == WPS_PBC)
 			config_method = WPS_CONFIG_PUSHBUTTON;
+		else if (dev->wps_method == WPS_P2PS)
+			config_method = WPS_CONFIG_P2PS;
 		else
 			return -1;
 		return p2p_prov_disc_req(p2p, dev->info.p2p_device_addr,
-					 config_method, 0, 0, 1);
+					 NULL, config_method, 0, 0, 1);
 	}
 
 	freq = dev->listen_freq > 0 ? dev->listen_freq : dev->oper_freq;
@@ -496,8 +502,8 @@ void p2p_reselect_channel(struct p2p_data *p2p,
 }
 
 
-static int p2p_go_select_channel(struct p2p_data *p2p, struct p2p_device *dev,
-				 u8 *status)
+int p2p_go_select_channel(struct p2p_data *p2p, struct p2p_device *dev,
+			  u8 *status)
 {
 	struct p2p_channels tmp, intersection;
 
@@ -631,7 +637,7 @@ void p2p_process_go_neg_req(struct p2p_data *p2p, const u8 *sa,
 			 * Request frame.
 			 */
 			p2p->cfg->send_action_done(p2p->cfg->cb_ctx);
-			p2p_go_neg_failed(p2p, dev, *msg.status);
+			p2p_go_neg_failed(p2p, *msg.status);
 			p2p_parse_free(&msg);
 			return;
 		}
@@ -746,6 +752,16 @@ void p2p_process_go_neg_req(struct p2p_data *p2p, const u8 *sa,
 			p2p_dbg(p2p, "Peer using pushbutton");
 			if (dev->wps_method != WPS_PBC) {
 				p2p_dbg(p2p, "We have wps_method=%s -> incompatible",
+					p2p_wps_method_str(dev->wps_method));
+				status = P2P_SC_FAIL_INCOMPATIBLE_PROV_METHOD;
+				goto fail;
+			}
+			break;
+		case DEV_PW_P2PS_DEFAULT:
+			p2p_dbg(p2p, "Peer using P2PS pin");
+			if (dev->wps_method != WPS_P2PS) {
+				p2p_dbg(p2p,
+					"We have wps_method=%s -> incompatible",
 					p2p_wps_method_str(dev->wps_method));
 				status = P2P_SC_FAIL_INCOMPATIBLE_PROV_METHOD;
 				goto fail;
@@ -989,7 +1005,7 @@ void p2p_process_go_neg_resp(struct p2p_data *p2p, const u8 *sa,
 			p2p_set_timeout(p2p, 0, 0);
 		} else {
 			p2p_dbg(p2p, "Stop GO Negotiation attempt");
-			p2p_go_neg_failed(p2p, dev, *msg.status);
+			p2p_go_neg_failed(p2p, *msg.status);
 		}
 		p2p->cfg->send_action_done(p2p->cfg->cb_ctx);
 		p2p_parse_free(&msg);
@@ -1117,6 +1133,15 @@ void p2p_process_go_neg_resp(struct p2p_data *p2p, const u8 *sa,
 			goto fail;
 		}
 		break;
+	case DEV_PW_P2PS_DEFAULT:
+		p2p_dbg(p2p, "P2P: Peer using P2PS default pin");
+		if (dev->wps_method != WPS_P2PS) {
+			p2p_dbg(p2p, "We have wps_method=%s -> incompatible",
+				p2p_wps_method_str(dev->wps_method));
+			status = P2P_SC_FAIL_INCOMPATIBLE_PROV_METHOD;
+			goto fail;
+		}
+		break;
 	default:
 		if (msg.dev_password_id &&
 		    msg.dev_password_id == dev->oob_pw_id) {
@@ -1177,13 +1202,13 @@ fail:
 			    wpabuf_len(dev->go_neg_conf), 200) < 0) {
 #endif
 		p2p_dbg(p2p, "Failed to send Action frame");
-		p2p_go_neg_failed(p2p, dev, -1);
+		p2p_go_neg_failed(p2p, -1);
 		p2p->cfg->send_action_done(p2p->cfg->cb_ctx);
 	} else
 		dev->go_neg_conf_sent++;
 	if (status != P2P_SC_SUCCESS) {
 		p2p_dbg(p2p, "GO Negotiation failed");
-		p2p_go_neg_failed(p2p, dev, status);
+		p2p_go_neg_failed(p2p, status);
 	}
 }
 
@@ -1234,7 +1259,7 @@ void p2p_process_go_neg_conf(struct p2p_data *p2p, const u8 *sa,
 	}
 	if (*msg.status) {
 		p2p_dbg(p2p, "GO Negotiation rejected: status %d", *msg.status);
-		p2p_go_neg_failed(p2p, dev, *msg.status);
+		p2p_go_neg_failed(p2p, *msg.status);
 		p2p_parse_free(&msg);
 		return;
 	}
@@ -1246,7 +1271,7 @@ void p2p_process_go_neg_conf(struct p2p_data *p2p, const u8 *sa,
 	} else if (dev->go_state == REMOTE_GO) {
 		p2p_dbg(p2p, "Mandatory P2P Group ID attribute missing from GO Negotiation Confirmation");
 		p2p->ssid_len = 0;
-		p2p_go_neg_failed(p2p, dev, P2P_SC_FAIL_INVALID_PARAMS);
+		p2p_go_neg_failed(p2p, P2P_SC_FAIL_INVALID_PARAMS);
 		p2p_parse_free(&msg);
 		return;
 	}

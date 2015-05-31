@@ -1,6 +1,6 @@
 /*
  * Qualcomm Atheros OUI and vendor specific assignments
- * Copyright (c) 2014, Qualcomm Atheros, Inc.
+ * Copyright (c) 2014-2015, Qualcomm Atheros, Inc.
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -69,6 +69,26 @@ enum qca_radiotap_vendor_ids {
  * @QCA_NL80211_VENDOR_SUBCMD_GET_FEATURES: Command to get the features
  *	supported by the driver. enum qca_wlan_vendor_features defines
  *	the possible features.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_STARTED: Event used by driver,
+ *	which supports DFS offloading, to indicate a channel availability check
+ *	start.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_FINISHED: Event used by driver,
+ *	which supports DFS offloading, to indicate a channel availability check
+ *	completion.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_ABORTED: Event used by driver,
+ *	which supports DFS offloading, to indicate that the channel availability
+ *	check aborted, no change to the channel status.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_NOP_FINISHED: Event used by
+ *	driver, which supports DFS offloading, to indicate that the
+ *	Non-Occupancy Period for this channel is over, channel becomes usable.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_RADAR_DETECTED: Event used by driver,
+ *	which supports DFS offloading, to indicate a radar pattern has been
+ *	detected. The channel is now unusable.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -112,9 +132,26 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_KEY_MGMT_SET_KEY = 50,
 	QCA_NL80211_VENDOR_SUBCMD_KEY_MGMT_ROAM_AUTH = 51,
 	QCA_NL80211_VENDOR_SUBCMD_APFIND = 52,
-	/* 53 - reserved for QCA */
+	/* 53 - reserved - was used by QCA, but not in use anymore */
 	QCA_NL80211_VENDOR_SUBCMD_DO_ACS = 54,
 	QCA_NL80211_VENDOR_SUBCMD_GET_FEATURES = 55,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_STARTED = 56,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_FINISHED = 57,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_ABORTED = 58,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_NOP_FINISHED = 59,
+	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_RADAR_DETECTED = 60,
+	/* 61-90 - reserved for QCA */
+	QCA_NL80211_VENDOR_SUBCMD_DATA_OFFLOAD = 91,
+	QCA_NL80211_VENDOR_SUBCMD_OCB_SET_CONFIG = 92,
+	QCA_NL80211_VENDOR_SUBCMD_OCB_SET_UTC_TIME = 93,
+	QCA_NL80211_VENDOR_SUBCMD_OCB_START_TIMING_ADVERT = 94,
+	QCA_NL80211_VENDOR_SUBCMD_OCB_STOP_TIMING_ADVERT = 95,
+	QCA_NL80211_VENDOR_SUBCMD_OCB_GET_TSF_TIMER = 96,
+	QCA_NL80211_VENDOR_SUBCMD_DCC_GET_STATS = 97,
+	QCA_NL80211_VENDOR_SUBCMD_DCC_CLEAR_STATS = 98,
+	QCA_NL80211_VENDOR_SUBCMD_DCC_UPDATE_NDL = 99,
+	QCA_NL80211_VENDOR_SUBCMD_DCC_STATS_EVENT = 100,
+	QCA_NL80211_VENDOR_SUBCMD_LINK_PROPERTIES = 101,
 };
 
 
@@ -134,9 +171,31 @@ enum qca_wlan_vendor_attr {
 	QCA_WLAN_VENDOR_ATTR_MAC_ADDR = 6,
 	/* used by QCA_NL80211_VENDOR_SUBCMD_GET_FEATURES */
 	QCA_WLAN_VENDOR_ATTR_FEATURE_FLAGS = 7,
+	QCA_WLAN_VENDOR_ATTR_TEST = 8,
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_MAX	= QCA_WLAN_VENDOR_ATTR_AFTER_LAST - 1,
+};
+
+
+enum qca_roaming_policy {
+	QCA_ROAMING_NOT_ALLOWED,
+	QCA_ROAMING_ALLOWED_WITHIN_ESS,
+};
+
+enum qca_wlan_vendor_attr_roam_auth {
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_BSSID,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_REQ_IE,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RESP_IE,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AUTHORIZED,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_KEY_REPLAY_CTR,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_MAX =
+	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST - 1
 };
 
 enum qca_wlan_vendor_attr_acs_offload {
@@ -162,28 +221,7 @@ enum qca_wlan_vendor_acs_hw_mode {
 	QCA_ACS_MODE_IEEE80211G,
 	QCA_ACS_MODE_IEEE80211A,
 	QCA_ACS_MODE_IEEE80211AD,
-};
-
-
-enum qca_roaming_policy {
-	QCA_ROAMING_NOT_ALLOWED,
-	QCA_ROAMING_ALLOWED_WITHIN_ESS,
-};
-
-
-enum qca_wlan_vendor_attr_roam_auth {
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_INVALID = 0,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_BSSID,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_REQ_IE,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RESP_IE,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AUTHORIZED,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_KEY_REPLAY_CTR,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KEK,
-	/* keep last */
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST,
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_MAX =
-	QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AFTER_LAST - 1
+	QCA_ACS_MODE_IEEE80211ANY,
 };
 
 /**
@@ -193,11 +231,35 @@ enum qca_wlan_vendor_attr_roam_auth {
  *	management offload, a mechanism where the station's firmware
  *	does the exchange with the AP to establish the temporal keys
  *	after roaming, rather than having the user space wpa_supplicant do it.
+ * @QCA_WLAN_VENDOR_FEATURE_SUPPORT_HW_MODE_ANY: Device supports automatic
+ *	band selection based on channel selection results.
  * @NUM_QCA_WLAN_VENDOR_FEATURES: Number of assigned feature bits
  */
 enum qca_wlan_vendor_features {
 	QCA_WLAN_VENDOR_FEATURE_KEY_MGMT_OFFLOAD	= 0,
+	QCA_WLAN_VENDOR_FEATURE_SUPPORT_HW_MODE_ANY     = 1,
 	NUM_QCA_WLAN_VENDOR_FEATURES /* keep last */
 };
 
+/**
+ * enum qca_wlan_vendor_attr_data_offload_ind - Vendor Data Offload Indication
+ *
+ * @QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_SESSION: Session corresponding to
+ *	the offloaded data.
+ * @QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_PROTOCOL: Protocol of the offloaded
+ *	data.
+ * @QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_EVENT: Event type for the data offload
+ *	indication.
+ */
+enum qca_wlan_vendor_attr_data_offload_ind {
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_SESSION,
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_PROTOCOL,
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_EVENT,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_MAX =
+	QCA_WLAN_VENDOR_ATTR_DATA_OFFLOAD_IND_AFTER_LAST - 1
+};
 #endif /* QCA_VENDOR_H */

@@ -161,8 +161,8 @@ static int eap_fast_session_ticket_cb(void *ctx, const u8 *ticket, size_t len,
 		return 0;
 	}
 
-	if (aes_unwrap(data->pac_opaque_encr, (pac_opaque_len - 8) / 8,
-		       pac_opaque, buf) < 0) {
+	if (aes_unwrap(data->pac_opaque_encr, sizeof(data->pac_opaque_encr),
+		       (pac_opaque_len - 8) / 8, pac_opaque, buf) < 0) {
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Failed to decrypt "
 			   "PAC-Opaque");
 		os_free(buf);
@@ -186,7 +186,6 @@ static int eap_fast_session_ticket_cb(void *ctx, const u8 *ticket, size_t len,
 
 		switch (*pos) {
 		case PAC_OPAQUE_TYPE_PAD:
-			pos = end;
 			goto done;
 		case PAC_OPAQUE_TYPE_KEY:
 			if (pos[1] != EAP_FAST_PAC_KEY_LEN) {
@@ -731,8 +730,8 @@ static struct wpabuf * eap_fast_build_pac(struct eap_sm *sm,
 		os_free(pac_buf);
 		return NULL;
 	}
-	if (aes_wrap(data->pac_opaque_encr, pac_len / 8, pac_buf,
-		     pac_opaque) < 0) {
+	if (aes_wrap(data->pac_opaque_encr, sizeof(data->pac_opaque_encr),
+		     pac_len / 8, pac_buf, pac_opaque) < 0) {
 		os_free(pac_buf);
 		os_free(pac_opaque);
 		return NULL;
@@ -819,6 +818,9 @@ static int eap_fast_encrypt_phase2(struct eap_sm *sm,
 			    plain);
 	encr = eap_server_tls_encrypt(sm, &data->ssl, plain);
 	wpabuf_free(plain);
+
+	if (!encr)
+		return -1;
 
 	if (data->ssl.tls_out && piggyback) {
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Piggyback Phase 2 data "
@@ -1017,7 +1019,7 @@ static void eap_fast_process_phase2_response(struct eap_sm *sm,
 	if (m->check(sm, priv, &buf)) {
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Phase2 check() asked to "
 			   "ignore the packet");
-		next_type = eap_fast_req_failure(sm, data);
+		eap_fast_req_failure(sm, data);
 		return;
 	}
 
@@ -1590,6 +1592,18 @@ static Boolean eap_fast_isSuccess(struct eap_sm *sm, void *priv)
 }
 
 
+static u8 * eap_fast_get_session_id(struct eap_sm *sm, void *priv, size_t *len)
+{
+	struct eap_fast_data *data = priv;
+
+	if (data->state != SUCCESS)
+		return NULL;
+
+	return eap_server_tls_derive_session_id(sm, &data->ssl, EAP_TYPE_FAST,
+						len);
+}
+
+
 int eap_server_fast_register(void)
 {
 	struct eap_method *eap;
@@ -1609,6 +1623,7 @@ int eap_server_fast_register(void)
 	eap->getKey = eap_fast_getKey;
 	eap->get_emsk = eap_fast_get_emsk;
 	eap->isSuccess = eap_fast_isSuccess;
+	eap->getSessionId = eap_fast_get_session_id;
 
 	ret = eap_server_method_register(eap);
 	if (ret)
