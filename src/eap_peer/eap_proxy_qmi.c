@@ -253,6 +253,12 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	uim_get_card_status_resp_msg_v01   *qmi_response_ptr  = NULL;
 
 	wpa_printf (MSG_ERROR, "eap_proxy: reading card %d values\n", sim_num+1);
+	if(!qmi_uim_svc_client_initialized[sim_num])
+	{
+		wpa_printf(MSG_ERROR,
+		"eap_proxy: QMI UIM service is not initialized for sim = %d\n", sim_num);
+		return FALSE;
+	}
 	qmi_response_ptr = (uim_get_card_status_resp_msg_v01 *)
 		os_malloc(sizeof(uim_get_card_status_resp_msg_v01));
 	if (qmi_response_ptr == NULL) {
