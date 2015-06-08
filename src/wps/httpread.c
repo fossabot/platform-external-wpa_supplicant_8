@@ -533,6 +533,13 @@ static void httpread_read_handler(int sd, void *eloop_ctx, void *sock_ctx)
 					if (!isxdigit(*cbp))
 						goto bad;
 					h->chunk_size = strtoul(cbp, NULL, 16);
+					if (h->chunk_size < 0 ||
+					    h->chunk_size > h->max_bytes) {
+						wpa_printf(MSG_DEBUG,
+							   "httpread: Invalid chunk size %d",
+							   h->chunk_size);
+						goto bad;
+					}
 					/* throw away chunk header
 					 * so we have only real data
 					 */
@@ -601,6 +608,11 @@ static void httpread_read_handler(int sd, void *eloop_ctx, void *sock_ctx)
 				ncopy = nread;
 			}
 			/* Note: should never be 0 */
+			if (ncopy < 0) {
+				wpa_printf(MSG_DEBUG,
+					   "httpread: Invalid ncopy=%d", ncopy);
+				goto bad;
+			}
 			if (ncopy > nread)
 				ncopy = nread;
 			os_memcpy(bbp, rbp, ncopy);
