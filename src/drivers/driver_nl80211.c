@@ -3580,6 +3580,9 @@ static void wiphy_info_supported_iftypes(struct wiphy_info_data *info,
 		case NL80211_IFTYPE_AP:
 			info->capa->flags |= WPA_DRIVER_FLAGS_AP;
 			break;
+		case NL80211_IFTYPE_MESH_POINT:
+			info->capa->flags |= WPA_DRIVER_FLAGS_MESH;
+			break;
 		case NL80211_IFTYPE_ADHOC:
 			info->capa->flags |= WPA_DRIVER_FLAGS_IBSS;
 			break;
@@ -3827,6 +3830,9 @@ static void wiphy_info_feature_flags(struct wiphy_info_data *info,
 
 	if (flags & NL80211_FEATURE_LOW_PRIORITY_SCAN)
 		info->have_low_prio_scan = 1;
+
+	if (flags & NL80211_FEATURE_HT_IBSS)
+		capa->flags |= WPA_DRIVER_FLAGS_HT_IBSS;
 }
 
 
@@ -12204,7 +12210,7 @@ static int wpa_driver_nl80211_status(void *priv, char *buf, size_t buflen)
 				  "capa.key_mgmt=0x%x\n"
 				  "capa.enc=0x%x\n"
 				  "capa.auth=0x%x\n"
-				  "capa.flags=0x%x\n"
+				  "capa.flags=0x%llx\n"
 				  "capa.max_scan_ssids=%d\n"
 				  "capa.max_sched_scan_ssids=%d\n"
 				  "capa.sched_scan_supported=%d\n"
@@ -12217,7 +12223,7 @@ static int wpa_driver_nl80211_status(void *priv, char *buf, size_t buflen)
 				  drv->capa.key_mgmt,
 				  drv->capa.enc,
 				  drv->capa.auth,
-				  drv->capa.flags,
+				  (unsigned long long) drv->capa.flags,
 				  drv->capa.max_scan_ssids,
 				  drv->capa.max_sched_scan_ssids,
 				  drv->capa.sched_scan_supported,
