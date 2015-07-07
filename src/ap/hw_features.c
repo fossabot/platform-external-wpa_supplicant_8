@@ -224,8 +224,8 @@ int hostapd_prepare_rates(struct hostapd_iface *iface,
 static int ieee80211n_allowed_ht40_channel_pair(struct hostapd_iface *iface)
 {
 	int sec_chan, ok, j, first;
-	int allowed[] = { 36, 44, 52, 60, 100, 108, 116, 124, 132, 149, 157,
-			  184, 192 };
+	int allowed[] = { 36, 44, 52, 60, 100, 108, 116, 124, 132, 140,
+			  149, 157, 184, 192 };
 	size_t k;
 
 	if (!iface->conf->secondary_channel)
