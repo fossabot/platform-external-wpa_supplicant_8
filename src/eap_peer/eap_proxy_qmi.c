@@ -96,8 +96,6 @@ typedef struct {
 wpa_uim_struct_type   wpa_uim[MAX_NO_OF_SIM_SUPPORTED];
 #endif /* SIM_AKA_IDENTITY_IMSI */
 
-static int eap_proxy_init_counter = 0;
-
 static int eap_proxy_qmi_init_handle;
 static qmi_client_type qmi_uim_svc_client_ptr;
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
@@ -684,13 +682,6 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	struct dev_info mdm_detect_info;
 	int ret = 0;
 
-	/* Make sure proxy sm is singleton */
-        if (eap_proxy_init_counter > 0) {
-		wpa_printf(MSG_INFO, "eap_proxy: already initialized, counter=%d", eap_proxy_init_counter);
-		return NULL;
-	}
-	eap_proxy_init_counter++;
-
 	/* Call ESOC API to get the number of modems.
 	 * If the number of modems is not zero, only then proceed
 	 * with the eap_proxy intialization.
@@ -908,7 +899,6 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 
 	os_free(eap_proxy);
 	eap_proxy = NULL;
-	eap_proxy_init_counter = 0;
 	wpa_printf(MSG_INFO, "eap_proxy Deinitialzed\n");
 }
 
