@@ -96,13 +96,10 @@ typedef struct {
 wpa_uim_struct_type   wpa_uim[MAX_NO_OF_SIM_SUPPORTED];
 #endif /* SIM_AKA_IDENTITY_IMSI */
 
-static int eap_proxy_qmi_init_handle;
-static qmi_client_type qmi_uim_svc_client_ptr;
+static int eap_proxy_init_counter = 0;
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
-static int eap_auth_session_flag[MAX_NO_OF_SIM_SUPPORTED] = {FALSE, FALSE};
 static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE, FALSE};
 #else
-static int eap_auth_session_flag[MAX_NO_OF_SIM_SUPPORTED] = {FALSE};
 static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE};
 #endif /* CONFIG_EAP_PROXY_DUAL_SIM */
 
@@ -718,8 +715,8 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 #endif
 
 	/* initialize QMI */
-	eap_proxy_qmi_init_handle = qmi_init(handle_qmi_sys_events, NULL);
-	if (eap_proxy_qmi_init_handle < 0) {
+	eap_proxy->eap_proxy_qmi_init_handle = qmi_init(handle_qmi_sys_events, NULL);
+	if (eap_proxy->eap_proxy_qmi_init_handle < 0) {
 		wpa_printf(MSG_ERROR, "Error in qmi_init\n");
 		os_free(eap_proxy);
 		eap_proxy = NULL;
@@ -730,6 +727,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 		/*Get the available port using property get*/
 		eap_qmi_port[index] = eap_proxy_get_port();
 		eap_proxy->qmihandle[index] = QMI_NO_ERR;
+                eap_proxy->eap_auth_session_flag[index] = FALSE;
 
 		do {
 			if(eap_proxy->qmihandle[index] == QMI_PORT_NOT_OPEN_ERR &&
@@ -765,7 +763,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 				index, eap_proxy->qmihandle[index]);
 
 #ifdef SIM_AKA_IDENTITY_IMSI
-		if (FALSE == qmi_uim_svc_client_initialized[index]) {
+		if ((FALSE == qmi_uim_svc_client_initialized[index]) && (eap_proxy_init_counter == 0)) {
 			/* Init QMI_UIM service for EAP-SIM/AKA */
 			qmi_client_service_obj[index] = uim_get_service_object_v01();
 
@@ -807,6 +805,9 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapRestart, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapResp, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, FALSE);
+        eap_proxy_init_counter++;
+        wpa_printf (MSG_DEBUG,
+		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
 	wpa_printf (MSG_ERROR, "Eap_proxy initialized successfully\n");
 
 	return eap_proxy;
@@ -822,10 +823,14 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	if (NULL == eap_proxy)
 		return;
 
+        eap_proxy_init_counter--;
+        wpa_printf (MSG_DEBUG,
+		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
+
 	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
-		if (TRUE == eap_auth_session_flag[index]) {
+		if (TRUE == eap_proxy->eap_auth_session_flag[index]) {
 			wpa_printf (MSG_ERROR, "eap_proxy: in eap_proxy_deinit qmihandle[%d] = %d\n",
 					index, eap_proxy->qmihandle[index]);
 			/* end the current EAP session */
@@ -841,14 +846,15 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 				wpa_printf(MSG_ERROR, "eap_proxy: Ended the QMI EAP session for "
 						"client %d\n",
 						index+1);
-				eap_auth_session_flag[index] = FALSE;
+				eap_proxy->eap_auth_session_flag[index] = FALSE;
 			}
 		} else {
 			wpa_printf (MSG_ERROR, "eap_proxy: session not started for client = %d\n", index+1);
 			continue;
 		}
 
-		if (TRUE == qmi_uim_svc_client_initialized[index]) {
+		if ((TRUE == qmi_uim_svc_client_initialized[index]) &&
+			(eap_proxy_init_counter == 0)) {
 			qmiRetCode = qmi_client_release(wpa_uim[index].qmi_uim_svc_client_ptr);
 			if (QMI_NO_ERR != qmiRetCode) {
 				wpa_printf (MSG_ERROR, "Unable to Releas the connection"
@@ -863,10 +869,9 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 					    "service client = %d; error_ret=%d;"
 					    "error_code=%d\n\n", index+1, qmiRetCode,
 					    qmiErrorCode);
-			} else {
-				wpa_printf(MSG_ERROR, "Released QMI EAP service client\n");
-				qmi_uim_svc_client_initialized[index] = FALSE;
 			}
+			wpa_printf(MSG_ERROR, "Released QMI EAP service client\n");
+			qmi_uim_svc_client_initialized[index] = FALSE;
 		} else {
 			wpa_printf (MSG_ERROR, "eap_proxy: Service client %d is not initilaized\n", index+1);
 			continue;
@@ -879,7 +884,7 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	}
 
 	/* Release QMI */
-	qmi_release(eap_proxy_qmi_init_handle);
+	qmi_release(eap_proxy->eap_proxy_qmi_init_handle);
 
 	eap_proxy->iskey_valid = FALSE;
 	eap_proxy->is_state_changed = FALSE;
@@ -1834,7 +1839,7 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 		return FALSE;
 	}
 #endif
-	if (TRUE == eap_auth_session_flag[sim_num]) {
+	if (TRUE == eap_proxy->eap_auth_session_flag[sim_num]) {
 		if (eap_proxy->qmihandle[sim_num] != 0) {
 			qmiRetCode = qmi_eap_auth_end_eap_session(eap_proxy->qmihandle[sim_num],
 									&qmiErrorCode);
@@ -1843,11 +1848,11 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 						" error_ret=%d; error_code=%d\n", qmiRetCode,
 						qmiErrorCode);
 			}
-			eap_auth_session_flag[sim_num] = FALSE;
+			eap_proxy->eap_auth_session_flag[sim_num] = FALSE;
 		}
 	}
 
-	if (FALSE == eap_auth_session_flag[sim_num]) {
+	if (FALSE == eap_proxy->eap_auth_session_flag[sim_num]) {
 		if (eap_proxy->qmihandle[sim_num] != 0) {
 			wpa_printf(MSG_ERROR, "eap_proxy: qmihandle[%d] = %d\n", sim_num, eap_proxy->qmihandle[sim_num]);
 			wpa_printf(MSG_ERROR, "eap_auth_start values\n");
@@ -1863,7 +1868,7 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 						qmiErrorCode);
 				return FALSE;
 			}
-			eap_auth_session_flag[sim_num] = TRUE;
+			eap_proxy->eap_auth_session_flag[sim_num] = TRUE;
 			eap_proxy->qmi_state = QMI_STATE_IDLE;
 			if (NULL != eap_auth_start.user_id) {
 				os_free (eap_auth_start.user_id);
