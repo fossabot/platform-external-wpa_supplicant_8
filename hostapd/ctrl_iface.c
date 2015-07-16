@@ -1351,37 +1351,13 @@ static int hostapd_ctrl_iface_vendor(struct hostapd_data *hapd, char *cmd,
 	return ret;
 }
 
-
-static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
-				       void *sock_ctx)
+static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
+					      char *buf, char *reply,
+					      int reply_size,
+					      struct sockaddr_un *from,
+					      socklen_t fromlen)
 {
-	struct hostapd_data *hapd = eloop_ctx;
-	char buf[4096];
-	int res;
-	struct sockaddr_un from;
-	socklen_t fromlen = sizeof(from);
-	char *reply;
-	const int reply_size = 4096;
-	int reply_len;
-	int level = MSG_DEBUG;
-
-	res = recvfrom(sock, buf, sizeof(buf) - 1, 0,
-		       (struct sockaddr *) &from, &fromlen);
-	if (res < 0) {
-		perror("recvfrom(ctrl_iface)");
-		return;
-	}
-	buf[res] = '\0';
-	if (os_strcmp(buf, "PING") == 0)
-		level = MSG_EXCESSIVE;
-	wpa_hexdump_ascii(level, "RX ctrl_iface", (u8 *) buf, res);
-
-	reply = os_malloc(reply_size);
-	if (reply == NULL) {
-		sendto(sock, "FAIL\n", 5, 0, (struct sockaddr *) &from,
-		       fromlen);
-		return;
-	}
+	int reply_len, res;
 
 	os_memcpy(reply, "OK\n", 3);
 	reply_len = 3;
@@ -1439,13 +1415,13 @@ static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
 		reply_len = hostapd_ctrl_iface_sta_next(hapd, buf + 9, reply,
 							reply_size);
 	} else if (os_strcmp(buf, "ATTACH") == 0) {
-		if (hostapd_ctrl_iface_attach(hapd, &from, fromlen))
+		if (hostapd_ctrl_iface_attach(hapd, from, fromlen))
 			reply_len = -1;
 	} else if (os_strcmp(buf, "DETACH") == 0) {
-		if (hostapd_ctrl_iface_detach(hapd, &from, fromlen))
+		if (hostapd_ctrl_iface_detach(hapd, from, fromlen))
 			reply_len = -1;
 	} else if (os_strncmp(buf, "LEVEL ", 6) == 0) {
-		if (hostapd_ctrl_iface_level(hapd, &from, fromlen,
+		if (hostapd_ctrl_iface_level(hapd, from, fromlen,
 						    buf + 6))
 			reply_len = -1;
 	} else if (os_strncmp(buf, "NEW_STA ", 8) == 0) {
@@ -1570,6 +1546,50 @@ static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
 		os_memcpy(reply, "FAIL\n", 5);
 		reply_len = 5;
 	}
+
+	return reply_len;
+}
+
+
+static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
+				       void *sock_ctx)
+{
+	struct hostapd_data *hapd = eloop_ctx;
+	char buf[4096];
+	int res;
+	struct sockaddr_un from;
+	socklen_t fromlen = sizeof(from);
+	char *reply;
+	const int reply_size = 4096;
+	int reply_len;
+	int level = MSG_DEBUG;
+
+	res = recvfrom(sock, buf, sizeof(buf) - 1, 0,
+		       (struct sockaddr *) &from, &fromlen);
+	if (res < 0) {
+		wpa_printf(MSG_ERROR, "recvfrom(ctrl_iface): %s",
+			   strerror(errno));
+		return;
+	}
+	buf[res] = '\0';
+	if (os_strcmp(buf, "PING") == 0)
+		level = MSG_EXCESSIVE;
+	wpa_hexdump_ascii(level, "RX ctrl_iface", (u8 *) buf, res);
+
+	reply = os_malloc(reply_size);
+	if (reply == NULL) {
+		if (sendto(sock, "FAIL\n", 5, 0, (struct sockaddr *) &from,
+			   fromlen) < 0) {
+			wpa_printf(MSG_DEBUG, "CTRL: sendto failed: %s",
+				   strerror(errno));
+		}
+		return;
+	}
+
+	reply_len = hostapd_ctrl_iface_receive_process(hapd, buf,
+						       reply, reply_size,
+						       &from, fromlen);
+
 	sendto(sock, reply, reply_len, 0, (struct sockaddr *) &from, fromlen);
 	os_free(reply);
 }
