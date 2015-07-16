@@ -455,6 +455,16 @@ static int acs_usable_chan(struct hostapd_channel_data *chan)
 }
 
 
+static int is_in_chanlist(struct hostapd_iface *iface,
+			  struct hostapd_channel_data *chan)
+{
+	if (!iface->conf->acs_ch_list.num)
+		return 1;
+
+	return freq_range_list_includes(&iface->conf->acs_ch_list, chan->chan);
+}
+
+
 static void acs_survey_all_chans_intereference_factor(
 	struct hostapd_iface *iface)
 {
@@ -465,6 +475,9 @@ static void acs_survey_all_chans_intereference_factor(
 		chan = &iface->current_mode->channels[i];
 
 		if (!acs_usable_chan(chan))
+			continue;
+
+		if (!is_in_chanlist(iface, chan))
 			continue;
 
 		wpa_printf(MSG_DEBUG, "ACS: Survey analysis for channel %d (%d MHz)",
@@ -543,6 +556,8 @@ acs_find_ideal_chan(struct hostapd_iface *iface)
 		if (chan->flag & HOSTAPD_CHAN_DISABLED)
 			continue;
 
+		if (!is_in_chanlist(iface, chan))
+			continue;
 
 		/* HT40 on 5 GHz has a limited set of primary channels as per
 		 * 11n Annex J */

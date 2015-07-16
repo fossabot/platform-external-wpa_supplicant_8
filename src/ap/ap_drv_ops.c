@@ -483,8 +483,6 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data, int mode,
 			    int vht_oper_chwidth, int center_segment0,
 			    int center_segment1, u32 vht_caps)
 {
-	int tmp;
-
 	os_memset(data, 0, sizeof(*data));
 	data->mode = mode;
 	data->freq = freq;
@@ -496,10 +494,6 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data, int mode,
 	data->center_freq2 = 0;
 	data->bandwidth = sec_channel_offset ? 40 : 20;
 
-	/*
-	 * This validation code is probably misplaced, maybe it should be
-	 * in src/ap/hw_features.c and check the hardware support as well.
-	 */
 	if (data->vht_enabled) switch (vht_oper_chwidth) {
 	case VHT_CHANWIDTH_USE_HT:
 		if (center_segment1)
@@ -528,13 +522,34 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data, int mode,
 			return -1;
 		if (!sec_channel_offset)
 			return -1;
-		/* primary 40 part must match the HT configuration */
-		tmp = (30 + freq - 5000 - center_segment0 * 5)/20;
-		tmp /= 2;
-		if (data->center_freq1 != 5000 +
-					 center_segment0 * 5 - 20 + 40 * tmp)
-			return -1;
-		data->center_freq1 = 5000 + center_segment0 * 5;
+		if (!center_segment0) {
+			if (channel <= 48)
+				center_segment0 = 42;
+			else if (channel <= 64)
+				center_segment0 = 58;
+			else if (channel <= 112)
+				center_segment0 = 106;
+			else if (channel <= 128)
+				center_segment0 = 122;
+			else if (channel <= 144)
+				center_segment0 = 138;
+			else if (channel <= 161)
+				center_segment0 = 155;
+			data->center_freq1 = 5000 + center_segment0 * 5;
+		} else {
+			/*
+			 * Note: HT/VHT config and params are coupled. Check if
+			 * HT40 channel band is in VHT80 Pri channel band
+			 * configuration.
+			 */
+			if (center_segment0 == channel + 6 ||
+			    center_segment0 == channel + 2 ||
+			    center_segment0 == channel - 2 ||
+			    center_segment0 == channel - 6)
+				data->center_freq1 = 5000 + center_segment0 * 5;
+			else
+				return -1;
+		}
 		break;
 	case VHT_CHANWIDTH_160MHZ:
 		data->bandwidth = 160;
@@ -548,13 +563,21 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data, int mode,
 			return -1;
 		if (!sec_channel_offset)
 			return -1;
-		/* primary 40 part must match the HT configuration */
-		tmp = (70 + freq - 5000 - center_segment0 * 5)/20;
-		tmp /= 2;
-		if (data->center_freq1 != 5000 +
-					 center_segment0 * 5 - 60 + 40 * tmp)
+		/*
+		 * Note: HT/VHT config and params are coupled. Check if
+		 * HT40 channel band is in VHT160 channel band configuration.
+		 */
+		if (center_segment0 == channel + 14 ||
+		    center_segment0 == channel + 10 ||
+		    center_segment0 == channel + 6 ||
+		    center_segment0 == channel + 2 ||
+		    center_segment0 == channel - 2 ||
+		    center_segment0 == channel - 6 ||
+		    center_segment0 == channel - 10 ||
+		    center_segment0 == channel - 14)
+			data->center_freq1 = 5000 + center_segment0 * 5;
+		else
 			return -1;
-		data->center_freq1 = 5000 + center_segment0 * 5;
 		break;
 	}
 
@@ -797,13 +820,66 @@ int hostapd_drv_set_qos_map(struct hostapd_data *hapd,
 int hostapd_drv_do_acs(struct hostapd_data *hapd)
 {
 	struct drv_acs_params params;
+	int ret, i, acs_ch_list_all = 0;
+	u8 *channels = NULL;
+	unsigned int num_channels = 0;
+	struct hostapd_hw_modes *mode;
 
 	if (hapd->driver == NULL || hapd->driver->do_acs == NULL)
 		return 0;
+
 	os_memset(&params, 0, sizeof(params));
 	params.hw_mode = hapd->iface->conf->hw_mode;
+
+	/*
+	 * If no chanlist config parameter is provided, include all enabled
+	 * channels of the selected hw_mode.
+	 */
+	if (!hapd->iface->conf->acs_ch_list.num)
+		acs_ch_list_all = 1;
+
+	mode = hapd->iface->current_mode;
+	if (mode == NULL)
+		return -1;
+	channels = os_malloc(mode->num_channels);
+	if (channels == NULL)
+		return -1;
+
+	for (i = 0; i < mode->num_channels; i++) {
+		struct hostapd_channel_data *chan = &mode->channels[i];
+		if (!acs_ch_list_all &&
+		    !freq_range_list_includes(&hapd->iface->conf->acs_ch_list,
+					      chan->chan))
+			continue;
+		if (!(chan->flag & HOSTAPD_CHAN_DISABLED))
+			channels[num_channels++] = chan->chan;
+	}
+
+	params.ch_list = channels;
+	params.ch_list_len = num_channels;
+
 	params.ht_enabled = !!(hapd->iface->conf->ieee80211n);
 	params.ht40_enabled = !!(hapd->iface->conf->ht_capab &
 				 HT_CAP_INFO_SUPP_CHANNEL_WIDTH_SET);
-	return hapd->driver->do_acs(hapd->drv_priv, &params);
+	params.vht_enabled = !!(hapd->iface->conf->ieee80211ac);
+	params.ch_width = 20;
+	if (hapd->iface->conf->ieee80211n && params.ht40_enabled)
+		params.ch_width = 40;
+
+	/* Note: VHT20 is defined by combination of ht_capab & vht_oper_chwidth
+	 */
+	if (hapd->iface->conf->ieee80211ac && params.ht40_enabled) {
+		if (hapd->iface->conf->vht_oper_chwidth == VHT_CHANWIDTH_80MHZ)
+			params.ch_width = 80;
+		else if (hapd->iface->conf->vht_oper_chwidth ==
+			 VHT_CHANWIDTH_160MHZ ||
+			 hapd->iface->conf->vht_oper_chwidth ==
+			 VHT_CHANWIDTH_80P80MHZ)
+			params.ch_width = 160;
+	}
+
+	ret = hapd->driver->do_acs(hapd->drv_priv, &params);
+	os_free(channels);
+
+	return ret;
 }
