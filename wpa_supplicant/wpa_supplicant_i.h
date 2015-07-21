@@ -871,6 +871,12 @@ struct wpa_supplicant {
 	unsigned int ext_work_id;
 
 	struct wpabuf *vendor_elem[NUM_VENDOR_ELEM_FRAMES];
+
+#ifdef CONFIG_FST
+	struct fst_iface *fst;
+	struct wpabuf *fst_ies;
+	struct wpabuf *received_mb_ies;
+#endif /* CONFIG_FST */
 };
 
 
@@ -1024,5 +1030,14 @@ int get_shared_radio_freqs_data(struct wpa_supplicant *wpa_s,
 				unsigned int len);
 int get_shared_radio_freqs(struct wpa_supplicant *wpa_s,
 			   int *freq_array, unsigned int len);
+
+#ifdef CONFIG_FST
+
+struct fst_wpa_obj;
+
+void fst_wpa_supplicant_fill_iface_obj(struct wpa_supplicant *wpa_s,
+				       struct fst_wpa_obj *iface_obj);
+
+#endif /* CONFIG_FST */
 
 #endif /* WPA_SUPPLICANT_I_H */

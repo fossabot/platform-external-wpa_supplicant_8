@@ -11,6 +11,7 @@
 #include "utils/common.h"
 #include "common/ieee802_11_defs.h"
 #include "eapol_auth/eapol_auth_sm.h"
+#include "fst/fst_ctrl_iface.h"
 #include "hostapd.h"
 #include "ieee802_1x.h"
 #include "wpa_auth.h"
@@ -189,7 +190,10 @@ int hostapd_ctrl_iface_sta(struct hostapd_data *hapd, const char *txtaddr,
 		return -1;
 	}
 
-	return hostapd_ctrl_iface_sta_mib(hapd, sta, buf, buflen);
+	ret = hostapd_ctrl_iface_sta_mib(hapd, sta, buf, buflen);
+	ret += fst_ctrl_iface_mb_info(addr, buf + ret, buflen - ret);
+
+	return ret;
 }
 
 

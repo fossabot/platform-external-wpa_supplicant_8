@@ -15,6 +15,7 @@
 #include "rsn_supp/wpa.h"
 #include "eap_peer/eap.h"
 #include "p2p/p2p.h"
+#include "fst/fst.h"
 #include "config.h"
 
 
@@ -2046,6 +2047,7 @@ void wpa_config_free(struct wpa_config *config)
 	wpabuf_free(config->ap_vendor_elements);
 	os_free(config->osu_dir);
 	os_free(config->wowlan_triggers);
+	os_free(config->fst_group_id);
 	os_free(config);
 }
 
@@ -3917,6 +3919,11 @@ static const struct global_parse_data global_fields[] = {
 	{ INT(rand_addr_lifetime), 0 },
 	{ INT(preassoc_mac_addr), 0 },
 	{ INT(key_mgmt_offload), 0},
+#ifdef CONFIG_FST
+	{ STR_RANGE(fst_group_id, 1, FST_MAX_GROUP_ID_LEN), 0 },
+	{ INT_RANGE(fst_priority, 1, FST_MAX_PRIO_VALUE), 0 },
+	{ INT_RANGE(fst_llt, 1, FST_MAX_LLT_MS), 0 },
+#endif /* CONFIG_FST */
 };
 
 #undef FUNC

@@ -2429,7 +2429,6 @@ static int nl80211_get_link_signal(struct wpa_driver_nl80211_data *drv,
 	return -ENOBUFS;
 }
 
-
 static int get_link_noise(struct nl_msg *msg, void *arg)
 {
 	struct nlattr *tb[NL80211_ATTR_MAX + 1];
@@ -4962,6 +4961,12 @@ static int nl80211_mgmt_subscribe_non_ap(struct i802_bss *bss)
 			ret = -1;
 	}
 #endif /* CONFIG_TDLS */
+
+#ifdef CONFIG_FST
+	/* FST Action frames */
+	if (nl80211_register_action_frame(bss, (u8 *) "\x12", 1) < 0)
+		ret = -1;
+#endif /* CONFIG_FST */
 
 	/* FT Action frames */
 	if (nl80211_register_action_frame(bss, (u8 *) "\x06", 1) < 0)
@@ -10503,8 +10508,8 @@ static void *i802_init(struct hostapd_data *hapd,
 	struct wpa_driver_nl80211_data *drv;
 	struct i802_bss *bss;
 	size_t i;
-	char brname[IFNAMSIZ];
-	int ifindex, br_ifindex;
+	char master_ifname[IFNAMSIZ];
+	int ifindex, br_ifindex = 0;
 	int br_added = 0;
 
 	bss = wpa_driver_nl80211_drv_init(hapd, params->ifname,
@@ -10515,13 +10520,19 @@ static void *i802_init(struct hostapd_data *hapd,
 
 	drv = bss->drv;
 
-	if (linux_br_get(brname, params->ifname) == 0) {
+	if (linux_br_get(master_ifname, params->ifname) == 0) {
 		wpa_printf(MSG_DEBUG, "nl80211: Interface %s is in bridge %s",
-			   params->ifname, brname);
-		br_ifindex = if_nametoindex(brname);
+			   params->ifname, master_ifname);
+		br_ifindex = if_nametoindex(master_ifname);
+		os_strlcpy(bss->brname, master_ifname, IFNAMSIZ);
+	} else if ((params->num_bridge == 0 || !params->bridge[0]) &&
+		   linux_master_get(master_ifname, params->ifname) == 0) {
+		wpa_printf(MSG_DEBUG, "nl80211: Interface %s is in master %s",
+			params->ifname, master_ifname);
+		/* start listening for EAPOL on the master interface */
+		add_ifidx(drv, if_nametoindex(master_ifname));
 	} else {
-		brname[0] = '\0';
-		br_ifindex = 0;
+		master_ifname[0] = '\0';
 	}
 
 	for (i = 0; i < params->num_bridge; i++) {

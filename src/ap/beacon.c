@@ -348,6 +348,10 @@ static u8 * hostapd_gen_probe_resp(struct hostapd_data *hapd,
 	if (hapd->p2p_probe_resp_ie)
 		buflen += wpabuf_len(hapd->p2p_probe_resp_ie);
 #endif /* CONFIG_P2P */
+#ifdef CONFIG_FST
+	if (hapd->iface->fst_ies)
+		buflen += wpabuf_len(hapd->iface->fst_ies);
+#endif /* CONFIG_FST */
 	if (hapd->conf->vendor_elements)
 		buflen += wpabuf_len(hapd->conf->vendor_elements);
 	resp = os_zalloc(buflen);
@@ -414,6 +418,15 @@ static u8 * hostapd_gen_probe_resp(struct hostapd_data *hapd,
 
 	pos = hostapd_add_csa_elems(hapd, pos, (u8 *)resp,
 				    &hapd->cs_c_off_proberesp);
+
+#ifdef CONFIG_FST
+	if (hapd->iface->fst_ies) {
+		os_memcpy(pos, wpabuf_head(hapd->iface->fst_ies),
+			  wpabuf_len(hapd->iface->fst_ies));
+		pos += wpabuf_len(hapd->iface->fst_ies);
+	}
+#endif /* CONFIG_FST */
+
 #ifdef CONFIG_IEEE80211AC
 	pos = hostapd_eid_vht_capabilities(hapd, pos);
 	pos = hostapd_eid_vht_operation(hapd, pos);
@@ -743,6 +756,10 @@ int ieee802_11_build_ap_params(struct hostapd_data *hapd,
 	if (hapd->p2p_beacon_ie)
 		tail_len += wpabuf_len(hapd->p2p_beacon_ie);
 #endif /* CONFIG_P2P */
+#ifdef CONFIG_FST
+	if (hapd->iface->fst_ies)
+		tail_len += wpabuf_len(hapd->iface->fst_ies);
+#endif /* CONFIG_FST */
 	if (hapd->conf->vendor_elements)
 		tail_len += wpabuf_len(hapd->conf->vendor_elements);
 	tailpos = tail = os_malloc(tail_len);
@@ -829,6 +846,15 @@ int ieee802_11_build_ap_params(struct hostapd_data *hapd,
 	tailpos = hostapd_eid_roaming_consortium(hapd, tailpos);
 	tailpos = hostapd_add_csa_elems(hapd, tailpos, tail,
 					&hapd->cs_c_off_beacon);
+
+#ifdef CONFIG_FST
+	if (hapd->iface->fst_ies) {
+		os_memcpy(tailpos, wpabuf_head(hapd->iface->fst_ies),
+			  wpabuf_len(hapd->iface->fst_ies));
+		tailpos += wpabuf_len(hapd->iface->fst_ies);
+	}
+#endif /* CONFIG_FST */
+
 #ifdef CONFIG_IEEE80211AC
 	tailpos = hostapd_eid_vht_capabilities(hapd, tailpos);
 	tailpos = hostapd_eid_vht_operation(hapd, tailpos);

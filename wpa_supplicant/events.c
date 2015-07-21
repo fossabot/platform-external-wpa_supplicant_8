@@ -23,6 +23,7 @@
 #include "eap_peer/eap.h"
 #include "ap/hostapd.h"
 #include "p2p/p2p.h"
+#include "fst/fst.h"
 #include "wnm_sta.h"
 #include "notify.h"
 #include "common/ieee802_11_defs.h"
@@ -1854,6 +1855,19 @@ static int wpa_supplicant_event_associnfo(struct wpa_supplicant *wpa_s,
 	if (wpa_found || rsn_found)
 		wpa_s->ap_ies_from_associnfo = 1;
 
+#ifdef CONFIG_FST
+	wpabuf_free(wpa_s->received_mb_ies);
+	wpa_s->received_mb_ies = NULL;
+	if (wpa_s->fst) {
+		struct mb_ies_info mb_ies;
+
+		wpa_printf(MSG_DEBUG, "Looking for MB IE");
+		if (!mb_ies_info_by_ies(&mb_ies, data->assoc_info.resp_ies,
+					data->assoc_info.resp_ies_len))
+			wpa_s->received_mb_ies = mb_ies_by_info(&mb_ies);
+	}
+#endif /* CONFIG_FST */
+
 	if (wpa_s->assoc_freq && data->assoc_info.freq &&
 	    wpa_s->assoc_freq != data->assoc_info.freq) {
 		wpa_printf(MSG_DEBUG, "Operating frequency changed from "
@@ -2900,6 +2914,13 @@ static void wpas_event_rx_mgmt_action(struct wpa_supplicant *wpa_s,
 		return;
 	}
 #endif /* CONFIG_INTERWORKING */
+
+#ifdef CONFIG_FST
+	if (mgmt->u.action.category == WLAN_ACTION_FST && wpa_s->fst) {
+		fst_rx_action(wpa_s->fst, mgmt, len);
+		return;
+	}
+#endif /* CONFIG_FST */
 
 	wpas_p2p_rx_action(wpa_s, mgmt->da, mgmt->sa, mgmt->bssid,
 			   category, payload, plen, freq);

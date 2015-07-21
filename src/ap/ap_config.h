@@ -14,6 +14,7 @@
 #include "common/wpa_common.h"
 #include "common/ieee802_11_common.h"
 #include "wps/wps.h"
+#include "fst/fst.h"
 
 #define MAX_STA_COUNT 2007
 #define MAX_VLAN_ID 4094
@@ -590,6 +591,10 @@ struct hostapd_config {
 	u8 vht_oper_chwidth;
 	u8 vht_oper_centr_freq_seg0_idx;
 	u8 vht_oper_centr_freq_seg1_idx;
+
+#ifdef CONFIG_FST
+	struct fst_iface_cfg fst_cfg;
+#endif /* CONFIG_FST */
 
 #ifdef CONFIG_TESTING_OPTIONS
 	double ignore_probe_probability;

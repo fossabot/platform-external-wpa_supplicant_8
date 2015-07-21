@@ -35,6 +35,7 @@
 #include "ap/wpa_auth.h"
 #include "wps/wps_defs.h"
 #include "wps/wps.h"
+#include "fst/fst_ctrl_iface.h"
 #include "config_file.h"
 #include "ctrl_iface.h"
 
@@ -49,6 +50,7 @@ struct wpa_ctrl_dst {
 
 
 static void hostapd_ctrl_iface_send(struct hostapd_data *hapd, int level,
+				    enum wpa_msg_type type,
 				    const char *buf, size_t len);
 
 
@@ -1594,13 +1596,14 @@ static char * hostapd_ctrl_iface_path(struct hostapd_data *hapd)
 }
 
 
-static void hostapd_ctrl_iface_msg_cb(void *ctx, int level, int global,
+static void hostapd_ctrl_iface_msg_cb(void *ctx, int level,
+				      enum wpa_msg_type type,
 				      const char *txt, size_t len)
 {
 	struct hostapd_data *hapd = ctx;
 	if (hapd == NULL)
 		return;
-	hostapd_ctrl_iface_send(hapd, level, txt, len);
+	hostapd_ctrl_iface_send(hapd, level, type, txt, len);
 }
 
 
@@ -1807,6 +1810,58 @@ static int hostapd_ctrl_iface_remove(struct hapd_interfaces *interfaces,
 }
 
 
+static int hostapd_global_ctrl_iface_attach(struct hapd_interfaces *interfaces,
+					    struct sockaddr_un *from,
+					    socklen_t fromlen)
+{
+	struct wpa_ctrl_dst *dst;
+
+	dst = os_zalloc(sizeof(*dst));
+	if (dst == NULL)
+		return -1;
+	os_memcpy(&dst->addr, from, sizeof(struct sockaddr_un));
+	dst->addrlen = fromlen;
+	dst->debug_level = MSG_INFO;
+	dst->next = interfaces->global_ctrl_dst;
+	interfaces->global_ctrl_dst = dst;
+	wpa_hexdump(MSG_DEBUG, "CTRL_IFACE monitor attached (global)",
+		    from->sun_path,
+		    fromlen - offsetof(struct sockaddr_un, sun_path));
+	return 0;
+}
+
+
+static int hostapd_global_ctrl_iface_detach(struct hapd_interfaces *interfaces,
+					    struct sockaddr_un *from,
+					    socklen_t fromlen)
+{
+	struct wpa_ctrl_dst *dst, *prev = NULL;
+
+	dst = interfaces->global_ctrl_dst;
+	while (dst) {
+		if (fromlen == dst->addrlen &&
+		    os_memcmp(from->sun_path, dst->addr.sun_path,
+			      fromlen - offsetof(struct sockaddr_un, sun_path))
+		    == 0) {
+			wpa_hexdump(MSG_DEBUG,
+				    "CTRL_IFACE monitor detached (global)",
+				    from->sun_path,
+				    fromlen -
+				    offsetof(struct sockaddr_un, sun_path));
+			if (prev == NULL)
+				interfaces->global_ctrl_dst = dst->next;
+			else
+				prev->next = dst->next;
+			os_free(dst);
+			return 0;
+		}
+		prev = dst;
+		dst = dst->next;
+	}
+	return -1;
+}
+
+
 static void hostapd_ctrl_iface_flush(struct hapd_interfaces *interfaces)
 {
 #ifdef CONFIG_WPS_TESTING
@@ -1817,6 +1872,55 @@ static void hostapd_ctrl_iface_flush(struct hapd_interfaces *interfaces)
 }
 
 
+#ifdef CONFIG_FST
+
+static int
+hostapd_global_ctrl_iface_fst_attach(struct hapd_interfaces *interfaces,
+				     const char *cmd)
+{
+	char ifname[IFNAMSIZ + 1];
+	struct fst_iface_cfg cfg;
+	struct hostapd_data *hapd;
+	struct fst_wpa_obj iface_obj;
+
+	if (!fst_parse_attach_command(cmd, ifname, sizeof(ifname), &cfg)) {
+		hapd = hostapd_get_iface(interfaces, ifname);
+		if (hapd) {
+			fst_hostapd_fill_iface_obj(hapd, &iface_obj);
+			hapd->iface->fst = fst_attach(ifname, hapd->own_addr,
+						      &iface_obj, &cfg);
+			if (hapd->iface->fst)
+				return 0;
+		}
+	}
+
+	return EINVAL;
+}
+
+
+static int
+hostapd_global_ctrl_iface_fst_detach(struct hapd_interfaces *interfaces,
+				     const char *cmd)
+{
+	char ifname[IFNAMSIZ + 1];
+	struct hostapd_data * hapd;
+
+	if (!fst_parse_detach_command(cmd, ifname, sizeof(ifname))) {
+		hapd = hostapd_get_iface(interfaces, ifname);
+		if (hapd) {
+			if (!fst_iface_detach(ifname)) {
+				hapd->iface->fst = NULL;
+				return 0;
+			}
+		}
+	}
+
+	return EINVAL;
+}
+
+#endif /* CONFIG_FST */
+
+
 static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
 					      void *sock_ctx)
 {
@@ -1825,8 +1929,9 @@ static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
 	int res;
 	struct sockaddr_un from;
 	socklen_t fromlen = sizeof(from);
-	char reply[24];
+	char *reply;
 	int reply_len;
+	const int reply_size = 4096;
 
 	res = recvfrom(sock, buf, sizeof(buf) - 1, 0,
 		       (struct sockaddr *) &from, &fromlen);
@@ -1836,6 +1941,16 @@ static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
 	}
 	buf[res] = '\0';
 	wpa_printf(MSG_DEBUG, "Global ctrl_iface command: %s", buf);
+
+	reply = os_malloc(reply_size);
+	if (reply == NULL) {
+		if (sendto(sock, "FAIL\n", 5, 0, (struct sockaddr *) &from,
+			   fromlen) < 0) {
+			wpa_printf(MSG_DEBUG, "CTRL: sendto failed: %s",
+				   strerror(errno));
+		}
+		return;
+	}
 
 	os_memcpy(reply, "OK\n", 3);
 	reply_len = 3;
@@ -1854,12 +1969,34 @@ static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
 	} else if (os_strncmp(buf, "REMOVE ", 7) == 0) {
 		if (hostapd_ctrl_iface_remove(interfaces, buf + 7) < 0)
 			reply_len = -1;
+	} else if (os_strcmp(buf, "ATTACH") == 0) {
+		if (hostapd_global_ctrl_iface_attach(interfaces, &from,
+						     fromlen))
+			reply_len = -1;
+	} else if (os_strcmp(buf, "DETACH") == 0) {
+		if (hostapd_global_ctrl_iface_detach(interfaces, &from,
+			fromlen))
+			reply_len = -1;
 #ifdef CONFIG_MODULE_TESTS
 	} else if (os_strcmp(buf, "MODULE_TESTS") == 0) {
 		int hapd_module_tests(void);
 		if (hapd_module_tests() < 0)
 			reply_len = -1;
 #endif /* CONFIG_MODULE_TESTS */
+#ifdef CONFIG_FST
+	} else if (os_strncmp(buf, "FST-ATTACH ", 11) == 0) {
+		if (!hostapd_global_ctrl_iface_fst_attach(interfaces, buf + 11))
+			reply_len = os_snprintf(reply, reply_size, "OK\n");
+		else
+			reply_len = -1;
+	} else if (os_strncmp(buf, "FST-DETACH ", 11) == 0) {
+		if (!hostapd_global_ctrl_iface_fst_detach(interfaces, buf + 11))
+			reply_len = os_snprintf(reply, reply_size, "OK\n");
+		else
+			reply_len = -1;
+	} else if (os_strncmp(buf, "FST-MANAGER ", 12) == 0) {
+		reply_len = fst_ctrl_iface_receive(buf + 12, reply, reply_size);
+#endif /* CONFIG_FST */
 	} else {
 		wpa_printf(MSG_DEBUG, "Unrecognized global ctrl_iface command "
 			   "ignored");
@@ -1872,6 +2009,7 @@ static void hostapd_global_ctrl_iface_receive(int sock, void *eloop_ctx,
 	}
 
 	sendto(sock, reply, reply_len, 0, (struct sockaddr *) &from, fromlen);
+	os_free(reply);
 }
 
 
@@ -2005,6 +2143,7 @@ fail:
 void hostapd_global_ctrl_iface_deinit(struct hapd_interfaces *interfaces)
 {
 	char *fname = NULL;
+	struct wpa_ctrl_dst *dst, *prev;
 
 	if (interfaces->global_ctrl_sock > -1) {
 		eloop_unregister_read_sock(interfaces->global_ctrl_sock);
@@ -2029,13 +2168,23 @@ void hostapd_global_ctrl_iface_deinit(struct hapd_interfaces *interfaces)
 					   strerror(errno));
 			}
 		}
-		os_free(interfaces->global_iface_path);
-		interfaces->global_iface_path = NULL;
+	}
+
+	os_free(interfaces->global_iface_path);
+	interfaces->global_iface_path = NULL;
+
+	dst = interfaces->global_ctrl_dst;
+	interfaces->global_ctrl_dst = NULL;
+	while (dst) {
+		prev = dst;
+		dst = dst->next;
+		os_free(prev);
 	}
 }
 
 
 static void hostapd_ctrl_iface_send(struct hostapd_data *hapd, int level,
+				    enum wpa_msg_type type,
 				    const char *buf, size_t len)
 {
 	struct wpa_ctrl_dst *dst, *next;
@@ -2043,9 +2192,17 @@ static void hostapd_ctrl_iface_send(struct hostapd_data *hapd, int level,
 	int idx;
 	struct iovec io[2];
 	char levelstr[10];
+	int s;
 
-	dst = hapd->ctrl_dst;
-	if (hapd->ctrl_sock < 0 || dst == NULL)
+	if (type != WPA_MSG_ONLY_GLOBAL) {
+		s = hapd->ctrl_sock;
+		dst = hapd->ctrl_dst;
+	} else {
+		s = hapd->iface->interfaces->global_ctrl_sock;
+		dst = hapd->iface->interfaces->global_ctrl_dst;
+	}
+
+	if (s < 0 || dst == NULL)
 		return;
 
 	os_snprintf(levelstr, sizeof(levelstr), "<%d>", level);
@@ -2066,16 +2223,22 @@ static void hostapd_ctrl_iface_send(struct hostapd_data *hapd, int level,
 				    offsetof(struct sockaddr_un, sun_path));
 			msg.msg_name = &dst->addr;
 			msg.msg_namelen = dst->addrlen;
-			if (sendmsg(hapd->ctrl_sock, &msg, 0) < 0) {
+			if (sendmsg(s, &msg, 0) < 0) {
 				int _errno = errno;
 				wpa_printf(MSG_INFO, "CTRL_IFACE monitor[%d]: "
 					   "%d - %s",
 					   idx, errno, strerror(errno));
 				dst->errors++;
 				if (dst->errors > 10 || _errno == ENOENT) {
-					hostapd_ctrl_iface_detach(
-						hapd, &dst->addr,
-						dst->addrlen);
+					if (type != WPA_MSG_ONLY_GLOBAL)
+						hostapd_ctrl_iface_detach(
+							hapd, &dst->addr,
+							dst->addrlen);
+					else
+						hostapd_global_ctrl_iface_detach(
+							hapd->iface->interfaces,
+							&dst->addr,
+							dst->addrlen);
 				}
 			} else
 				dst->errors = 0;

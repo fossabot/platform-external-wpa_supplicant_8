@@ -239,6 +239,7 @@ extern "C" {
 #define WPA_BSS_MASK_INTERNETW		BIT(15)
 #define WPA_BSS_MASK_WIFI_DISPLAY	BIT(16)
 #define WPA_BSS_MASK_DELIM		BIT(17)
+#define WPA_BSS_MASK_FST		BIT(21)
 
 
 /* VENDOR_ELEM_* frame id values */
