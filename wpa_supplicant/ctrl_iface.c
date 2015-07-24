@@ -6037,31 +6037,17 @@ static void wpas_ctrl_eapol_response(void *eloop_ctx, void *timeout_ctx)
 }
 
 
-static int set_scan_freqs(struct wpa_supplicant *wpa_s, char *val)
-{
-	int *freqs = NULL;
-
-	freqs = freq_range_to_channel_list(wpa_s, val);
-	if (freqs == NULL)
-		return -1;
-
-	os_free(wpa_s->manual_scan_freqs);
-	wpa_s->manual_scan_freqs = freqs;
-
-	return 0;
-}
-
-
-static int scan_id_list_parse(struct wpa_supplicant *wpa_s, const char *value)
+static int scan_id_list_parse(struct wpa_supplicant *wpa_s, const char *value,
+			      unsigned int *scan_id_count, int scan_id[])
 {
 	const char *pos = value;
 
 	while (pos) {
 		if (*pos == ' ' || *pos == '\0')
 			break;
-		if (wpa_s->scan_id_count == MAX_SCAN_ID)
+		if (*scan_id_count == MAX_SCAN_ID)
 			return -1;
-		wpa_s->scan_id[wpa_s->scan_id_count++] = atoi(pos);
+		scan_id[(*scan_id_count)++] = atoi(pos);
 		pos = os_strchr(pos, ',');
 		if (pos)
 			pos++;
@@ -6075,16 +6061,22 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 			   char *reply, int reply_size, int *reply_len)
 {
 	char *pos;
+	unsigned int manual_scan_passive = 0;
+	unsigned int manual_scan_use_id = 0;
+	unsigned int manual_scan_only_new = 0;
+	unsigned int scan_only = 0;
+	unsigned int scan_id_count = 0;
+	int scan_id[MAX_SCAN_ID];
+	void (*scan_res_handler)(struct wpa_supplicant *wpa_s,
+				 struct wpa_scan_results *scan_res);
+	int *manual_scan_freqs = NULL;
+	struct wpa_ssid_value *ssid = NULL, *ns;
+	unsigned int ssid_count = 0;
 
 	if (wpa_s->wpa_state == WPA_INTERFACE_DISABLED) {
 		*reply_len = -1;
 		return;
 	}
-
-	wpa_s->manual_scan_passive = 0;
-	wpa_s->manual_scan_use_id = 0;
-	wpa_s->manual_scan_only_new = 0;
-	wpa_s->scan_id_count = 0;
 
 	if (radio_work_pending(wpa_s, "scan")) {
 		wpa_printf(MSG_DEBUG,
@@ -6104,41 +6096,112 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 
 	if (params) {
 		if (os_strncasecmp(params, "TYPE=ONLY", 9) == 0)
-			wpa_s->scan_res_handler = scan_only_handler;
+			scan_only = 1;
 
 		pos = os_strstr(params, "freq=");
-		if (pos && set_scan_freqs(wpa_s, pos + 5) < 0) {
-			*reply_len = -1;
-			return;
+		if (pos) {
+			manual_scan_freqs = freq_range_to_channel_list(wpa_s,
+								       pos + 5);
+			if (manual_scan_freqs == NULL) {
+				*reply_len = -1;
+				goto done;
+			}
 		}
 
 		pos = os_strstr(params, "passive=");
 		if (pos)
-			wpa_s->manual_scan_passive = !!atoi(pos + 8);
+			manual_scan_passive = !!atoi(pos + 8);
 
 		pos = os_strstr(params, "use_id=");
 		if (pos)
-			wpa_s->manual_scan_use_id = atoi(pos + 7);
+			manual_scan_use_id = atoi(pos + 7);
 
 		pos = os_strstr(params, "only_new=1");
 		if (pos)
-			wpa_s->manual_scan_only_new = 1;
+			manual_scan_only_new = 1;
 
 		pos = os_strstr(params, "scan_id=");
-		if (pos && scan_id_list_parse(wpa_s, pos + 8) < 0) {
+		if (pos && scan_id_list_parse(wpa_s, pos + 8, &scan_id_count,
+					      scan_id) < 0) {
 			*reply_len = -1;
-			return;
+			goto done;
 		}
-	} else {
-		os_free(wpa_s->manual_scan_freqs);
-		wpa_s->manual_scan_freqs = NULL;
-		if (wpa_s->scan_res_handler == scan_only_handler)
-			wpa_s->scan_res_handler = NULL;
+
+		pos = params;
+		while (pos && *pos != '\0') {
+			if (os_strncmp(pos, "ssid ", 5) == 0) {
+				char *end;
+
+				pos += 5;
+				end = pos;
+				while (*end) {
+					if (*end == '\0' || *end == ' ')
+						break;
+					end++;
+				}
+
+				ns = os_realloc_array(
+					ssid, ssid_count + 1,
+					sizeof(struct wpa_ssid_value));
+				if (ns == NULL) {
+					*reply_len = -1;
+					goto done;
+				}
+				ssid = ns;
+
+				if ((end - pos) & 0x01 ||
+				    end - pos > 2 * SSID_MAX_LEN ||
+				    hexstr2bin(pos, ssid[ssid_count].ssid,
+					       (end - pos) / 2) < 0) {
+					wpa_printf(MSG_DEBUG,
+						   "Invalid SSID value '%s'",
+						   pos);
+					*reply_len = -1;
+					goto done;
+				}
+				ssid[ssid_count].ssid_len = (end - pos) / 2;
+				wpa_hexdump_ascii(MSG_DEBUG, "scan SSID",
+						  ssid[ssid_count].ssid,
+						  ssid[ssid_count].ssid_len);
+				ssid_count++;
+				pos = end;
+			}
+
+			pos = os_strchr(pos, ' ');
+			if (pos)
+				pos++;
+		}
 	}
+
+	wpa_s->num_ssids_from_scan_req = ssid_count;
+	os_free(wpa_s->ssids_from_scan_req);
+	if (ssid_count) {
+		wpa_s->ssids_from_scan_req = ssid;
+		ssid = NULL;
+	} else {
+		wpa_s->ssids_from_scan_req = NULL;
+	}
+
+	if (scan_only)
+		scan_res_handler = scan_only_handler;
+	else if (wpa_s->scan_res_handler == scan_only_handler)
+		scan_res_handler = NULL;
+	else
+		scan_res_handler = wpa_s->scan_res_handler;
 
 	if (!wpa_s->sched_scanning && !wpa_s->scanning &&
 	    ((wpa_s->wpa_state <= WPA_SCANNING) ||
 	     (wpa_s->wpa_state == WPA_COMPLETED))) {
+		wpa_s->manual_scan_passive = manual_scan_passive;
+		wpa_s->manual_scan_use_id = manual_scan_use_id;
+		wpa_s->manual_scan_only_new = manual_scan_only_new;
+		wpa_s->scan_id_count = scan_id_count;
+		os_memcpy(wpa_s->scan_id, scan_id, scan_id_count * sizeof(int));
+		wpa_s->scan_res_handler = scan_res_handler;
+		os_free(wpa_s->manual_scan_freqs);
+		wpa_s->manual_scan_freqs = manual_scan_freqs;
+		manual_scan_freqs = NULL;
+
 		wpa_s->normal_scans = 0;
 		wpa_s->scan_req = MANUAL_SCAN_REQ;
 		wpa_s->after_wps = 0;
@@ -6152,6 +6215,16 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 						 wpa_s->manual_scan_id);
 		}
 	} else if (wpa_s->sched_scanning) {
+		wpa_s->manual_scan_passive = manual_scan_passive;
+		wpa_s->manual_scan_use_id = manual_scan_use_id;
+		wpa_s->manual_scan_only_new = manual_scan_only_new;
+		wpa_s->scan_id_count = scan_id_count;
+		os_memcpy(wpa_s->scan_id, scan_id, scan_id_count * sizeof(int));
+		wpa_s->scan_res_handler = scan_res_handler;
+		os_free(wpa_s->manual_scan_freqs);
+		wpa_s->manual_scan_freqs = manual_scan_freqs;
+		manual_scan_freqs = NULL;
+
 		wpa_printf(MSG_DEBUG, "Stop ongoing sched_scan to allow requested full scan to proceed");
 		wpa_supplicant_cancel_sched_scan(wpa_s);
 		wpa_s->scan_req = MANUAL_SCAN_REQ;
@@ -6167,6 +6240,10 @@ static void wpas_ctrl_scan(struct wpa_supplicant *wpa_s, char *params,
 		wpa_printf(MSG_DEBUG, "Ongoing scan action - reject new request");
 		*reply_len = os_snprintf(reply, reply_size, "FAIL-BUSY\n");
 	}
+
+done:
+	os_free(manual_scan_freqs);
+	os_free(ssid);
 }
 
 

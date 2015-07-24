@@ -618,15 +618,47 @@ static void wpa_set_scan_ssids(struct wpa_supplicant *wpa_s,
 }
 
 
+static int wpa_set_ssids_from_scan_req(struct wpa_supplicant *wpa_s,
+				       struct wpa_driver_scan_params *params,
+				       size_t max_ssids)
+{
+	unsigned int i;
+
+	if (wpa_s->ssids_from_scan_req == NULL ||
+	    wpa_s->num_ssids_from_scan_req == 0)
+		return 0;
+
+	if (wpa_s->num_ssids_from_scan_req > max_ssids) {
+		wpa_s->num_ssids_from_scan_req = max_ssids;
+		wpa_printf(MSG_DEBUG, "Over max scan SSIDs from scan req: %u",
+			   (unsigned int) max_ssids);
+	}
+
+	for (i = 0; i < wpa_s->num_ssids_from_scan_req; i++) {
+		params->ssids[i].ssid = wpa_s->ssids_from_scan_req[i].ssid;
+		params->ssids[i].ssid_len =
+			wpa_s->ssids_from_scan_req[i].ssid_len;
+		wpa_hexdump_ascii(MSG_DEBUG, "specific SSID",
+				  params->ssids[i].ssid,
+				  params->ssids[i].ssid_len);
+	}
+
+	params->num_ssids = wpa_s->num_ssids_from_scan_req;
+	wpa_s->num_ssids_from_scan_req = 0;
+	return 1;
+}
+
+
 static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 {
 	struct wpa_supplicant *wpa_s = eloop_ctx;
 	struct wpa_ssid *ssid;
-	int ret, p2p_in_progress;
+	int ret, p2p_in_prog;
 	struct wpabuf *extra_ie = NULL;
 	struct wpa_driver_scan_params params;
 	struct wpa_driver_scan_params *scan_params;
 	size_t max_ssids;
+	int connect_without_scan = 0;
 
 	if (wpa_s->pno || wpa_s->pno_sched_pending) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "Skip scan - PNO is in progress");
@@ -674,8 +706,20 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 		return;
 	}
 
-	p2p_in_progress = wpas_p2p_in_progress(wpa_s);
-	if (p2p_in_progress && p2p_in_progress != 2) {
+	ssid = NULL;
+	if (wpa_s->scan_req != MANUAL_SCAN_REQ &&
+	    wpa_s->connect_without_scan) {
+		connect_without_scan = 1;
+		for (ssid = wpa_s->conf->ssid; ssid; ssid = ssid->next) {
+			if (ssid == wpa_s->connect_without_scan)
+				break;
+		}
+	}
+
+	p2p_in_prog = wpas_p2p_in_progress(wpa_s);
+	if (p2p_in_prog && p2p_in_prog != 2 &&
+	    (!ssid ||
+	     (ssid->mode != WPAS_MODE_AP && ssid->mode != WPAS_MODE_P2P_GO))) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "Delay station mode scan while P2P operation is in progress");
 		wpa_supplicant_req_scan(wpa_s, 5, 0);
 		return;
@@ -692,6 +736,16 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 	wpa_s->last_scan_req = wpa_s->scan_req;
 	wpa_s->scan_req = NORMAL_SCAN_REQ;
 
+	if (connect_without_scan) {
+		wpa_s->connect_without_scan = NULL;
+		if (ssid) {
+			wpa_printf(MSG_DEBUG, "Start a pre-selected network "
+				   "without scan step");
+			wpa_supplicant_associate(wpa_s, NULL, ssid);
+			return;
+		}
+	}
+
 	os_memset(&params, 0, sizeof(params));
 
 	wpa_s->scan_prev_wpa_state = wpa_s->wpa_state;
@@ -707,19 +761,10 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 		goto scan;
 	}
 
-	if (wpa_s->last_scan_req != MANUAL_SCAN_REQ &&
-	    wpa_s->connect_without_scan) {
-		for (ssid = wpa_s->conf->ssid; ssid; ssid = ssid->next) {
-			if (ssid == wpa_s->connect_without_scan)
-				break;
-		}
-		wpa_s->connect_without_scan = NULL;
-		if (ssid) {
-			wpa_printf(MSG_DEBUG, "Start a pre-selected network "
-				   "without scan step");
-			wpa_supplicant_associate(wpa_s, NULL, ssid);
-			return;
-		}
+	if (wpa_s->last_scan_req == MANUAL_SCAN_REQ &&
+	    wpa_set_ssids_from_scan_req(wpa_s, &params, max_ssids)) {
+		wpa_printf(MSG_DEBUG, "Use specific SSIDs from SCAN command");
+		goto ssid_list_set;
 	}
 
 #ifdef CONFIG_P2P
@@ -882,10 +927,8 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 		wpa_dbg(wpa_s, MSG_DEBUG, "Starting AP scan for wildcard "
 			"SSID");
 	}
-#ifdef CONFIG_P2P
-ssid_list_set:
-#endif /* CONFIG_P2P */
 
+ssid_list_set:
 	wpa_supplicant_optimize_freqs(wpa_s, &params);
 	extra_ie = wpa_supplicant_extra_ies(wpa_s);
 
