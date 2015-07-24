@@ -48,6 +48,7 @@ struct ieee802_11_elems {
 	const u8 *osen;
 	const u8 *ampe;
 	const u8 *mic;
+	const u8 *pref_freq_list;
 
 	u8 ssid_len;
 	u8 supp_rates_len;
@@ -76,6 +77,7 @@ struct ieee802_11_elems {
 	u8 osen_len;
 	u8 ampe_len;
 	u8 mic_len;
+	u8 pref_freq_list_len;
 };
 
 typedef enum { ParseOK = 0, ParseUnknown = 1, ParseFailed = -1 } ParseRes;
