@@ -388,6 +388,23 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	return TRUE;
 } /* wpa_qmi_read_card_status */
 
+static int check_for_3_digit()
+{
+	int mcc = 0,i =0;
+//      -- 3 digits if MCC belongs to this group: 302, 310, 311, 312, 313, 314, 315, 316, 334, 348 (decimal)
+//      -- 2 digits in all other cases
+	int valid_mcc[] = {302, 310, 311, 312, 313, 314, 315, 316, 334, 348};
+
+        mcc = ((imsi[0]-0x30)*100) + ((imsi[1]-0x30)*10) + (imsi[2]-0x30); //imsi values are hex characters
+	wpa_printf(MSG_ERROR, "mcc from the SIM is %d\n", mcc);
+	for(i = 0; i < sizeof(valid_mcc)/sizeof(valid_mcc[0]); i++)
+	{
+		if(mcc == valid_mcc[i])
+			return 1;
+	}
+	return 0;
+}
+
 static Boolean wpa_qmi_read_card_imsi(int sim_num)
 {
 	int			length;
@@ -398,6 +415,7 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 	qmi_client_error_type               qmi_err_code = 0;
 	uim_read_transparent_req_msg_v01   *qmi_read_trans_req_ptr = NULL;
 	uim_read_transparent_resp_msg_v01  *qmi_read_trans_resp_ptr = NULL;
+	card_mnc_len = -1;
 
 	qmi_read_trans_req_ptr = (uim_read_transparent_req_msg_v01 *)
 					os_malloc(sizeof(uim_read_transparent_req_msg_v01));
@@ -548,7 +566,16 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			data    =
 				qmi_read_trans_resp_ptr->read_result.content;
 
-			card_mnc_len = data[3];
+			if(length >= 4)
+				card_mnc_len = 0x0f & data[3];
+			if ((card_mnc_len != 2) && (card_mnc_len != 3)) {
+				if(check_for_3_digit())
+					card_mnc_len = 3;
+				else
+					card_mnc_len = 2;
+				wpa_printf(MSG_ERROR, "Failed to get MNC length from (U)SIM "
+				"assuming %d as mcc %s to 3 digit mnc group\n", card_mnc_len, card_mnc_len == 3? "belongs":"not belongs");
+			}
 		}
 	}
 	else{
@@ -1448,7 +1475,6 @@ static char bin_to_hexchar(u8 ch)
 	}
 	return ch + 'a' - 10;
 }
-
 static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, struct eap_sm *eap_sm)
 {
 	struct eap_hdr *resp;
@@ -1775,12 +1801,6 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 			/* mnc valus */
 			mnc_len = card_mnc_len;
 			wpa_printf(MSG_ERROR, "card mnc len %d\n", card_mnc_len);
-
-			if (mnc_len < 0) {
-				wpa_printf(MSG_INFO, "Failed to get MNC length from (U)SIM "
-				"assuming 3 in build_id");
-				mnc_len = 3;
-			}
 
 			if (mnc_len == 2) {
 				imsi_identity[idx + 9]  = '0';
