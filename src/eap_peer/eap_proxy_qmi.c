@@ -1848,7 +1848,8 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 		qmiRetCode = qmi_auth_set_subscription_binding(eap_proxy->qmihandle[sim_num],
 							QMI_AUTH_SUBS_TYPE_PRIMARY,
 							&qmiErrorCode);
-		if (QMI_NO_ERR != qmiRetCode) {
+		if ((QMI_NO_ERR != qmiRetCode) &&
+			(QMI_ERR_OP_DEVICE_UNSUPPORTED_V01 != qmiErrorCode)) {
 			wpa_printf(MSG_ERROR, "Unable to get the qmi_auth_set_subscription_binding for"
 					" sim 1; error_ret=%d; error_code=%d\n", qmiRetCode,
 					qmiErrorCode);
