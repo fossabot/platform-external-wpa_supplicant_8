@@ -104,6 +104,12 @@ struct eap_proxy_sm {
    Boolean isEap;
    int eap_type;
    int user_selected_sim;
+   int eap_proxy_qmi_init_handle;
+#ifdef CONFIG_EAP_PROXY_DUAL_SIM
+   int eap_auth_session_flag[MAX_NO_OF_SIM_SUPPORTED];
+#else
+   int eap_auth_session_flag[MAX_NO_OF_SIM_SUPPORTED];
+#endif /* CONFIG_EAP_PROXY_DUAL_SIM */
 };
 
 int eap_proxy_allowed_method(struct eap_peer_config *config, int vendor,
