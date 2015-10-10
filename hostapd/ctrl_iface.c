@@ -1350,6 +1350,52 @@ static int hostapd_ctrl_iface_vendor(struct hostapd_data *hapd, char *cmd,
 }
 
 
+static int hostapd_ctrl_iface_log_level(struct hostapd_data *hapd, char *cmd,
+					char *buf, size_t buflen)
+{
+	char *pos, *end, *stamp;
+	int ret;
+
+	/* cmd: "LOG_LEVEL [<level>]" */
+	if (*cmd == '\0') {
+		pos = buf;
+		end = buf + buflen;
+		ret = os_snprintf(pos, end - pos, "Current level: %s\n"
+				  "Timestamp: %d\n",
+				  debug_level_str(wpa_debug_level),
+				  wpa_debug_timestamp);
+		if (os_snprintf_error(end - pos, ret))
+			ret = 0;
+
+		return ret;
+	}
+
+	while (*cmd == ' ')
+		cmd++;
+
+	stamp = os_strchr(cmd, ' ');
+	if (stamp) {
+		*stamp++ = '\0';
+		while (*stamp == ' ') {
+			stamp++;
+		}
+	}
+
+	if (os_strlen(cmd)) {
+		int level = str_to_debug_level(cmd);
+		if (level < 0)
+			return -1;
+		wpa_debug_level = level;
+	}
+
+	if (stamp && os_strlen(stamp))
+		wpa_debug_timestamp = atoi(stamp);
+
+	os_memcpy(buf, "OK\n", 3);
+	return 3;
+}
+
+
 static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
 				       void *sock_ctx)
 {
@@ -1559,6 +1605,9 @@ static void hostapd_ctrl_iface_receive(int sock, void *eloop_ctx,
 		reply_len = hostapd_ctrl_iface_vendor(hapd, buf + 7, reply,
 						      reply_size);
 
+	} else if (os_strncmp(buf, "LOG_LEVEL", 9) == 0) {
+		reply_len = hostapd_ctrl_iface_log_level(
+			hapd, buf + 9, reply, reply_size);
 	} else {
 		os_memcpy(reply, "UNKNOWN COMMAND\n", 16);
 		reply_len = 16;
