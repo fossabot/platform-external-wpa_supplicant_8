@@ -273,6 +273,7 @@ struct wpa_global {
 	} conc_pref;
 	unsigned int p2p_per_sta_psk:1;
 	unsigned int p2p_fail_on_wps_complete:1;
+	unsigned int p2p_24ghz_social_channels:1;
 
 #ifdef CONFIG_WIFI_DISPLAY
 	int wifi_display;
@@ -361,6 +362,8 @@ struct wps_ap_info {
 	} type;
 	unsigned int tries;
 	struct os_reltime last_attempt;
+	unsigned int pbc_active;
+	u8 uuid[WPS_UUID_LEN];
 };
 
 struct wpa_ssid_value {
