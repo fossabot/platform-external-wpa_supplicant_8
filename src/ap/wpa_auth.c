@@ -60,9 +60,9 @@ static const u32 eapol_key_timeout_first = 100; /* ms */
 static const u32 eapol_key_timeout_subseq = 1000; /* ms */
 static const u32 eapol_key_timeout_first_group = 500; /* ms */
 #else
-static const u32 eapol_key_timeout_first = 100000; /* ms */
-static const u32 eapol_key_timeout_subseq = 100000; /* ms */
-static const u32 eapol_key_timeout_first_group = 500000; /* ms */
+static const u32 eapol_key_timeout_first = 2000; /* ms */
+static const u32 eapol_key_timeout_subseq = 20000; /* ms */
+static const u32 eapol_key_timeout_first_group = 10000; /* ms */
 #endif
 
 /* TODO: make these configurable */
