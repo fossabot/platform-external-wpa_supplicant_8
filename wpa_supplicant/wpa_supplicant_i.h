@@ -615,6 +615,7 @@ struct wpa_supplicant {
 	unsigned int last_eapol_matches_bssid:1;
 	unsigned int eap_expected_failure:1;
 	unsigned int reattach:1; /* reassociation to the same BSS requested */
+	unsigned int wnmsleep_used:1;
 
 	struct ibss_rsn *ibss_rsn;
 
