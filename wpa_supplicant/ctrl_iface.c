@@ -5818,6 +5818,7 @@ static void wpa_supplicant_ctrl_iface_flush(struct wpa_supplicant *wpa_s)
 #endif /* CONFIG_INTERWORKING */
 
 	wpa_s->ext_mgmt_frame_handling = 0;
+	wpa_s->wnmsleep_used = 0;
 }
 
 
