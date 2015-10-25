@@ -136,6 +136,8 @@ int ieee802_11_send_wnmsleep_req(struct wpa_supplicant *wpa_s,
 	if (res < 0)
 		wpa_printf(MSG_DEBUG, "Failed to send WNM-Sleep Request "
 			   "(action=%d, intval=%d)", action, intval);
+	else
+		wpa_s->wnmsleep_used = 1;
 
 	os_free(wnmsleep_ie);
 	os_free(wnmtfs_ie);
@@ -244,6 +246,12 @@ static void ieee802_11_rx_wnmsleep_resp(struct wpa_supplicant *wpa_s,
 	/* multiple TFS Resp IE (assuming consecutive) */
 	u8 *tfsresp_ie_start = NULL;
 	u8 *tfsresp_ie_end = NULL;
+
+	if (!wpa_s->wnmsleep_used) {
+		wpa_printf(MSG_DEBUG,
+			   "WNM: Ignore WNM-Sleep Mode Response frame since WNM-Sleep Mode has not been used in this association");
+		return;
+	}
 
 	if (len < 3)
 		return;
