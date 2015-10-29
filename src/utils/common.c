@@ -846,3 +846,9 @@ void bin_clear_free(void *bin, size_t len)
 		os_free(bin);
 	}
 }
+
+
+int is_ctrl_char(char c)
+{
+	return c > 0 && c < 32;
+}
