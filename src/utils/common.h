@@ -538,6 +538,7 @@ void int_array_add_unique(int **res, int a);
 void str_clear_free(char *str);
 void bin_clear_free(void *bin, size_t len);
 
+int is_ctrl_char(char c);
 
 /*
  * gcc 4.4 ends up generating strict-aliasing warnings about some very common
