@@ -833,3 +833,8 @@ void int_array_add_unique(int **res, int a)
 
 	*res = n;
 }
+
+int is_ctrl_char(char c)
+{
+	return c > 0 && c < 32;
+}
