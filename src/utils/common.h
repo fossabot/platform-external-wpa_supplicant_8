@@ -546,6 +546,8 @@ void bin_clear_free(void *bin, size_t len);
 int random_mac_addr(u8 *addr);
 int random_mac_addr_keep_oui(u8 *addr);
 
+int is_ctrl_char(char c);
+
 
 /*
  * gcc 4.4 ends up generating strict-aliasing warnings about some very common
