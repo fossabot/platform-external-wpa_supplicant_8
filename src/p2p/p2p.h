@@ -30,7 +30,7 @@
 /**
  * P2P_MAX_REG_CLASSES - Maximum number of regulatory classes
  */
-#define P2P_MAX_REG_CLASSES 10
+#define P2P_MAX_REG_CLASSES 15
 
 /**
  * P2P_MAX_REG_CLASS_CHANNELS - Maximum number of channels per regulatory class
@@ -97,6 +97,10 @@ struct p2p_go_neg_results {
 	int ht40;
 
 	int vht;
+
+	u8 max_oper_chwidth;
+
+	unsigned int vht_center_freq2;
 
 	/**
 	 * ssid - SSID of the group
