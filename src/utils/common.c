@@ -866,3 +866,9 @@ int random_mac_addr_keep_oui(u8 *addr)
 	addr[0] |= 0x02; /* locally administered */
 	return 0;
 }
+
+
+int is_ctrl_char(char c)
+{
+	return c > 0 && c < 32;
+}
