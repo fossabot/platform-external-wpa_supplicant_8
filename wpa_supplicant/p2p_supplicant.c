@@ -5501,6 +5501,8 @@ static int wpas_start_p2p_client(struct wpa_supplicant *wpa_s,
 	wpa_s->show_group_started = 1;
 	wpa_s->p2p_in_invitation = 1;
 	wpa_s->p2p_invite_go_freq = freq;
+	wpa_s->p2p_go_group_formation_completed = 0;
+	wpa_s->global->p2p_group_formation = wpa_s;
 
 	eloop_cancel_timeout(wpas_p2p_group_formation_timeout, wpa_s->parent,
 			     NULL);
@@ -6899,6 +6901,7 @@ int wpas_p2p_cancel(struct wpa_supplicant *wpa_s)
 				   wpa_s->ifname);
 			found = 1;
 			wpas_p2p_group_formation_failed(wpa_s, 0);
+			break;
 		}
 	}
 
