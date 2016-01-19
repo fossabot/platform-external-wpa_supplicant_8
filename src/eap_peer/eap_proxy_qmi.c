@@ -98,6 +98,8 @@ typedef struct {
 wpa_uim_struct_type   wpa_uim[MAX_NO_OF_SIM_SUPPORTED];
 #endif /* SIM_AKA_IDENTITY_IMSI */
 
+static int eap_proxy_init_counter = 0;
+
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
 static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE, FALSE};
 #else
@@ -340,6 +342,23 @@ static Boolean wpa_qmi_read_card_status(int sim_num)
 	return TRUE;
 } /* wpa_qmi_read_card_status */
 
+static int check_for_3_digit()
+{
+	int mcc = 0,i =0;
+//      -- 3 digits if MCC belongs to this group: 302, 310, 311, 312, 313, 314, 315, 316, 334, 348 (decimal)
+//      -- 2 digits in all other cases
+	int valid_mcc[] = {302, 310, 311, 312, 313, 314, 315, 316, 334, 348};
+
+        mcc = ((imsi[0]-0x30)*100) + ((imsi[1]-0x30)*10) + (imsi[2]-0x30); //imsi values are hex characters
+	wpa_printf(MSG_ERROR, "mcc from the SIM is %d\n", mcc);
+	for(i = 0; i < sizeof(valid_mcc)/sizeof(valid_mcc[0]); i++)
+	{
+		if(mcc == valid_mcc[i])
+			return 1;
+	}
+	return 0;
+}
+
 static Boolean wpa_qmi_read_card_imsi(int sim_num)
 {
 	int			length;
@@ -350,6 +369,7 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 	qmi_client_error_type               qmi_err_code = 0;
 	uim_read_transparent_req_msg_v01   qmi_read_trans_req;
 	uim_read_transparent_resp_msg_v01  read_trans_resp;
+	card_mnc_len = -1;
 
 
 	os_memset(&read_trans_resp, 0,
@@ -481,7 +501,16 @@ static Boolean wpa_qmi_read_card_imsi(int sim_num)
 			data    =
 				read_trans_resp.read_result.content;
 
-			card_mnc_len = data[3];
+			if(length >= 4)
+				card_mnc_len = 0x0f & data[3];
+			if ((card_mnc_len != 2) && (card_mnc_len != 3)) {
+				if(check_for_3_digit())
+					card_mnc_len = 3;
+				else
+					card_mnc_len = 2;
+				wpa_printf(MSG_ERROR, "Failed to get MNC length from (U)SIM "
+				"assuming %d as mcc %s to 3 digit mnc group\n", card_mnc_len, card_mnc_len == 3? "belongs":"not belongs");
+			}
 		}
 	}
 
@@ -574,7 +603,7 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
 
 #ifdef SIM_AKA_IDENTITY_IMSI
-                if (FALSE == qmi_uim_svc_client_initialized[index]) {
+                if ((FALSE == qmi_uim_svc_client_initialized[index]) && (eap_proxy_init_counter == 0))  {
                         qmi_client_os_params eap_os_params;
                         /* Init QMI_UIM service for EAP-SIM/AKA */
                         os_memset(&eap_os_params, 0, sizeof(qmi_client_os_params));
@@ -645,6 +674,9 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapRestart, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapResp, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, FALSE);
+	eap_proxy_init_counter++;
+	wpa_printf (MSG_DEBUG,
+		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
 	wpa_printf (MSG_ERROR, "eap_proxy: Eap_proxy initialized successfully\n");
 
 }
@@ -731,6 +763,9 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	if (NULL == eap_proxy)
 		return;
 
+	eap_proxy_init_counter--;
+	wpa_printf (MSG_DEBUG,
+		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
 	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
@@ -752,16 +787,16 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 			continue;
 		}
 
-		if (TRUE == qmi_uim_svc_client_initialized[index]) {
+		if ((TRUE == qmi_uim_svc_client_initialized[index]) &&
+			(eap_proxy_init_counter == 0))  {
 			qmiRetCode = qmi_client_release(wpa_uim[index].qmi_uim_svc_client_ptr);
 			if (QMI_NO_ERR != qmiRetCode) {
 				wpa_printf (MSG_ERROR, "eap_proxy: Unable to Releas the connection"
 						" to uim service for client=%d; error_ret=%d\n;",
 						index+1, qmiRetCode);
-			}  else {
-				wpa_printf(MSG_ERROR, "eap_proxy: Released QMI UIM service client\n");
-				qmi_uim_svc_client_initialized[index] = FALSE;
 			}
+			wpa_printf(MSG_ERROR, "eap_proxy: Released QMI UIM service client\n");
+			qmi_uim_svc_client_initialized[index] = FALSE;
 		}
 
 		qmiRetCode = qmi_client_release(eap_proxy->qmi_auth_svc_client_ptr[index]);
@@ -1358,7 +1393,6 @@ static char bin_to_hexchar(u8 ch)
 	}
 	return ch + 'a' - 10;
 }
-
 static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, struct eap_sm *eap_sm)
 {
 	struct eap_hdr *resp;
@@ -1655,12 +1689,6 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 			mnc_len = card_mnc_len;
 			wpa_printf(MSG_ERROR, "eap_proxy: card mnc len %d\n", card_mnc_len);
 
-			if (mnc_len < 0) {
-				wpa_printf(MSG_INFO, "eap_proxy: Failed to get MNC length from (U)SIM "
-				"assuming 3 in build_id");
-				mnc_len = 3;
-			}
-
 			if ((mnc_len == 2) && (imsi_identity != NULL)) {
 				imsi_identity[idx + 9]  = '0';
 				imsi_identity[idx + 10] = imsi[3];
@@ -1718,7 +1746,8 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 						sizeof(auth_set_subscription_binding_resp_msg_v01),
 						WPA_UIM_QMI_DEFAULT_TIMEOUT);
 
-				if (QMI_NO_ERR != qmiRetCode || sub_resp_binding.resp.result != QMI_RESULT_SUCCESS_V01 ) {
+				if ((QMI_NO_ERR != qmiRetCode || sub_resp_binding.resp.result != QMI_RESULT_SUCCESS_V01 ) &&
+				    (QMI_ERR_OP_DEVICE_UNSUPPORTED_V01 != sub_resp_binding.resp.error)) {
 			wpa_printf(MSG_ERROR, "QMI-ERROR Unable to get the qmi_auth_set_subscription_binding for"
 					" sim 1; error_ret=%d; error_code=%d\n", qmiRetCode,
 					sub_resp_binding.resp.error);
