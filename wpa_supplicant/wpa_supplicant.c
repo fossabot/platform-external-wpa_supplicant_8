@@ -4662,6 +4662,8 @@ static void wpa_supplicant_deinit_iface(struct wpa_supplicant *wpa_s,
 
 	iface = global->ifaces;
 	while (iface) {
+		if (iface->p2pdev == wpa_s)
+			iface->p2pdev = iface->parent;
 		if (iface == wpa_s || iface->parent != wpa_s) {
 			iface = iface->next;
 			continue;
