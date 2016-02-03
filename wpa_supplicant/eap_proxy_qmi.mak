@@ -3,7 +3,7 @@ CFLAGS += -DSIM_AKA_IMSI_RAW_ENABLED
 
 CFLAGS += $(shell $(PKG_CONFIG) --cflags qmi qmi-framework)
 
-LIBS += $(shell $(PKG_CONFIG) --libs qmi qmi-framework)
+LIBS += $(shell $(PKG_CONFIG) --libs qmi qmi-framework) -lpthread
 
 # EAP-AKA' (enable CONFIG_PCSC, if EAP-AKA' is used).
 # This requires CONFIG_EAP_AKA to be enabled, too.
