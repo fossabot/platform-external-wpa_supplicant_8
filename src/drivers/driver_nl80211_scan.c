@@ -288,7 +288,11 @@ int wpa_driver_nl80211_scan(struct i802_bss *bss,
 		 * complete, so use longer timeout to avoid race conditions
 		 * with scanning and following association request.
 		 */
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+		timeout = 75;
+#else
 		timeout = 30;
+#endif
 	}
 	wpa_printf(MSG_DEBUG, "Scan requested (ret=%d) - scan timeout %d "
 		   "seconds", ret, timeout);
@@ -951,10 +955,18 @@ int wpa_driver_nl80211_vendor_scan(struct i802_bss *bss,
 	drv->scan_state = SCAN_REQUESTED;
 
 	wpa_printf(MSG_DEBUG,
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+		   "nl80211: Vendor scan requested (ret=%d) - scan timeout 75 seconds, scan cookie:0x%llx",
+#else
 		   "nl80211: Vendor scan requested (ret=%d) - scan timeout 30 seconds, scan cookie:0x%llx",
+#endif
 		   ret, (long long unsigned int) cookie);
 	eloop_cancel_timeout(wpa_driver_nl80211_scan_timeout, drv, drv->ctx);
+#ifdef QCA_WIFI_3_0_EMU_SUPPLICANT
+	eloop_register_timeout(75, 0, wpa_driver_nl80211_scan_timeout,
+#else
 	eloop_register_timeout(30, 0, wpa_driver_nl80211_scan_timeout,
+#endif
 			       drv, drv->ctx);
 	drv->last_scan_cmd = NL80211_CMD_VENDOR;
 
