@@ -104,6 +104,7 @@ struct eap_proxy_sm {
    Boolean isEap;
    int eap_type;
    int user_selected_sim;
+   int notification_code;
 };
 
 int eap_proxy_allowed_method(struct eap_peer_config *config, int vendor,
