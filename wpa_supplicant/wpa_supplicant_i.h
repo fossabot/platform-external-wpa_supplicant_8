@@ -300,9 +300,13 @@ struct wpa_radio {
 	char name[16]; /* from driver_ops get_radio_name() or empty if not
 			* available */
 	unsigned int external_scan_running:1;
+	unsigned int num_active_works;
 	struct dl_list ifaces; /* struct wpa_supplicant::radio_list entries */
 	struct dl_list work; /* struct wpa_radio_work::list entries */
 };
+
+#define MAX_ACTIVE_WORKS 2
+
 
 /**
  * struct wpa_radio_work - Radio work item
@@ -316,6 +320,7 @@ struct wpa_radio_work {
 	void *ctx;
 	unsigned int started:1;
 	struct os_reltime time;
+	unsigned int bands;
 };
 
 int radio_add_work(struct wpa_supplicant *wpa_s, unsigned int freq,
@@ -346,6 +351,9 @@ struct wpa_external_work {
 	char type[100];
 	unsigned int timeout;
 };
+
+enum wpa_radio_work_band wpas_freq_to_band(int freq);
+unsigned int wpas_get_bands(struct wpa_supplicant *wpa_s, const int *freqs);
 
 /**
  * offchannel_send_action_result - Result of offchannel send Action frame
@@ -427,6 +435,7 @@ struct wpa_supplicant {
 	struct wpa_radio *radio; /* shared radio context */
 	struct dl_list radio_list; /* list head: struct wpa_radio::ifaces */
 	struct wpa_supplicant *parent;
+	struct wpa_supplicant *p2pdev;
 	struct wpa_supplicant *next;
 	struct l2_packet_data *l2;
 	struct l2_packet_data *l2_br;
