@@ -433,7 +433,8 @@ static int issuer_match(X509 *cert, X509 *issuer, CertID *certid)
 	}
 
 	ikey = X509_get0_pubkey_bitstr(issuer);
-	if (!EVP_Digest(ikey->data, ikey->length, md, &len, dgst, NULL) ||
+	if (!ikey ||
+	    !EVP_Digest(ikey->data, ikey->length, md, &len, dgst, NULL) ||
 	    !ASN1_OCTET_STRING_set(hash, md, len)) {
 		ASN1_OCTET_STRING_free(hash);
 		return -1;
@@ -562,6 +563,8 @@ enum ocsp_result check_ocsp_resp(SSL_CTX *ssl_ctx, SSL *ssl, X509 *cert,
 
 	if (basic->certs) {
 		untrusted = sk_X509_dup(basic->certs);
+		if (!untrusted)
+			goto fail;
 
 		num = sk_X509_num(basic->certs);
 		for (i = 0; i < num; i++) {
