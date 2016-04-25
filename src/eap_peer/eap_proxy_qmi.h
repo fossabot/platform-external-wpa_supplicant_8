@@ -128,6 +128,7 @@ struct eap_proxy_sm {
    int eap_type;
    int user_selected_sim;
    int eap_auth_session_flag[MAX_NO_OF_SIM_SUPPORTED];
+   int notification_code;
    pthread_t thread_id;
    wpa_uim_struct_type   wpa_uim[MAX_NO_OF_SIM_SUPPORTED];
    Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED];
