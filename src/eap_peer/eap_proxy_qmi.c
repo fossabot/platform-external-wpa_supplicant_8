@@ -81,33 +81,6 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define EAP_PROXY_TARGET_FUSION4_5_PCIE    "fusion4_5_pcie"
 #define EAP_PROXY_BASEBAND_VALUE_UNDEFINED "undefined"
 
-#ifdef SIM_AKA_IDENTITY_IMSI
-typedef struct {
-  uim_card_state_enum_v01			card_state;
-  uim_card_error_code_enum_v01			card_error_code;
-  u8						app_state;
-  u8						app_type;
-} wpa_uim_card_info_type;
-
-typedef struct {
-  int                                   card_ready_idx;
-  wpa_uim_card_info_type                card_info[QMI_UIM_CARDS_MAX_V01];
-  qmi_client_type                       qmi_uim_svc_client_ptr;
-  int                                   qmi_msg_lib_handle;
-} wpa_uim_struct_type;
-
-/* Global variable with the card status */
-wpa_uim_struct_type   wpa_uim[MAX_NO_OF_SIM_SUPPORTED];
-#endif /* SIM_AKA_IDENTITY_IMSI */
-
-static int eap_proxy_init_counter = 0;
-
-#ifdef CONFIG_EAP_PROXY_DUAL_SIM
-static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE, FALSE};
-#else
-static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE};
-#endif /* CONFIG_EAP_PROXY_DUAL_SIM */
-
 static void eap_proxy_eapol_sm_set_bool(struct eap_proxy_sm *sm,
 			 enum eapol_bool_var var, Boolean value);
 static Boolean eap_proxy_eapol_sm_get_bool(struct eap_proxy_sm *sm,
@@ -152,9 +125,9 @@ static unsigned int slot = 0;
 static unsigned int session_type;
 #endif /* CONFIG_EAP_PROXY_DUAL_SIM */
 
-static Boolean wpa_qmi_register_events(int sim_num);
-static Boolean wpa_qmi_read_card_imsi(int sim_num);
-static Boolean wpa_qmi_read_card_status(int sim_num);
+static Boolean wpa_qmi_register_events(int sim_num, wpa_uim_struct_type *wpa_uim);
+static Boolean wpa_qmi_read_card_imsi(int sim_num, wpa_uim_struct_type *wpa_uim);
+static Boolean wpa_qmi_read_card_status(int sim_num, wpa_uim_struct_type *wpa_uim);
 static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy);
 
 #endif
@@ -214,7 +187,7 @@ static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy)
 
 }
 
-static Boolean wpa_qmi_register_events(int sim_num)
+static Boolean wpa_qmi_register_events(int sim_num, wpa_uim_struct_type *wpa_uim)
 {
 	qmi_client_error_type               qmi_err_code      = 0;
 	uim_event_reg_resp_msg_v01          event_resp_msg;
@@ -256,7 +229,7 @@ static Boolean wpa_qmi_register_events(int sim_num)
 
 	}
 
-	if (wpa_qmi_read_card_status(sim_num))
+	if (wpa_qmi_read_card_status(sim_num, wpa_uim))
 		return TRUE;
 	else {
 		wpa_printf(MSG_ERROR,"eap_proxy: Error while reading SIM card status\n");
@@ -264,7 +237,7 @@ static Boolean wpa_qmi_register_events(int sim_num)
 	}
 }
 
-static Boolean wpa_qmi_read_card_status(int sim_num)
+static Boolean wpa_qmi_read_card_status(int sim_num, wpa_uim_struct_type *wpa_uim)
 {
 	unsigned int                        i = 0, j = 0;
 	Boolean                             card_found = FALSE;
@@ -397,7 +370,7 @@ static int check_for_3_digit()
 	return 0;
 }
 
-static Boolean wpa_qmi_read_card_imsi(int sim_num)
+static Boolean wpa_qmi_read_card_imsi(int sim_num, wpa_uim_struct_type *wpa_uim)
 {
 	int			length;
 	unsigned char           *data;
@@ -603,6 +576,7 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 	static Boolean flag = FALSE;
 	struct sigaction    actions;
 	int ret = 0;
+	wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
 	struct dev_info mdm_detect_info;
 
@@ -645,15 +619,16 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 	eap_proxy->user_selected_sim = 0;
 
 #ifdef CONFIG_EAP_PROXY_DUAL_SIM
-	wpa_printf (MSG_ERROR, "eap_proxy: eap_proxy Initializing for DUAL SIM build %d ", MAX_NO_OF_SIM_SUPPORTED);
+	wpa_printf (MSG_ERROR, "eap_proxy: eap_proxy Initializing for DUAL SIM build %d tid %d", MAX_NO_OF_SIM_SUPPORTED, gettid());
 #else
-	wpa_printf (MSG_ERROR, "eap_proxy: eap_proxy Initializing for Single SIM build %d ", MAX_NO_OF_SIM_SUPPORTED);
+	wpa_printf (MSG_ERROR, "eap_proxy: eap_proxy Initializing for Single SIM build %d tid %d", MAX_NO_OF_SIM_SUPPORTED, gettid());
 #endif
+
 
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
 
 #ifdef SIM_AKA_IDENTITY_IMSI
-                if ((FALSE == qmi_uim_svc_client_initialized[index]) && (eap_proxy_init_counter == 0))  {
+                if (FALSE == eap_proxy->qmi_uim_svc_client_initialized[index])  {
                         qmi_client_os_params eap_os_params;
                         /* Init QMI_UIM service for EAP-SIM/AKA */
                         os_memset(&eap_os_params, 0, sizeof(qmi_client_os_params));
@@ -673,15 +648,14 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                                 flag = FALSE;
                                 continue;
                         }
-                        qmi_uim_svc_client_initialized[index] = TRUE;
+                        eap_proxy->qmi_uim_svc_client_initialized[index] = TRUE;
 
-                        wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client initialized with success %p %d\n",
+                        wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client initialized with success tid is %d %p %d\n", gettid(),
                                     wpa_uim[index].qmi_uim_svc_client_ptr, qmiErrorCode);
                         /* Register the card events with the QMI / UIM */
-                        wpa_qmi_register_events(index);
-		} else {
-			wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client is already initialized\n");
-		}
+                        wpa_qmi_register_events(index, wpa_uim);
+		} else
+			wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client is already initialized tid is %d \n", gettid());
 
 
 		qmi_client_os_params eap_os_params;
@@ -704,7 +678,7 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 			flag = FALSE;
 			continue;
 		}
-		wpa_printf (MSG_ERROR, "eap_proxy: QMI auth service client initialized with success %p eapol_proxy=%p\n",
+		wpa_printf (MSG_ERROR, "eap_proxy: QMI auth service client initialized with success tid is %d  %p eapol_proxy=%p\n", gettid(),
 				eap_proxy->qmi_auth_svc_client_ptr[index], eap_proxy);
 		flag = TRUE;
 		/* Register for the notifications from QMI / AUTH */
@@ -724,10 +698,7 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapRestart, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapResp, FALSE);
 	eap_proxy_eapol_sm_set_bool(eap_proxy, EAPOL_eapNoResp, FALSE);
-	eap_proxy_init_counter++;
-	wpa_printf (MSG_DEBUG,
-		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
-	wpa_printf (MSG_ERROR, "eap_proxy: Eap_proxy initialized successfully\n");
+	wpa_printf (MSG_ERROR, "eap_proxy: Eap_proxy initialized successfully tid is %d \n", gettid());
 	return NULL;
 
 }
@@ -807,7 +778,6 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	ret = pthread_create(&eap_proxy->thread_id, &attr, eap_proxy_post_init, eap_proxy);
 	if(ret < 0)
 	       wpa_printf(MSG_ERROR, "eap_proxy: starting thread is failed %d\n", ret);
-
 	return eap_proxy;
 }
 
@@ -817,14 +787,12 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	int qmiRetCode;
 	int qmiErrorCode;
 	int index;
+	wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
 
 	if (NULL == eap_proxy)
 		return;
 
 	pthread_kill(eap_proxy->thread_id, SIGUSR1);
-	eap_proxy_init_counter--;
-	wpa_printf (MSG_DEBUG,
-		"eap_proxy: %s: eap_proxy_init_counter %d\n", __func__, eap_proxy_init_counter);
 	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
@@ -846,8 +814,7 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 			continue;
 		}
 
-		if ((TRUE == qmi_uim_svc_client_initialized[index]) &&
-			(eap_proxy_init_counter == 0))  {
+		if ((TRUE == eap_proxy->qmi_uim_svc_client_initialized[index]))  {
 			qmiRetCode = qmi_client_release(wpa_uim[index].qmi_uim_svc_client_ptr);
 			if (QMI_NO_ERR != qmiRetCode) {
 				wpa_printf (MSG_ERROR, "eap_proxy: Unable to Releas the connection"
@@ -855,7 +822,7 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 						index+1, qmiRetCode);
 			}
 			wpa_printf(MSG_ERROR, "eap_proxy: Released QMI UIM service client\n");
-			qmi_uim_svc_client_initialized[index] = FALSE;
+			eap_proxy->qmi_uim_svc_client_initialized[index] = FALSE;
 		}
 
 		qmiRetCode = qmi_client_release(eap_proxy->qmi_auth_svc_client_ptr[index]);
@@ -1652,7 +1619,7 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 		identity_format == EAP_IDENTITY_IMSI_RAW || mcc_idx) {
 
 		wpa_printf(MSG_ERROR, "eap_proxy: EAP_IDENTITY_IMSI_3GPP_REALM is selected\n");
-		if (!wpa_qmi_read_card_status(sim_num)) {
+		if (!wpa_qmi_read_card_status(sim_num, eap_proxy->wpa_uim)) {
 			wpa_printf(MSG_INFO, "eap_proxy: Read Card Status failed, return\n");
 			if (NULL != identity) {
 				os_free(identity);
@@ -1661,7 +1628,7 @@ static Boolean eap_proxy_build_identity(struct eap_proxy_sm *eap_proxy, u8 id, s
 			return FALSE;
 		}
 
-		if (!wpa_qmi_read_card_imsi(sim_num)) {
+		if (!wpa_qmi_read_card_imsi(sim_num, eap_proxy->wpa_uim)) {
 			wpa_printf(MSG_INFO, "eap_proxy: Read Card IMSI failed, return\n");
 			if (NULL != identity) {
 				os_free(identity);
@@ -2002,12 +1969,12 @@ int eap_proxy_get_imsi(struct eap_proxy_sm *eap_proxy, char *imsi_buf,
 		wpa_printf(MSG_ERROR, "eap_proxy:%s: Not initialized\n", __func__);
 		return FALSE;
 	}
-	if (!wpa_qmi_read_card_status(sim_num)) {
+	if (!wpa_qmi_read_card_status(sim_num, eap_proxy->wpa_uim)) {
 	wpa_printf(MSG_INFO, "eap_proxy: Card not ready");
 		return -1;
 	}
 
-	if (!wpa_qmi_read_card_imsi(sim_num) || imsi == NULL) {
+	if (!wpa_qmi_read_card_imsi(sim_num, eap_proxy->wpa_uim) || imsi == NULL) {
 		wpa_printf(MSG_INFO, "eap_proxy: Failed to read card IMSI");
 		return -1;
 	}
