@@ -1164,6 +1164,16 @@ struct wpa_config {
 	 * reassoc_same_bss_optim - Whether to optimize reassoc-to-same-BSS
 	 */
 	int reassoc_same_bss_optim;
+
+	/**
+	 * gas_address3 - GAS Address3 field behavior
+	 *
+	 * Values:
+	 * 0 - P2P specification (Address3 = AP BSSID)
+	 * 1 = IEEE 802.11 standard compliant (Address3 = Wildcard BSSID when
+	 *	sent to not-associated AP; if associated, AP BSSID)
+	 */
+	int gas_address3;
 };
 
 

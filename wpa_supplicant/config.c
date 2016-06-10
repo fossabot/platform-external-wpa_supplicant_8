@@ -4227,6 +4227,7 @@ static const struct global_parse_data global_fields[] = {
 	{ INT(key_mgmt_offload), 0},
 	{ INT(passive_scan), 0 },
 	{ INT(reassoc_same_bss_optim), 0 },
+	{ INT(gas_address3), 0 },
 };
 
 #undef FUNC

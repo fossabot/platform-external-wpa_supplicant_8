@@ -1287,6 +1287,9 @@ static void wpa_config_write_global(FILE *f, struct wpa_config *config)
 	if (config->reassoc_same_bss_optim)
 		fprintf(f, "reassoc_same_bss_optim=%d\n",
 			config->reassoc_same_bss_optim);
+
+	if (config->gas_address3)
+		fprintf(f, "gas_address3=%d\n", config->gas_address3);
 }
 
 #endif /* CONFIG_NO_CONFIG_WRITE */
