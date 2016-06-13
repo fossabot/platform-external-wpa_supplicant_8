@@ -1357,7 +1357,9 @@ endif
 
 OBJS += $(DBUS_OBJS)
 L_CFLAGS += $(DBUS_CFLAGS)
+ifeq ($(DBUS), y)
 LIBS += $(DBUS_LIBS)
+endif
 
 ifdef CONFIG_READLINE
 OBJS_c += src/utils/edit_readline.c
@@ -1600,6 +1602,9 @@ endif
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
+ifeq ($(DBUS), y)
+LOCAL_SHARED_LIBRARIES += libdbus
+endif
 include $(BUILD_EXECUTABLE)
 
 ########################
