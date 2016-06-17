@@ -902,4 +902,15 @@ static inline int wpa_drv_set_prob_oper_freq(struct wpa_supplicant *wpa_s,
 	return wpa_s->driver->set_prob_oper_freq(wpa_s->drv_priv, freq);
 }
 
+static inline int wpa_drv_get_ext_capa(struct wpa_supplicant *wpa_s,
+				       enum wpa_driver_if_type type)
+{
+	if (!wpa_s->driver->get_ext_capab)
+		return -1;
+	return wpa_s->driver->get_ext_capab(wpa_s->drv_priv, type,
+					    &wpa_s->extended_capa,
+					    &wpa_s->extended_capa_mask,
+					    &wpa_s->extended_capa_len);
+}
+
 #endif /* DRIVER_I_H */
