@@ -1089,6 +1089,9 @@ enum wifi_display_subelem {
 
 
 #define OUI_BROADCOM 0x00904c /* Broadcom (Epigram) */
+#define VENDOR_VHT_TYPE		0x04
+#define VENDOR_VHT_SUBTYPE	0x08
+#define VENDOR_VHT_SUBTYPE2	0x00
 
 #define VENDOR_HT_CAPAB_OUI_TYPE 0x33 /* 00-90-4c:0x33 */
 
