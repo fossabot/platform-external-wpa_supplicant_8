@@ -93,6 +93,9 @@ enum qca_radiotap_vendor_ids {
  * @QCA_NL80211_VENDOR_SUBCMD_LL_STATS_EXT: Link layer statistics extension.
  *	enum qca_wlan_vendor_attr_ll_stats_ext attributes are used with this
  *	command and event.
+ *
+ * @QCA_NL80211_VENDOR_SUBCMD_GET_CHAIN_RSSI: Get antenna RSSI value for a
+ *	specific chain.
  */
 enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
@@ -167,6 +170,7 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_TRIGGER_SCAN = 106,
 	QCA_NL80211_VENDOR_SUBCMD_SCAN_DONE = 107,
 	QCA_NL80211_VENDOR_SUBCMD_LL_STATS_EXT = 127,
+	QCA_NL80211_VENDOR_SUBCMD_GET_CHAIN_RSSI = 138,
 };
 
 
@@ -196,6 +200,13 @@ enum qca_wlan_vendor_attr {
 	QCA_WLAN_VENDOR_ATTR_MAX_CONCURRENT_CHANNELS_5_0_BAND = 11,
 	/* Unsigned 32-bit value from enum qca_set_band. */
 	QCA_WLAN_VENDOR_ATTR_SETBAND_VALUE = 12,
+	/* Used in QCA_NL80211_VENDOR_SUBCMD_GET_CHAIN_RSSI command
+	 * to specify the chain number (unsigned 32 bit value) to inquire
+	 * the corresponding antenna RSSI value */
+	QCA_WLAN_VENDOR_ATTR_CHAIN_INDEX = 26,
+	/* Used in QCA_NL80211_VENDOR_SUBCMD_GET_CHAIN_RSSI command
+	 * to report the specific antenna RSSI value (unsigned 32 bit value) */
+	QCA_WLAN_VENDOR_ATTR_CHAIN_RSSI = 27,
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_MAX	= QCA_WLAN_VENDOR_ATTR_AFTER_LAST - 1,
@@ -549,6 +560,17 @@ enum qca_wlan_vendor_attr_config {
 	 * ignore the assoc disallowed set by APs while connecting
 	 * 1-Ignore, 0-Don't ignore */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_IGNORE_ASSOC_DISALLOWED,
+	/* 32-bit unsigned value to trigger antenna diversity features:
+	 * 1-Enable, 0-Disable */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_ENA,
+	/* 32-bit unsigned value to configure specific chain antenna */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_CHAIN,
+	/* 32-bit unsigned value to trigger cycle selftest
+	 * 1-Enable, 0-Disable */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_SELFTEST,
+	/* 32-bit unsigned to configure the cycle time of selftest
+	 * the unit is micro-second */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_SELFTEST_INTVL,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
