@@ -109,6 +109,10 @@ static Boolean qmi_uim_svc_client_initialized[MAX_NO_OF_SIM_SUPPORTED] = {FALSE}
 
 static void eap_proxy_eapol_sm_set_bool(struct eap_proxy_sm *sm,
 			 enum eapol_bool_var var, Boolean value);
+static Boolean wpa_qmi_ssr = FALSE;
+static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy);
+struct eap_proxy_sm * eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
+               void *msg_ctx);
 static Boolean eap_proxy_eapol_sm_get_bool(struct eap_proxy_sm *sm,
 					enum eapol_bool_var var);
 
@@ -550,6 +554,24 @@ static int eap_modem_compatible(struct dev_info *mdm_detect_info)
 }
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 
+void wpa_qmi_register_notification(void *eloop_ctx, void *timeout_ctx)
+{
+        struct eap_proxy_sm *eap_proxy = eloop_ctx;
+        wpa_printf(MSG_DEBUG, "eap_proxy: %s", __func__);
+
+        eap_proxy_qmi_deinit(eap_proxy);
+        eap_proxy_init(eap_proxy, NULL, NULL);
+}
+
+void wpa_qmi_handle_ssr(qmi_client_type user_handle, qmi_client_error_type error, void *err_cb_data)
+{
+        struct eap_proxy_sm *eap_proxy = err_cb_data;
+
+        wpa_printf(MSG_DEBUG, "eap_proxy: %s ", __func__);
+
+        wpa_qmi_ssr = TRUE;
+        eloop_register_timeout(0, 0, wpa_qmi_register_notification, eap_proxy, NULL);
+}
 
 static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
 {
@@ -628,6 +650,11 @@ static void eap_proxy_post_init(void *eloop_ctx, void *timeout_ctx)
                                     wpa_uim[index].qmi_uim_svc_client_ptr, qmiErrorCode);
                         /* Register the card events with the QMI / UIM */
                         wpa_qmi_register_events(index);
+			qmiErrorCode = qmi_client_register_error_cb(
+					wpa_uim[index].qmi_uim_svc_client_ptr, wpa_qmi_handle_ssr, eap_proxy);
+			wpa_printf(MSG_DEBUG,
+					"eap_proxy: qmi_client_register_error_cb() status %d\n", qmiErrorCode);
+			wpa_qmi_ssr = FALSE;
 		} else {
 			wpa_printf (MSG_ERROR, "eap_proxy: QMI uim service client is already initialized\n");
 		}
@@ -724,17 +751,21 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 	struct eap_proxy_sm *eap_proxy;
 	qmi_idl_service_object_type    qmi_client_service_obj;
 
-	eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
-	if (NULL == eap_proxy) {
-		wpa_printf(MSG_ERROR, "eap_proxy: Error memory alloc  for eap_proxy"
-						"eap_proxy_init\n");
-		return NULL;
-	}
-	os_memset(eap_proxy, 0, sizeof(*eap_proxy));
+        if(wpa_qmi_ssr) {
+                eap_proxy = eapol_ctx;
+        } else {
+		eap_proxy =  os_malloc(sizeof(struct eap_proxy_sm));
+		if (NULL == eap_proxy) {
+			wpa_printf(MSG_ERROR, "eap_proxy: Error memory alloc  for eap_proxy"
+							"eap_proxy_init\n");
+			return NULL;
+		}
+		os_memset(eap_proxy, 0, sizeof(*eap_proxy));
 
-	eap_proxy->ctx = eapol_ctx;
-	eap_proxy->eapol_cb = eapol_cb;
-	eap_proxy->msg_ctx = msg_ctx;
+		eap_proxy->ctx = eapol_ctx;
+		eap_proxy->eapol_cb = eapol_cb;
+		eap_proxy->msg_ctx = msg_ctx;
+        }
 	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 	eap_proxy->qmi_state = QMI_STATE_IDLE;
 	eap_proxy->key = NULL;
@@ -753,7 +784,7 @@ eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
 }
 
 
-void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
+static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
 {
 	int qmiRetCode;
 	int qmiErrorCode;
@@ -818,9 +849,16 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	eap_proxy->is_state_changed = FALSE;
         eap_proxy->user_selected_sim = 0;
 
-	os_free(eap_proxy);
-	eap_proxy = NULL;
-	wpa_printf(MSG_INFO, "eap_proxy: eap_proxy Deinitialzed\n");
+}
+
+void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
+{
+        eap_proxy_qmi_deinit(eap_proxy);
+        if (eap_proxy != NULL) {
+            os_free(eap_proxy);
+            eap_proxy = NULL;
+            wpa_printf(MSG_INFO, "eap_proxy: eap_proxy Deinitialzed\n");
+        }
 }
 
 /* Call-back function to process an authentication result indication
