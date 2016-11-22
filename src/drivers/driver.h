@@ -910,6 +910,22 @@ struct wpa_driver_ap_params {
 	int *basic_rates;
 
 	/**
+	 * beacon_rate: Beacon frame data rate
+	 *
+	 * This parameter can be used to set a specific Beacon frame data rate
+	 * for the BSS. The interpretation of this value depends on the
+	 * rate_type (legacy: in 100 kbps units, HT: HT-MCS, VHT: VHT-MCS). If
+	 * beacon_rate == 0 and rate_type == 0 (BEACON_RATE_LEGACY), the default
+	 * Beacon frame data rate is used.
+	 */
+	unsigned int beacon_rate;
+
+	/**
+	 * beacon_rate_type: Beacon data rate type (legacy/HT/VHT)
+	 */
+	enum beacon_rate_type rate_type;
+
+	/**
 	 * proberesp - Probe Response template
 	 *
 	 * This is used by drivers that reply to Probe Requests internally in
@@ -1246,6 +1262,12 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_SUPPORT_HW_MODE_ANY	0x0000004000000000ULL
 /** Driver supports simultaneous off-channel operations */
 #define WPA_DRIVER_FLAGS_OFFCHANNEL_SIMULTANEOUS	0x0000008000000000ULL
+/** Driver supports Beacon frame TX rate configuration (legacy rates) */
+#define WPA_DRIVER_FLAGS_BEACON_RATE_LEGACY	0x0000080000000000ULL
+/** Driver supports Beacon frame TX rate configuration (HT rates) */
+#define WPA_DRIVER_FLAGS_BEACON_RATE_HT		0x0000100000000000ULL
+/** Driver supports Beacon frame TX rate configuration (VHT rates) */
+#define WPA_DRIVER_FLAGS_BEACON_RATE_VHT	0x0000200000000000ULL
 	u64 flags;
 
 #define WPA_DRIVER_SMPS_MODE_STATIC			0x00000001
