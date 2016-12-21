@@ -2349,7 +2349,9 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 
 	if (os_strcmp(var, "password") == 0 &&
 	    os_strncmp(value, "ext:", 4) == 0) {
-		os_free(cred->password);
+		if (has_newline(value))
+			return -1;
+     		os_free(cred->password);
 		cred->password = os_strdup(value);
 		cred->ext_password = 1;
 		return 0;
@@ -2361,9 +2363,14 @@ int wpa_config_set_cred(struct wpa_cred *cred, const char *var,
 	}
 
 	val = wpa_config_parse_string(value, &len);
-	if (val == NULL) {
+	if (val == NULL ||
+	    (os_strcmp(var, "excluded_ssid") != 0 &&
+	     os_strcmp(var, "roaming_consortium") != 0 &&
+	     os_strcmp(var, "required_roaming_consortium") != 0 &&
+	     has_newline(val))) {
 		wpa_printf(MSG_ERROR, "Line %d: invalid field '%s' string "
 			   "value '%s'.", line, var, value);
+		os_free(val);
 		return -1;
 	}
 
