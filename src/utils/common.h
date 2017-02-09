@@ -525,6 +525,8 @@ void int_array_concat(int **res, const int *a);
 void int_array_sort_unique(int *a);
 void int_array_add_unique(int **res, int a);
 
+int is_ctrl_char(char c);
+
 /*
  * gcc 4.4 ends up generating strict-aliasing warnings about some very common
  * networking socket uses that do not really result in a real problem and
