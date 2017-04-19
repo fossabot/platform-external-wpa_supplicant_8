@@ -101,8 +101,9 @@ static Boolean wpa_qmi_ssr = FALSE;
 static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy);
 static void eap_proxy_eapol_sm_set_bool(struct eap_proxy_sm *sm,
                          enum eapol_bool_var var, Boolean value);
-struct eap_proxy_sm * eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
-               void *msg_ctx);
+struct eap_proxy_sm *
+eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
+	       void *msg_ctx);
 static Boolean eap_proxy_eapol_sm_get_bool(struct eap_proxy_sm *sm,
                                         enum eapol_bool_var var);
 
@@ -166,8 +167,76 @@ static void wpa_qmi_client_indication_cb
         void                          *ind_cb_data
 )
 {
-        /* we currently not need the card status changes */
-        /* Making this a dummy CB handler */
+	u32 decoded_payload_len = 0;
+	qmi_client_error_type qmi_err = QMI_NO_ERR;
+	void * decoded_payload = NULL;
+	struct eap_proxy_sm *eap_proxy = ind_cb_data;
+	uim_status_change_ind_msg_v01* status_change_ind_ptr = NULL;
+	struct wpa_supplicant *wpa_s = NULL;
+	u32 i, card_info_len = 0;
+
+	wpa_printf(MSG_DEBUG, "eap_proxy: %s: msg_id=0x%lx", __func__, msg_id);
+
+	if (user_handle == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy: qmi_client_type missing in callback");
+		return;
+	}
+
+	if (eap_proxy == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy: not initialized, discard client indiataion");
+		return;
+	}
+
+	if (ind_buf_ptr == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy: indication buffer NULL, discard client indiataion");
+		return;
+	}
+
+	qmi_idl_get_message_c_struct_len(uim_get_service_object_v01(),
+					 QMI_IDL_INDICATION, msg_id,
+					 &decoded_payload_len);
+
+	if(!decoded_payload_len) {
+		wpa_printf(MSG_ERROR, "eap_proxy: cann't decode payload, discard client indiataion");
+		return;
+	}
+
+	decoded_payload = os_zalloc(decoded_payload_len);
+	if (decoded_payload == NULL) {
+		wpa_printf(MSG_ERROR, "eap_proxy: failed to allocate memory");
+		return;
+	}
+
+	qmi_err = qmi_client_message_decode(user_handle,
+					    QMI_IDL_INDICATION, msg_id,
+					    ind_buf_ptr, ind_buf_len,
+					    decoded_payload, decoded_payload_len);
+
+	if (qmi_err == QMI_NO_ERR) {
+		switch (msg_id) {
+		case QMI_UIM_STATUS_CHANGE_IND_V01:
+			status_change_ind_ptr = (uim_status_change_ind_msg_v01*)decoded_payload;
+			if (!status_change_ind_ptr->card_status_valid)
+				goto fail;
+
+			card_info_len = status_change_ind_ptr->card_status.card_info_len;
+			for (i = 0; i < card_info_len; i++) {
+				if(UIM_CARD_STATE_ABSENT_V01 ==
+				    status_change_ind_ptr->card_status.card_info[i].card_state) {
+					wpa_printf(MSG_DEBUG, "eap_proxy: %s SIM card removed. flush pmksa entries.", __func__);
+					eap_proxy->eapol_cb->eap_proxy_notify_sim_status(eap_proxy->ctx, SIM_STATE_ERROR);
+					break; /* only one flush will do */
+				}
+			}
+			break;
+		default:
+			wpa_printf(MSG_DEBUG, "eap_proxy: Unknown QMI Indicaiton %lu", msg_id);
+			break;
+		}
+	}
+fail:
+	os_free(decoded_payload);
+	return;
 }
 
 static Boolean wpa_qmi_register_auth_inds(struct eap_proxy_sm *eap_proxy)
@@ -614,12 +683,6 @@ void wpa_qmi_handle_ssr(qmi_client_type user_handle, qmi_client_error_type error
         eloop_register_timeout(0, 0, wpa_qmi_register_notification, eap_proxy, NULL);
 }
 
-
-static void exit_proxy_init(int signum)
-{
-       pthread_exit(NULL);
-}
-
 static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 {
         int qmiErrorCode;
@@ -627,7 +690,6 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
         qmi_idl_service_object_type qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
         int index;
         static Boolean flag = FALSE;
-        struct sigaction    actions;
         int ret = 0;
         wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
@@ -655,13 +717,6 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
                 return;
         }
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
-
-        sigemptyset(&actions.sa_mask);
-        actions.sa_flags = 0;
-        actions.sa_handler = exit_proxy_init;
-        ret = sigaction(SIGUSR1,&actions,NULL);
-        if(ret < 0)
-                wpa_printf(MSG_DEBUG, "sigaction\n");
         eap_proxy->proxy_state = EAP_PROXY_INITIALIZE;
         eap_proxy->qmi_state = QMI_STATE_IDLE;
         eap_proxy->key = NULL;
@@ -809,18 +864,15 @@ int eap_auth_end_eap_session(qmi_client_type qmi_auth_svc_client_ptr)
 static void eap_proxy_schedule_thread(void *eloop_ctx, void *timeout_ctx)
 {
         struct eap_proxy_sm *eap_proxy = eloop_ctx;
-        pthread_attr_t attr;
         int ret = -1;
 
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        ret = pthread_create(&eap_proxy->thread_id, &attr, eap_proxy_post_init, eap_proxy);
+        ret = pthread_create(&eap_proxy->thread_id, NULL, eap_proxy_post_init, eap_proxy);
         if(ret < 0)
                wpa_printf(MSG_ERROR, "eap_proxy: starting thread is failed %d\n", ret);
 }
 
 struct eap_proxy_sm *
-eap_proxy_init(void *eapol_ctx, struct eapol_callbacks *eapol_cb,
+eap_proxy_init(void *eapol_ctx, const struct eapol_callbacks *eapol_cb,
                void *msg_ctx)
 {
         int qmiErrorCode;
@@ -872,8 +924,11 @@ static void eap_proxy_qmi_deinit(struct eap_proxy_sm *eap_proxy)
 
         if (NULL == eap_proxy)
                 return;
-
-        pthread_kill(eap_proxy->thread_id, SIGUSR1);
+        /* Waiting for eap_proxy_post_init to exit normally.
+         * The eap_proxy_post_init may wait for QMI responese.
+         * Force killing the thread will cause problem in QMI lib.
+         */
+        pthread_join(eap_proxy->thread_id, NULL);
         eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 
         for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
@@ -2050,12 +2105,16 @@ int eap_proxy_sm_get_status(struct eap_proxy_sm *sm, char *buf, size_t buflen,
                 return 0;
 
         if (sm->eap_type != EAP_TYPE_NONE) {
-                char name[8] = "Unknown";
+                char name[8];
 
-        if (sm->eap_type == EAP_TYPE_SIM)
-                os_strlcpy(name, "SIM", 4);
-        else if (sm->eap_type == EAP_TYPE_AKA)
-                os_strlcpy(name, "AKA", 4);
+                if (sm->eap_type == EAP_TYPE_SIM)
+                        os_strlcpy(name, "SIM", 4);
+                else if (sm->eap_type == EAP_TYPE_AKA)
+                        os_strlcpy(name, "AKA", 4);
+                else if (sm->eap_type == EAP_TYPE_AKA_PRIME)
+                        os_strlcpy(name, "AKA'", 5);
+                else
+                        os_strlcpy(name, "Unknown", 8);
 
                 ret = os_snprintf(buf + len, buflen - len,
                                 "selectedMethod=%d (EAP-%s)\n",
