@@ -541,11 +541,6 @@ static int eap_modem_compatible(struct dev_info *mdm_detect_info)
 }
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 
-static void exit_proxy_init(int signum)
-{
-       pthread_exit(NULL);
-}
-
 static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 {
 	int qmiErrorCode;
@@ -553,7 +548,6 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 	qmi_idl_service_object_type qmi_client_service_obj[MAX_NO_OF_SIM_SUPPORTED];
 	int index;
 	static Boolean flag = FALSE;
-	struct sigaction    actions;
 	int ret = 0;
 	wpa_uim_struct_type *wpa_uim = eap_proxy->wpa_uim;
 #ifdef CONFIG_EAP_PROXY_MDM_DETECT
@@ -582,12 +576,6 @@ static void eap_proxy_post_init(struct eap_proxy_sm *eap_proxy)
 	}
 #endif /* CONFIG_EAP_PROXY_MDM_DETECT */
 
-        sigemptyset(&actions.sa_mask);
-        actions.sa_flags = 0;
-        actions.sa_handler = exit_proxy_init;
-        ret = sigaction(SIGUSR1,&actions,NULL);
-	if(ret < 0)
-		wpa_printf(MSG_DEBUG, "sigaction\n");
 	eap_proxy->proxy_state = EAP_PROXY_INITIALIZE;
 	eap_proxy->qmi_state = QMI_STATE_IDLE;
 	eap_proxy->key = NULL;
@@ -719,12 +707,9 @@ int eap_auth_end_eap_session(qmi_client_type qmi_auth_svc_client_ptr)
 static void eap_proxy_schedule_thread(void *eloop_ctx, void *timeout_ctx)
 {
         struct eap_proxy_sm *eap_proxy = eloop_ctx;
-        pthread_attr_t attr;
         int ret = -1;
 
-        pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        ret = pthread_create(&eap_proxy->thread_id, &attr, eap_proxy_post_init, eap_proxy);
+        ret = pthread_create(&eap_proxy->thread_id, NULL, eap_proxy_post_init, eap_proxy);
         if(ret < 0)
                wpa_printf(MSG_ERROR, "eap_proxy: starting thread is failed %d\n", ret);
 }
@@ -778,7 +763,12 @@ void eap_proxy_deinit(struct eap_proxy_sm *eap_proxy)
 	if (NULL == eap_proxy)
 		return;
 
-	pthread_kill(eap_proxy->thread_id, SIGUSR1);
+	/* Waiting for eap_proxy_post_init to exit normally.
+	 * The eap_proxy_post_init may wait for QMI responese.
+	 * Force killing the thread will cause problem in QMI lib.
+	 */
+	pthread_join(eap_proxy->thread_id, NULL);
+
 	eap_proxy->proxy_state = EAP_PROXY_DISABLED;
 
 	for (index = 0; index < MAX_NO_OF_SIM_SUPPORTED; ++index) {
