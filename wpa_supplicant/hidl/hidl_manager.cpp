@@ -1175,10 +1175,9 @@ void HidlManager::notifyP2pGroupFormationFailure(
 }
 
 void HidlManager::notifyP2pGroupStarted(
-    struct wpa_supplicant *wpa_group_s, const struct wpa_ssid *ssid,
-    int persistent, int client, const u8 *ip)
+    struct wpa_supplicant *wpa_group_s, const struct wpa_ssid *ssid, int persistent, int client)
 {
-	if (!wpa_group_s || !wpa_group_s->parent || !ssid || !ip)
+	if (!wpa_group_s || !wpa_group_s->parent || !ssid)
 		return;
 
 	// For group notifications, need to use the parent iface for callbacks.
@@ -1324,15 +1323,14 @@ void HidlManager::notifyP2pSdResponse(
 void HidlManager::notifyApStaAuthorized(
     struct wpa_supplicant *wpa_s, const u8 *sta, const u8 *p2p_dev_addr)
 {
-	if (!wpa_s || !sta || !p2p_dev_addr)
+	if (!wpa_s || !wpa_s->parent || !sta || !p2p_dev_addr)
 		return;
-
-	if (p2p_iface_object_map_.find(wpa_s->ifname) ==
+	if (p2p_iface_object_map_.find(wpa_s->parent->ifname) ==
 	    p2p_iface_object_map_.end())
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    wpa_s->ifname, std::bind(
+	    wpa_s->parent->ifname, std::bind(
 			       &ISupplicantP2pIfaceCallback::onStaAuthorized,
 			       std::placeholders::_1, sta, p2p_dev_addr));
 }
@@ -1340,15 +1338,14 @@ void HidlManager::notifyApStaAuthorized(
 void HidlManager::notifyApStaDeauthorized(
     struct wpa_supplicant *wpa_s, const u8 *sta, const u8 *p2p_dev_addr)
 {
-	if (!wpa_s || !sta || !p2p_dev_addr)
+	if (!wpa_s || !wpa_s->parent || !sta || !p2p_dev_addr)
 		return;
-
-	if (p2p_iface_object_map_.find(wpa_s->ifname) ==
+	if (p2p_iface_object_map_.find(wpa_s->parent->ifname) ==
 	    p2p_iface_object_map_.end())
 		return;
 
 	callWithEachP2pIfaceCallback(
-	    wpa_s->ifname, std::bind(
+	    wpa_s->parent->ifname, std::bind(
 			       &ISupplicantP2pIfaceCallback::onStaDeauthorized,
 			       std::placeholders::_1, sta, p2p_dev_addr));
 }
