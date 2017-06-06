@@ -2,6 +2,7 @@
  * hidl interface for wpa_supplicant daemon
  * Copyright (c) 2004-2016, Jouni Malinen <j@w1.fi>
  * Copyright (c) 2004-2016, Roshan Pius <rpius@google.com>
+ * Copyright (C) 2017 Sony Mobile Communications Inc.
  *
  * This software may be distributed under the terms of the BSD license.
  * See README for more details.
@@ -14,6 +15,7 @@
 #include "p2p_iface.h"
 
 extern "C" {
+#include "ap.h"
 #include "wps_supplicant.h"
 #include "wifi_display.h"
 }
@@ -24,6 +26,7 @@ const char kConfigMethodStrDisplay[] = "display";
 const char kConfigMethodStrKeypad[] = "keypad";
 constexpr char kSetMiracastMode[] = "MIRACAST ";
 constexpr uint8_t kWfdDeviceInfoSubelemId = 0;
+constexpr char kWfdDeviceInfoSubelemLenHexStr[] = "0006";
 
 using android::hardware::wifi::supplicant::V1_0::ISupplicantP2pIface;
 uint8_t convertHidlMiracastModeToInternal(
@@ -681,6 +684,7 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 	if (go_intent > 15) {
 		return {{SupplicantStatusCode::FAILURE_ARGS_INVALID, ""}, {}};
 	}
+	int go_intent_signed = join_existing_group ? -1 : go_intent;
 	p2p_wps_method wps_method = {};
 	switch (provision_method) {
 	case WpsProvisionMethod::PBC:
@@ -693,9 +697,10 @@ std::pair<SupplicantStatus, std::string> P2pIface::connectInternal(
 		wps_method = WPS_PIN_KEYPAD;
 		break;
 	}
+	const char* pin = pre_selected_pin.length() > 0 ? pre_selected_pin.data() : nullptr;
 	int new_pin = wpas_p2p_connect(
-	    wpa_s, peer_address.data(), pre_selected_pin.data(), wps_method,
-	    persistent, false, join_existing_group, false, go_intent, 0, 0, -1,
+	    wpa_s, peer_address.data(), pin, wps_method,
+	    persistent, false, join_existing_group, false, go_intent_signed, 0, 0, -1,
 	    false, false, false, VHT_CHANWIDTH_USE_HT, nullptr, 0);
 	if (new_pin < 0) {
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, {}};
@@ -856,21 +861,22 @@ SupplicantStatus P2pIface::setListenChannelInternal(
 SupplicantStatus P2pIface::setDisallowedFrequenciesInternal(
     const std::vector<FreqRange>& ranges)
 {
-	if (ranges.size() == 0) {
-		return {SupplicantStatusCode::FAILURE_ARGS_INVALID, ""};
-	}
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
 	using DestT = struct wpa_freq_range_list::wpa_freq_range;
-	DestT* freq_ranges =
-	    static_cast<DestT*>(os_malloc(sizeof(DestT) * ranges.size()));
-	if (!freq_ranges) {
-		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
-	}
-	uint32_t i = 0;
-	for (const auto& range : ranges) {
-		freq_ranges[i].min = range.min;
-		freq_ranges[i].max = range.max;
-		i++;
+	DestT* freq_ranges = nullptr;
+	// Empty ranges is used to enable all frequencies.
+	if (ranges.size() != 0) {
+		freq_ranges =
+		    static_cast<DestT*>(os_malloc(sizeof(DestT) * ranges.size()));
+		if (!freq_ranges) {
+			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+		}
+		uint32_t i = 0;
+		for (const auto& range : ranges) {
+			freq_ranges[i].min = range.min;
+			freq_ranges[i].max = range.max;
+			i++;
+		}
 	}
 
 	os_free(wpa_s->global->p2p_disallow_freq.range);
@@ -983,8 +989,11 @@ std::pair<SupplicantStatus, uint64_t> P2pIface::requestServiceDiscoveryInternal(
 	if (!query_buf) {
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, {}};
 	}
+	const uint8_t* dst_addr = is_zero_ether_addr(peer_address.data())
+				      ? nullptr
+				      : peer_address.data();
 	uint64_t identifier =
-	    wpas_p2p_sd_request(wpa_s, peer_address.data(), query_buf.get());
+	    wpas_p2p_sd_request(wpa_s, dst_addr, query_buf.get());
 	if (identifier == 0) {
 		return {{SupplicantStatusCode::FAILURE_UNKNOWN, ""}, {}};
 	}
@@ -1028,6 +1037,14 @@ SupplicantStatus P2pIface::startWpsPbcInternal(
 	}
 	const uint8_t* bssid_addr =
 	    is_zero_ether_addr(bssid.data()) ? nullptr : bssid.data();
+#ifdef CONFIG_AP
+	if (wpa_group_s->ap_iface) {
+		if (wpa_supplicant_ap_wps_pbc(wpa_group_s, bssid_addr, NULL)) {
+			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+		}
+		return {SupplicantStatusCode::SUCCESS, ""};
+	}
+#endif /* CONFIG_AP */
 	if (wpas_wps_start_pbc(wpa_group_s, bssid_addr, 0)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
@@ -1042,6 +1059,15 @@ SupplicantStatus P2pIface::startWpsPinKeypadInternal(
 	if (!wpa_group_s) {
 		return {SupplicantStatusCode::FAILURE_IFACE_UNKNOWN, ""};
 	}
+#ifdef CONFIG_AP
+	if (wpa_group_s->ap_iface) {
+		if (wpa_supplicant_ap_wps_pin(
+				wpa_group_s, nullptr, pin.c_str(), nullptr, 0, 0) < 0) {
+			return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+		}
+		return {SupplicantStatusCode::SUCCESS, ""};
+	}
+#endif /* CONFIG_AP */
 	if (wpas_wps_start_pin(
 		wpa_group_s, nullptr, pin.c_str(), 0, DEV_PW_DEFAULT)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
@@ -1137,14 +1163,16 @@ SupplicantStatus P2pIface::setWfdDeviceInfoInternal(
     const std::array<uint8_t, 6>& info)
 {
 	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
-	uint32_t wfd_device_info_hex_len = info.size() * 2 + 1;
-	std::vector<char> wfd_device_info_hex(wfd_device_info_hex_len);
+	std::vector<char> wfd_device_info_hex(info.size() * 2 + 1);
 	wpa_snprintf_hex(
 	    wfd_device_info_hex.data(), wfd_device_info_hex.size(), info.data(),
 	    info.size());
+	// |wifi_display_subelem_set| expects the first 2 bytes
+	// to hold the lenght of the subelement. In this case it's
+	// fixed to 6, so prepend that.
 	std::string wfd_device_info_set_cmd_str =
 	    std::to_string(kWfdDeviceInfoSubelemId) + " " +
-	    wfd_device_info_hex.data();
+	    kWfdDeviceInfoSubelemLenHexStr + wfd_device_info_hex.data();
 	std::vector<char> wfd_device_info_set_cmd(
 	    wfd_device_info_set_cmd_str.c_str(),
 	    wfd_device_info_set_cmd_str.c_str() +
