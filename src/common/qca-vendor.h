@@ -1321,6 +1321,12 @@ enum qca_wlan_vendor_attr_config {
 	/* 32-bit unsigned value to set ack snr weight */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_ANT_DIV_ACK_SNR_WEIGHT = 47,
 
+	/*
+	 * 8 bit unsigned value to globally enable/disable scan
+	 * 1 - Enable, 0 - Disable.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_SCAN_ENABLE = 51,
+
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
