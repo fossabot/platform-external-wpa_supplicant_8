@@ -50,6 +50,7 @@
 #include "ap/beacon.h"
 #include "ap/neighbor_db.h"
 #include "ap/rrm.h"
+#include "ap/dpp_hostapd.h"
 #include "wps/wps_defs.h"
 #include "wps/wps.h"
 #include "fst/fst_ctrl_iface.h"
@@ -763,7 +764,7 @@ static int hostapd_ctrl_iface_send_qos_map_conf(struct hostapd_data *hapd,
 #endif /* CONFIG_INTERWORKING */
 
 
-#ifdef CONFIG_WNM
+#ifdef CONFIG_WNM_AP
 
 static int hostapd_ctrl_iface_disassoc_imminent(struct hostapd_data *hapd,
 						const char *cmd)
@@ -838,7 +839,7 @@ static int hostapd_ctrl_iface_bss_tm_req(struct hostapd_data *hapd,
 	char *url = NULL;
 	int ret;
 	u8 nei_rep[1000];
-	u8 *nei_pos = nei_rep;
+	int nei_len;
 	u8 mbo[10];
 	size_t mbo_len = 0;
 
@@ -888,99 +889,10 @@ static int hostapd_ctrl_iface_bss_tm_req(struct hostapd_data *hapd,
 		WPA_PUT_LE16(&bss_term_dur[10], atoi(end));
 	}
 
-
-	/*
-	 * BSS Transition Candidate List Entries - Neighbor Report elements
-	 * neighbor=<BSSID>,<BSSID Information>,<Operating Class>,
-	 * <Channel Number>,<PHY Type>[,<hexdump of Optional Subelements>]
-	 */
-	pos = cmd;
-	while (pos) {
-		u8 *nei_start;
-		long int val;
-		char *endptr, *tmp;
-
-		pos = os_strstr(pos, " neighbor=");
-		if (!pos)
-			break;
-		if (nei_pos + 15 > nei_rep + sizeof(nei_rep)) {
-			wpa_printf(MSG_DEBUG,
-				   "Not enough room for additional neighbor");
-			return -1;
-		}
-		pos += 10;
-
-		nei_start = nei_pos;
-		*nei_pos++ = WLAN_EID_NEIGHBOR_REPORT;
-		nei_pos++; /* length to be filled in */
-
-		if (hwaddr_aton(pos, nei_pos)) {
-			wpa_printf(MSG_DEBUG, "Invalid BSSID");
-			return -1;
-		}
-		nei_pos += ETH_ALEN;
-		pos += 17;
-		if (*pos != ',') {
-			wpa_printf(MSG_DEBUG, "Missing BSSID Information");
-			return -1;
-		}
-		pos++;
-
-		val = strtol(pos, &endptr, 0);
-		WPA_PUT_LE32(nei_pos, val);
-		nei_pos += 4;
-		if (*endptr != ',') {
-			wpa_printf(MSG_DEBUG, "Missing Operating Class");
-			return -1;
-		}
-		pos = endptr + 1;
-
-		*nei_pos++ = atoi(pos); /* Operating Class */
-		pos = os_strchr(pos, ',');
-		if (pos == NULL) {
-			wpa_printf(MSG_DEBUG, "Missing Channel Number");
-			return -1;
-		}
-		pos++;
-
-		*nei_pos++ = atoi(pos); /* Channel Number */
-		pos = os_strchr(pos, ',');
-		if (pos == NULL) {
-			wpa_printf(MSG_DEBUG, "Missing PHY Type");
-			return -1;
-		}
-		pos++;
-
-		*nei_pos++ = atoi(pos); /* PHY Type */
-		end = os_strchr(pos, ' ');
-		tmp = os_strchr(pos, ',');
-		if (tmp && (!end || tmp < end)) {
-			/* Optional Subelements (hexdump) */
-			size_t len;
-
-			pos = tmp + 1;
-			end = os_strchr(pos, ' ');
-			if (end)
-				len = end - pos;
-			else
-				len = os_strlen(pos);
-			if (nei_pos + len / 2 > nei_rep + sizeof(nei_rep)) {
-				wpa_printf(MSG_DEBUG,
-					   "Not enough room for neighbor subelements");
-				return -1;
-			}
-			if (len & 0x01 ||
-			    hexstr2bin(pos, nei_pos, len / 2) < 0) {
-				wpa_printf(MSG_DEBUG,
-					   "Invalid neighbor subelement info");
-				return -1;
-			}
-			nei_pos += len / 2;
-			pos = end;
-		}
-
-		nei_start[1] = nei_pos - nei_start - 2;
-	}
+	nei_len = ieee802_11_parse_candidate_list(cmd, nei_rep,
+						  sizeof(nei_rep));
+	if (nei_len < 0)
+		return -1;
 
 	pos = os_strstr(cmd, " url=");
 	if (pos) {
@@ -1067,9 +979,8 @@ static int hostapd_ctrl_iface_bss_tm_req(struct hostapd_data *hapd,
 
 	ret = wnm_send_bss_tm_req(hapd, sta, req_mode, disassoc_timer,
 				  valid_int, bss_term_dur, url,
-				  nei_pos > nei_rep ? nei_rep : NULL,
-				  nei_pos - nei_rep, mbo_len ? mbo : NULL,
-				  mbo_len);
+				  nei_len ? nei_rep : NULL, nei_len,
+				  mbo_len ? mbo : NULL, mbo_len);
 #ifdef CONFIG_MBO
 fail:
 #endif /* CONFIG_MBO */
@@ -1077,7 +988,7 @@ fail:
 	return ret;
 }
 
-#endif /* CONFIG_WNM */
+#endif /* CONFIG_WNM_AP */
 
 
 static int hostapd_ctrl_iface_get_key_mgmt(struct hostapd_data *hapd,
@@ -1189,6 +1100,24 @@ static int hostapd_ctrl_iface_get_key_mgmt(struct hostapd_data *hapd,
 		pos += ret;
 	}
 #endif /* CONFIG_FILS */
+
+#ifdef CONFIG_OWE
+	if (hapd->conf->wpa_key_mgmt & WPA_KEY_MGMT_OWE) {
+		ret = os_snprintf(pos, end - pos, "OWE ");
+		if (os_snprintf_error(end - pos, ret))
+			return pos - buf;
+		pos += ret;
+	}
+#endif /* CONFIG_OWE */
+
+#ifdef CONFIG_DPP
+	if (hapd->conf->wpa_key_mgmt & WPA_KEY_MGMT_DPP) {
+		ret = os_snprintf(pos, end - pos, "DPP ");
+		if (os_snprintf_error(end - pos, ret))
+			return pos - buf;
+		pos += ret;
+	}
+#endif /* CONFIG_DPP */
 
 	if (pos > buf && *(pos - 1) == ' ') {
 		*(pos - 1) = '\0';
@@ -1359,6 +1288,23 @@ static int hostapd_ctrl_iface_set(struct hostapd_data *hapd, char *cmd)
 		hapd->ext_mgmt_frame_handling = atoi(value);
 	} else if (os_strcasecmp(cmd, "ext_eapol_frame_io") == 0) {
 		hapd->ext_eapol_frame_io = atoi(value);
+#ifdef CONFIG_DPP
+	} else if (os_strcasecmp(cmd, "dpp_config_obj_override") == 0) {
+		os_free(hapd->dpp_config_obj_override);
+		hapd->dpp_config_obj_override = os_strdup(value);
+	} else if (os_strcasecmp(cmd, "dpp_discovery_override") == 0) {
+		os_free(hapd->dpp_discovery_override);
+		hapd->dpp_discovery_override = os_strdup(value);
+	} else if (os_strcasecmp(cmd, "dpp_groups_override") == 0) {
+		os_free(hapd->dpp_groups_override);
+		hapd->dpp_groups_override = os_strdup(value);
+	} else if (os_strcasecmp(cmd, "dpp_devices_override") == 0) {
+		os_free(hapd->dpp_devices_override);
+		hapd->dpp_devices_override = os_strdup(value);
+	} else if (os_strcasecmp(cmd,
+				 "dpp_ignore_netaccesskey_mismatch") == 0) {
+		hapd->dpp_ignore_netaccesskey_mismatch = atoi(value);
+#endif /* CONFIG_DPP */
 #endif /* CONFIG_TESTING_OPTIONS */
 #ifdef CONFIG_MBO
 	} else if (os_strcasecmp(cmd, "mbo_assoc_disallow") == 0) {
@@ -1379,6 +1325,11 @@ static int hostapd_ctrl_iface_set(struct hostapd_data *hapd, char *cmd)
 		 * disallowing station logic.
 		 */
 #endif /* CONFIG_MBO */
+#ifdef CONFIG_DPP
+	} else if (os_strcasecmp(cmd, "dpp_configurator_params") == 0) {
+		os_free(hapd->dpp_configurator_params);
+		hapd->dpp_configurator_params = os_strdup(value);
+#endif /* CONFIG_DPP */
 	} else {
 		struct sta_info *sta;
 		struct vlan_description vlan_id;
@@ -2587,7 +2538,7 @@ static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
 		if (hostapd_ctrl_iface_hs20_deauth_req(hapd, buf + 16))
 			reply_len = -1;
 #endif /* CONFIG_HS20 */
-#ifdef CONFIG_WNM
+#ifdef CONFIG_WNM_AP
 	} else if (os_strncmp(buf, "DISASSOC_IMMINENT ", 18) == 0) {
 		if (hostapd_ctrl_iface_disassoc_imminent(hapd, buf + 18))
 			reply_len = -1;
@@ -2597,7 +2548,7 @@ static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
 	} else if (os_strncmp(buf, "BSS_TM_REQ ", 11) == 0) {
 		if (hostapd_ctrl_iface_bss_tm_req(hapd, buf + 11))
 			reply_len = -1;
-#endif /* CONFIG_WNM */
+#endif /* CONFIG_WNM_AP */
 	} else if (os_strcmp(buf, "GET_CONFIG") == 0) {
 		reply_len = hostapd_ctrl_iface_get_config(hapd, reply,
 							  reply_size);
@@ -2683,6 +2634,9 @@ static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
 							  reply_size);
 	} else if (os_strcmp(buf, "PMKSA_FLUSH") == 0) {
 		hostapd_ctrl_iface_pmksa_flush(hapd);
+	} else if (os_strncmp(buf, "PMKSA_ADD ", 10) == 0) {
+		if (hostapd_ctrl_iface_pmksa_add(hapd, buf + 10) < 0)
+			reply_len = -1;
 	} else if (os_strncmp(buf, "SET_NEIGHBOR ", 13) == 0) {
 		if (hostapd_ctrl_iface_set_neighbor(hapd, buf + 13))
 			reply_len = -1;
@@ -2703,6 +2657,70 @@ static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
 						      reply_size);
 	} else if (os_strcmp(buf, "TERMINATE") == 0) {
 		eloop_terminate();
+#ifdef CONFIG_DPP
+	} else if (os_strncmp(buf, "DPP_QR_CODE ", 12) == 0) {
+		res = hostapd_dpp_qr_code(hapd, buf + 12);
+		if (res < 0) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%d", res);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_BOOTSTRAP_GEN ", 18) == 0) {
+		res = hostapd_dpp_bootstrap_gen(hapd, buf + 18);
+		if (res < 0) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%d", res);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_BOOTSTRAP_REMOVE ", 21) == 0) {
+		if (hostapd_dpp_bootstrap_remove(hapd, buf + 21) < 0)
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DPP_BOOTSTRAP_GET_URI ", 22) == 0) {
+		const char *uri;
+
+		uri = hostapd_dpp_bootstrap_get_uri(hapd, atoi(buf + 22));
+		if (!uri) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%s", uri);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_BOOTSTRAP_INFO ", 19) == 0) {
+		reply_len = hostapd_dpp_bootstrap_info(hapd, atoi(buf + 19),
+						       reply, reply_size);
+	} else if (os_strncmp(buf, "DPP_AUTH_INIT ", 14) == 0) {
+		if (hostapd_dpp_auth_init(hapd, buf + 13) < 0)
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DPP_CONFIGURATOR_ADD", 20) == 0) {
+		res = hostapd_dpp_configurator_add(hapd, buf + 20);
+		if (res < 0) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%d", res);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_CONFIGURATOR_REMOVE ", 24) == 0) {
+		if (hostapd_dpp_configurator_remove(hapd, buf + 24) < 0)
+			reply_len = -1;
+	} else if (os_strncmp(buf, "DPP_PKEX_ADD ", 13) == 0) {
+		res = hostapd_dpp_pkex_add(hapd, buf + 12);
+		if (res < 0) {
+			reply_len = -1;
+		} else {
+			reply_len = os_snprintf(reply, reply_size, "%d", res);
+			if (os_snprintf_error(reply_size, reply_len))
+				reply_len = -1;
+		}
+	} else if (os_strncmp(buf, "DPP_PKEX_REMOVE ", 16) == 0) {
+		if (hostapd_dpp_pkex_remove(hapd, buf + 16) < 0)
+			reply_len = -1;
+#endif /* CONFIG_DPP */
 	} else {
 		os_memcpy(reply, "UNKNOWN COMMAND\n", 16);
 		reply_len = 16;

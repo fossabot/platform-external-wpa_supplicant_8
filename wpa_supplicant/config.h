@@ -41,6 +41,8 @@
 #define DEFAULT_P2P_GO_CTWINDOW 0
 #define DEFAULT_WPA_RSC_RELAXATION 1
 #define DEFAULT_MBO_CELL_CAPA MBO_CELL_CAPA_NOT_SUPPORTED
+#define DEFAULT_DISASSOC_IMMINENT_RSSI_THRESHOLD -75
+#define DEFAULT_OCE_SUPPORT OCE_STA
 
 #include "config_ssid.h"
 #include "wps/wps.h"
@@ -625,6 +627,13 @@ struct wpa_config {
 	u8 uuid[16];
 
 	/**
+	 * auto_uuid - Automatic UUID behavior
+	 * 0 = generate static value based on the local MAC address (default)
+	 * 1 = generate a random UUID every time wpa_supplicant starts
+	 */
+	int auto_uuid;
+
+	/**
 	 * device_name - Device Name (WPS)
 	 * User-friendly description of device; up to 32 octets encoded in
 	 * UTF-8
@@ -1096,6 +1105,15 @@ struct wpa_config {
 	unsigned int sched_scan_interval;
 
 	/**
+	 * sched_scan_start_delay - Schedule scan start delay before first scan
+	 *
+	 * Delay (in seconds) before scheduling first scan plan cycle. The
+	 * driver may ignore this parameter and start immediately (or at any
+	 * other time), if this feature is not supported.
+	 */
+	unsigned int sched_scan_start_delay;
+
+	/**
 	 * tdls_external_control - External control for TDLS setup requests
 	 *
 	 * Enable TDLS mode where external programs are given the control
@@ -1291,6 +1309,19 @@ struct wpa_config {
 	 * mbo_cell_capa - Cellular capabilities for MBO
 	 */
 	enum mbo_cellular_capa mbo_cell_capa;
+
+	/**
+	 * disassoc_imminent_rssi_threshold - RSSI threshold of candidate AP
+	 * when disassociation imminent is set.
+	 */
+	int disassoc_imminent_rssi_threshold;
+
+	/**
+	 * oce - Enable OCE in STA and/or STA-CFON mode
+	 *  - Set BIT(0) to enable OCE in non-AP STA mode
+	 *  - Set BIT(1) to enable OCE in STA-CFON mode
+	 */
+	unsigned int oce;
 #endif /* CONFIG_MBO */
 
 	/**
@@ -1343,6 +1374,21 @@ struct wpa_config {
 	 * 2 = like 1, but maintain OUI (with local admin bit set)
 	 */
 	int gas_rand_mac_addr;
+
+	/**
+	 * dpp_config_processing - How to process DPP configuration
+	 *
+	 * 0 = report received configuration to an external program for
+	 *	processing; do not generate any network profile internally
+	 * 1 = report received configuration to an external program and generate
+	 *	a network profile internally, but do not automatically connect
+	 *	to the created (disabled) profile; the network profile id is
+	 *	reported to external programs
+	 * 2 = report received configuration to an external program, generate
+	 *	a network profile internally, try to connect to the created
+	 *	profile automatically
+	 */
+	int dpp_config_processing;
 };
 
 

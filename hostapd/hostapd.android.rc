@@ -18,3 +18,14 @@ service hostapd /vendor/bin/hostapd \
     writepid /data/vendor/wifi/hostapd.pid
     disabled
     oneshot
+
+service hostapd_dual /vendor/bin/hostapd \
+        -e /data/vendor/wifi/entropy.bin \
+        /data/vendor/wifi/hostapd_dual2g.conf \
+        /data/vendor/wifi/hostapd_dual5g.conf
+    class main
+    user wifi
+    group wifi net_raw net_admin
+    writepid /data/vendor/wifi/hostapd.pid
+    disabled
+    oneshot

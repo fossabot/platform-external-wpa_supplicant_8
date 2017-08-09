@@ -462,6 +462,7 @@
 #define WLAN_EID_EXT_FILS_PUBLIC_KEY 12
 #define WLAN_EID_EXT_FILS_NONCE 13
 #define WLAN_EID_EXT_FUTURE_CHANNEL_GUIDANCE 14
+#define WLAN_EID_EXT_OWE_DH_PARAM 32
 
 
 /* Action frame categories (IEEE Std 802.11-2016, 9.4.1.11, Table 9-76) */
@@ -1126,6 +1127,7 @@ struct ieee80211_ampe_ie {
 #define VHT_CAP_SUPP_CHAN_WIDTH_160MHZ              ((u32) BIT(2))
 #define VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ     ((u32) BIT(3))
 #define VHT_CAP_SUPP_CHAN_WIDTH_MASK                ((u32) BIT(2) | BIT(3))
+#define VHT_CAP_SUPP_CHAN_WIDTH_MASK_SHIFT          2
 #define VHT_CAP_RXLDPC                              ((u32) BIT(4))
 #define VHT_CAP_SHORT_GI_80                         ((u32) BIT(5))
 #define VHT_CAP_SHORT_GI_160                        ((u32) BIT(6))
@@ -1336,6 +1338,7 @@ enum wmm_ac {
 
 /* MBO v0.0_r19, 4.2: MBO Attributes */
 /* Table 4-5: MBO Attributes */
+/* OCE v0.0.10, Table 4-3: OCE Attributes */
 enum mbo_attr_id {
 	MBO_ATTR_ID_AP_CAPA_IND = 1,
 	MBO_ATTR_ID_NON_PREF_CHAN_REPORT = 2,
@@ -1345,6 +1348,10 @@ enum mbo_attr_id {
 	MBO_ATTR_ID_TRANSITION_REASON = 6,
 	MBO_ATTR_ID_TRANSITION_REJECT_REASON = 7,
 	MBO_ATTR_ID_ASSOC_RETRY_DELAY = 8,
+	OCE_ATTR_ID_CAPA_IND = 101,
+	OCE_ATTR_ID_RSSI_BASED_ASSOC_REJECT = 102,
+	OCE_ATTR_ID_REDUCED_WAN_METRICS = 103,
+	OCE_ATTR_ID_RNR_COMPLETENESS = 104,
 };
 
 /* MBO v0.0_r19, 4.2.1: MBO AP Capability Indication Attribute */
@@ -1419,9 +1426,17 @@ enum wfa_wnm_notif_subelem_id {
 	WFA_WNM_NOTIF_SUBELEM_CELL_DATA_CAPA = 3,
 };
 
-/* MBO v0.0_r25, 4.3: MBO ANQP-elements */
+/* MBO v0.0_r27, 4.3: MBO ANQP-elements */
 #define MBO_ANQP_OUI_TYPE 0x12
-#define MBO_ANQP_SUBTYPE_CELL_CONN_PREF 1
+#define MBO_ANQP_SUBTYPE_QUERY_LIST 1
+#define MBO_ANQP_SUBTYPE_CELL_CONN_PREF 2
+#define MAX_MBO_ANQP_SUBTYPE MBO_ANQP_SUBTYPE_CELL_CONN_PREF
+
+/* OCE v0.0.10, 4.2.1: OCE Capability Indication Attribute */
+#define OCE_RELEASE 1
+#define OCE_RELEASE_MASK (BIT(0) | BIT(1) | BIT(2))
+#define OCE_IS_STA_CFON BIT(3)
+#define OCE_IS_NON_OCE_AP_PRESENT BIT(4)
 
 /* Wi-Fi Direct (P2P) */
 
@@ -1570,7 +1585,9 @@ enum wifi_display_subelem {
 	WFD_SUBELEM_COUPLED_SINK = 6,
 	WFD_SUBELEM_EXT_CAPAB = 7,
 	WFD_SUBELEM_LOCAL_IP_ADDRESS = 8,
-	WFD_SUBELEM_SESSION_INFO = 9
+	WFD_SUBELEM_SESSION_INFO = 9,
+	WFD_SUBELEM_MAC_INFO = 10,
+	WFD_SUBELEM_R2_DEVICE_INFO = 11,
 };
 
 /* 802.11s */
@@ -2008,5 +2025,8 @@ struct ieee80211_he_operation {
 #define HE_OPERATION_TX_BSSID_INDICATOR		((u32) BIT(29))
 #define HE_OPERATION_BSS_COLOR_DISABLED		((u32) BIT(30))
 #define HE_OPERATION_BSS_DUAL_BEACON		((u32) BIT(31))
+
+/* DPP Public Action frame identifiers - OUI_WFA */
+#define DPP_OUI_TYPE 0x1A
 
 #endif /* IEEE802_11_DEFS_H */
