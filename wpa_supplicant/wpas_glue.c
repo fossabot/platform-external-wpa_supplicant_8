@@ -146,6 +146,8 @@ static int wpa_supplicant_eapol_send(void *ctx, int type, const u8 *buf,
 	 * extra copy here */
 
 	if (wpa_key_mgmt_wpa_psk(wpa_s->key_mgmt) ||
+	    wpa_s->key_mgmt == WPA_KEY_MGMT_OWE ||
+	    wpa_s->key_mgmt == WPA_KEY_MGMT_DPP ||
 	    wpa_s->key_mgmt == WPA_KEY_MGMT_NONE) {
 		/* Current SSID is not using IEEE 802.1X/EAP, so drop possible
 		 * EAPOL frames (mainly, EAPOL-Start) from EAPOL state
@@ -529,30 +531,59 @@ static struct wpa_ssid * wpas_get_network_ctx(struct wpa_supplicant *wpa_s,
 
 
 static int wpa_supplicant_add_pmkid(void *_wpa_s, void *network_ctx,
-				    const u8 *bssid, const u8 *pmkid)
+				    const u8 *bssid, const u8 *pmkid,
+				    const u8 *fils_cache_id,
+				    const u8 *pmk, size_t pmk_len)
 {
 	struct wpa_supplicant *wpa_s = _wpa_s;
 	struct wpa_ssid *ssid;
+	struct wpa_pmkid_params params;
 
+	os_memset(&params, 0, sizeof(params));
 	ssid = wpas_get_network_ctx(wpa_s, network_ctx);
 	if (ssid)
 		wpa_msg(wpa_s, MSG_INFO, PMKSA_CACHE_ADDED MACSTR " %d",
 			MAC2STR(bssid), ssid->id);
-	return wpa_drv_add_pmkid(wpa_s, bssid, pmkid);
+	if (ssid && fils_cache_id) {
+		params.ssid = ssid->ssid;
+		params.ssid_len = ssid->ssid_len;
+		params.fils_cache_id = fils_cache_id;
+	} else {
+		params.bssid = bssid;
+	}
+
+	params.pmkid = pmkid;
+	params.pmk = pmk;
+	params.pmk_len = pmk_len;
+
+	return wpa_drv_add_pmkid(wpa_s, &params);
 }
 
 
 static int wpa_supplicant_remove_pmkid(void *_wpa_s, void *network_ctx,
-				       const u8 *bssid, const u8 *pmkid)
+				       const u8 *bssid, const u8 *pmkid,
+				       const u8 *fils_cache_id)
 {
 	struct wpa_supplicant *wpa_s = _wpa_s;
 	struct wpa_ssid *ssid;
+	struct wpa_pmkid_params params;
 
+	os_memset(&params, 0, sizeof(params));
 	ssid = wpas_get_network_ctx(wpa_s, network_ctx);
 	if (ssid)
 		wpa_msg(wpa_s, MSG_INFO, PMKSA_CACHE_REMOVED MACSTR " %d",
 			MAC2STR(bssid), ssid->id);
-	return wpa_drv_remove_pmkid(wpa_s, bssid, pmkid);
+	if (ssid && fils_cache_id) {
+		params.ssid = ssid->ssid;
+		params.ssid_len = ssid->ssid_len;
+		params.fils_cache_id = fils_cache_id;
+	} else {
+		params.bssid = bssid;
+	}
+
+	params.pmkid = pmkid;
+
+	return wpa_drv_remove_pmkid(wpa_s, &params);
 }
 
 
@@ -900,7 +931,7 @@ static void wpa_supplicant_eap_proxy_cb(void *ctx)
 	struct wpa_supplicant *wpa_s = ctx;
 	size_t len;
 
-	wpa_s->mnc_len = eapol_sm_get_eap_proxy_imsi(wpa_s->eapol,
+	wpa_s->mnc_len = eapol_sm_get_eap_proxy_imsi(wpa_s->eapol, -1,
 						     wpa_s->imsi, &len);
 	if (wpa_s->mnc_len > 0) {
 		wpa_s->imsi[len] = '\0';
@@ -1232,6 +1263,11 @@ void wpa_supplicant_rsn_supp_set_config(struct wpa_supplicant *wpa_s,
 		}
 #endif /* CONFIG_P2P */
 		conf.wpa_rsc_relaxation = wpa_s->conf->wpa_rsc_relaxation;
+#ifdef CONFIG_FILS
+		if (wpa_key_mgmt_fils(wpa_s->key_mgmt))
+			conf.fils_cache_id =
+				wpa_bss_get_fils_cache_id(wpa_s->current_bss);
+#endif /* CONFIG_FILS */
 	}
 	wpa_sm_set_config(wpa_s->wpa, ssid ? &conf : NULL);
 }

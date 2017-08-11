@@ -35,11 +35,13 @@
 
 static void wpa_send_eapol_timeout(void *eloop_ctx, void *timeout_ctx);
 static int wpa_sm_step(struct wpa_state_machine *sm);
-static int wpa_verify_key_mic(int akmp, struct wpa_ptk *PTK, u8 *data,
-			      size_t data_len);
+static int wpa_verify_key_mic(int akmp, size_t pmk_len, struct wpa_ptk *PTK,
+			      u8 *data, size_t data_len);
 #ifdef CONFIG_FILS
 static int wpa_aead_decrypt(struct wpa_state_machine *sm, struct wpa_ptk *ptk,
 			    u8 *buf, size_t buf_len, u16 *_key_data_len);
+static struct wpabuf * fils_prepare_plainbuf(struct wpa_state_machine *sm,
+					     const struct wpabuf *hlp);
 #endif /* CONFIG_FILS */
 static void wpa_sm_call_step(void *eloop_ctx, void *timeout_ctx);
 static void wpa_group_sm_step(struct wpa_authenticator *wpa_auth,
@@ -224,13 +226,13 @@ void wpa_auth_vlogger(struct wpa_authenticator *wpa_auth, const u8 *addr,
 
 
 static void wpa_sta_disconnect(struct wpa_authenticator *wpa_auth,
-			       const u8 *addr)
+			       const u8 *addr, u16 reason)
 {
 	if (wpa_auth->cb->disconnect == NULL)
 		return;
-	wpa_printf(MSG_DEBUG, "wpa_sta_disconnect STA " MACSTR, MAC2STR(addr));
-	wpa_auth->cb->disconnect(wpa_auth->cb_ctx, addr,
-				 WLAN_REASON_PREV_AUTH_NOT_VALID);
+	wpa_printf(MSG_DEBUG, "wpa_sta_disconnect STA " MACSTR " (reason %u)",
+		   MAC2STR(addr), reason);
+	wpa_auth->cb->disconnect(wpa_auth->cb_ctx, addr, reason);
 }
 
 
@@ -518,6 +520,7 @@ void wpa_deinit(struct wpa_authenticator *wpa_auth)
 #ifdef CONFIG_IEEE80211R_AP
 	wpa_ft_pmk_cache_deinit(wpa_auth->ft_pmk_cache);
 	wpa_auth->ft_pmk_cache = NULL;
+	wpa_ft_deinit(wpa_auth);
 #endif /* CONFIG_IEEE80211R_AP */
 
 #ifdef CONFIG_P2P
@@ -703,6 +706,9 @@ void wpa_auth_sta_deinit(struct wpa_state_machine *sm)
 	sm->pending_1_of_4_timeout = 0;
 	eloop_cancel_timeout(wpa_sm_call_step, sm, NULL);
 	eloop_cancel_timeout(wpa_rekey_ptk, sm->wpa_auth, sm);
+#ifdef CONFIG_IEEE80211R_AP
+	wpa_ft_sta_deinit(sm);
+#endif /* CONFIG_IEEE80211R_AP */
 	if (sm->in_step_loop) {
 		/* Must not free state machine while wpa_sm_step() is running.
 		 * Freeing will be completed in the end of wpa_sm_step(). */
@@ -860,8 +866,8 @@ static int wpa_try_alt_snonce(struct wpa_state_machine *sm, u8 *data,
 		if (wpa_derive_ptk(sm, sm->alt_SNonce, pmk, pmk_len, &PTK) < 0)
 			break;
 
-		if (wpa_verify_key_mic(sm->wpa_key_mgmt, &PTK, data, data_len)
-		    == 0) {
+		if (wpa_verify_key_mic(sm->wpa_key_mgmt, pmk_len, &PTK,
+				       data, data_len) == 0) {
 			ok = 1;
 			break;
 		}
@@ -906,7 +912,7 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 		return;
 	wpa_hexdump(MSG_MSGDUMP, "WPA: RX EAPOL data", data, data_len);
 
-	mic_len = wpa_mic_len(sm->wpa_key_mgmt);
+	mic_len = wpa_mic_len(sm->wpa_key_mgmt, sm->pmk_len);
 	keyhdrlen = sizeof(*key) + mic_len + 2;
 
 	if (data_len < sizeof(*hdr) + keyhdrlen) {
@@ -1018,6 +1024,8 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 
 			if (!wpa_use_aes_cmac(sm) &&
 			    !wpa_key_mgmt_fils(sm->wpa_key_mgmt) &&
+			    sm->wpa_key_mgmt != WPA_KEY_MGMT_OWE &&
+			    sm->wpa_key_mgmt != WPA_KEY_MGMT_DPP &&
 			    ver != WPA_KEY_INFO_TYPE_HMAC_SHA1_AES) {
 				wpa_auth_logger(wpa_auth, sm->addr,
 						LOGGER_WARNING,
@@ -1028,7 +1036,9 @@ void wpa_receive(struct wpa_authenticator *wpa_auth,
 		}
 
 		if ((wpa_key_mgmt_suite_b(sm->wpa_key_mgmt) ||
-		     wpa_key_mgmt_fils(sm->wpa_key_mgmt)) &&
+		     wpa_key_mgmt_fils(sm->wpa_key_mgmt) ||
+		     sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
+		     sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE) &&
 		    ver != WPA_KEY_INFO_TYPE_AKM_DEFINED) {
 			wpa_auth_logger(wpa_auth, sm->addr, LOGGER_WARNING,
 					"did not use EAPOL-Key descriptor version 0 as required for AKM-defined cases");
@@ -1152,7 +1162,8 @@ continue_processing:
 				   "collect more entropy for random number "
 				   "generation");
 			random_mark_pool_ready();
-			wpa_sta_disconnect(wpa_auth, sm->addr);
+			wpa_sta_disconnect(wpa_auth, sm->addr,
+					   WLAN_REASON_PREV_AUTH_NOT_VALID);
 			return;
 		}
 		break;
@@ -1230,8 +1241,8 @@ continue_processing:
 	sm->MICVerified = FALSE;
 	if (sm->PTK_valid && !sm->update_snonce) {
 		if (mic_len &&
-		    wpa_verify_key_mic(sm->wpa_key_mgmt, &sm->PTK, data,
-				       data_len) &&
+		    wpa_verify_key_mic(sm->wpa_key_mgmt, sm->pmk_len, &sm->PTK,
+				       data, data_len) &&
 		    (msg != PAIRWISE_4 || !sm->alt_snonce_valid ||
 		     wpa_try_alt_snonce(sm, data, data_len))) {
 			wpa_auth_logger(wpa_auth, sm->addr, LOGGER_INFO,
@@ -1335,10 +1346,9 @@ continue_processing:
 #endif /* CONFIG_PEERKEY */
 
 	os_free(sm->last_rx_eapol_key);
-	sm->last_rx_eapol_key = os_malloc(data_len);
+	sm->last_rx_eapol_key = os_memdup(data, data_len);
 	if (sm->last_rx_eapol_key == NULL)
 		return;
-	os_memcpy(sm->last_rx_eapol_key, data, data_len);
 	sm->last_rx_eapol_key_len = data_len;
 
 	sm->rx_eapol_key_secure = !!(key_info & WPA_KEY_INFO_SECURE);
@@ -1412,7 +1422,7 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 	int i;
 	u8 *key_mic, *key_data;
 
-	mic_len = wpa_mic_len(sm->wpa_key_mgmt);
+	mic_len = wpa_mic_len(sm->wpa_key_mgmt, sm->pmk_len);
 	keyhdrlen = sizeof(*key) + mic_len + 2;
 
 	len = sizeof(struct ieee802_1x_hdr) + keyhdrlen;
@@ -1420,6 +1430,8 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 	if (force_version)
 		version = force_version;
 	else if (sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN ||
+		 sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE ||
+		 sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
 		 wpa_key_mgmt_suite_b(sm->wpa_key_mgmt) ||
 		 wpa_key_mgmt_fils(sm->wpa_key_mgmt))
 		version = WPA_KEY_INFO_TYPE_AKM_DEFINED;
@@ -1445,6 +1457,8 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 	key_data_len = kde_len;
 
 	if ((version == WPA_KEY_INFO_TYPE_HMAC_SHA1_AES ||
+	     sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE ||
+	     sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
 	     sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN ||
 	     wpa_key_mgmt_suite_b(sm->wpa_key_mgmt) ||
 	     version == WPA_KEY_INFO_TYPE_AES_128_CMAC) && encr) {
@@ -1547,9 +1561,14 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 		wpa_hexdump_key(MSG_DEBUG, "Plaintext EAPOL-Key Key Data",
 				buf, key_data_len);
 		if (version == WPA_KEY_INFO_TYPE_HMAC_SHA1_AES ||
+		    sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE ||
+		    sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
 		    sm->wpa_key_mgmt == WPA_KEY_MGMT_OSEN ||
 		    wpa_key_mgmt_suite_b(sm->wpa_key_mgmt) ||
 		    version == WPA_KEY_INFO_TYPE_AES_128_CMAC) {
+			wpa_printf(MSG_DEBUG,
+				   "WPA: Encrypt Key Data using AES-WRAP (KEK length %u)",
+				   (unsigned int) sm->PTK.kek_len);
 			if (aes_wrap(sm->PTK.kek, sm->PTK.kek_len,
 				     (key_data_len - 8) / 8, buf, key_data)) {
 				os_free(hdr);
@@ -1560,6 +1579,9 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 #ifndef CONFIG_NO_RC4
 		} else if (sm->PTK.kek_len == 16) {
 			u8 ek[32];
+
+			wpa_printf(MSG_DEBUG,
+				   "WPA: Encrypt Key Data using RC4");
 			os_memcpy(key->key_iv,
 				  sm->group->Counter + WPA_NONCE_LEN - 16, 16);
 			inc_byte_array(sm->group->Counter, WPA_NONCE_LEN);
@@ -1640,15 +1662,15 @@ static void wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 }
 
 
-static int wpa_verify_key_mic(int akmp, struct wpa_ptk *PTK, u8 *data,
-			      size_t data_len)
+static int wpa_verify_key_mic(int akmp, size_t pmk_len, struct wpa_ptk *PTK,
+			      u8 *data, size_t data_len)
 {
 	struct ieee802_1x_hdr *hdr;
 	struct wpa_eapol_key *key;
 	u16 key_info;
 	int ret = 0;
 	u8 mic[WPA_EAPOL_KEY_MIC_MAX_LEN], *mic_pos;
-	size_t mic_len = wpa_mic_len(akmp);
+	size_t mic_len = wpa_mic_len(akmp, pmk_len);
 
 	if (data_len < sizeof(*hdr) + sizeof(*key))
 		return -1;
@@ -1751,6 +1773,16 @@ int wpa_auth_sm_event(struct wpa_state_machine *sm, enum wpa_event event)
 #else /* CONFIG_IEEE80211R_AP */
 		break;
 #endif /* CONFIG_IEEE80211R_AP */
+	case WPA_ASSOC_FILS:
+#ifdef CONFIG_FILS
+		wpa_printf(MSG_DEBUG,
+			   "FILS: TK configuration after association");
+		fils_set_tk(sm);
+		sm->fils_completed = 1;
+		return 0;
+#else /* CONFIG_FILS */
+		break;
+#endif /* CONFIG_FILS */
 	}
 
 #ifdef CONFIG_IEEE80211R_AP
@@ -1810,7 +1842,9 @@ SM_STATE(WPA_PTK, INITIALIZE)
 	wpa_remove_ptk(sm);
 	wpa_auth_set_eapol(sm->wpa_auth, sm->addr, WPA_EAPOL_portValid, 0);
 	sm->TimeoutCtr = 0;
-	if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt)) {
+	if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt) ||
+	    sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
+	    sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE) {
 		wpa_auth_set_eapol(sm->wpa_auth, sm->addr,
 				   WPA_EAPOL_authorized, 0);
 	}
@@ -1819,9 +1853,14 @@ SM_STATE(WPA_PTK, INITIALIZE)
 
 SM_STATE(WPA_PTK, DISCONNECT)
 {
+	u16 reason = sm->disconnect_reason;
+
 	SM_ENTRY_MA(WPA_PTK, DISCONNECT, wpa_ptk);
 	sm->Disconnect = FALSE;
-	wpa_sta_disconnect(sm->wpa_auth, sm->addr);
+	sm->disconnect_reason = 0;
+	if (!reason)
+		reason = WLAN_REASON_PREV_AUTH_NOT_VALID;
+	wpa_sta_disconnect(sm->wpa_auth, sm->addr, reason);
 }
 
 
@@ -1922,6 +1961,14 @@ SM_STATE(WPA_PTK, INITPMK)
 		wpa_printf(MSG_DEBUG, "WPA: PMK from PMKSA cache");
 		os_memcpy(sm->PMK, sm->pmksa->pmk, sm->pmksa->pmk_len);
 		sm->pmk_len = sm->pmksa->pmk_len;
+#ifdef CONFIG_DPP
+	} else if (sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP) {
+		wpa_printf(MSG_DEBUG,
+			   "DPP: No PMKSA cache entry for STA - reject connection");
+		sm->Disconnect = TRUE;
+		sm->disconnect_reason = WLAN_REASON_INVALID_PMKID;
+		return;
+#endif /* CONFIG_DPP */
 	} else if (wpa_auth_get_msk(sm->wpa_auth, sm->addr, msk, &len) == 0) {
 		unsigned int pmk_len;
 
@@ -2056,22 +2103,52 @@ static int wpa_derive_ptk(struct wpa_state_machine *sm, const u8 *snonce,
 #ifdef CONFIG_FILS
 
 int fils_auth_pmk_to_ptk(struct wpa_state_machine *sm, const u8 *pmk,
-			 size_t pmk_len, const u8 *snonce, const u8 *anonce)
+			 size_t pmk_len, const u8 *snonce, const u8 *anonce,
+			 struct wpabuf *g_sta, struct wpabuf *g_ap)
 {
 	u8 ick[FILS_ICK_MAX_LEN];
 	size_t ick_len;
 	int res;
+	u8 fils_ft[FILS_FT_MAX_LEN];
+	size_t fils_ft_len = 0;
 
 	res = fils_pmk_to_ptk(pmk, pmk_len, sm->addr, sm->wpa_auth->addr,
 			      snonce, anonce, &sm->PTK, ick, &ick_len,
-			      sm->wpa_key_mgmt, sm->pairwise);
+			      sm->wpa_key_mgmt, sm->pairwise,
+			      fils_ft, &fils_ft_len);
 	if (res < 0)
 		return res;
 	sm->PTK_valid = TRUE;
 
+#ifdef CONFIG_IEEE80211R_AP
+	if (fils_ft_len) {
+		struct wpa_authenticator *wpa_auth = sm->wpa_auth;
+		struct wpa_auth_config *conf = &wpa_auth->conf;
+		u8 pmk_r0[PMK_LEN], pmk_r0_name[WPA_PMK_NAME_LEN];
+
+		if (wpa_derive_pmk_r0(fils_ft, fils_ft_len,
+				      conf->ssid, conf->ssid_len,
+				      conf->mobility_domain,
+				      conf->r0_key_holder,
+				      conf->r0_key_holder_len,
+				      sm->addr, pmk_r0, pmk_r0_name) < 0)
+			return -1;
+
+		wpa_hexdump_key(MSG_DEBUG, "FILS+FT: PMK-R0", pmk_r0, PMK_LEN);
+		wpa_hexdump(MSG_DEBUG, "FILS+FT: PMKR0Name",
+			    pmk_r0_name, WPA_PMK_NAME_LEN);
+		wpa_ft_store_pmk_r0(wpa_auth, sm->addr, pmk_r0, pmk_r0_name,
+				    sm->pairwise);
+		os_memset(fils_ft, 0, sizeof(fils_ft));
+	}
+#endif /* CONFIG_IEEE80211R_AP */
+
 	res = fils_key_auth_sk(ick, ick_len, snonce, anonce,
 			       sm->addr, sm->wpa_auth->addr,
-			       NULL, 0, NULL, 0, /* TODO: SK+PFS */
+			       g_sta ? wpabuf_head(g_sta) : NULL,
+			       g_sta ? wpabuf_len(g_sta) : 0,
+			       g_ap ? wpabuf_head(g_ap) : NULL,
+			       g_ap ? wpabuf_len(g_ap) : 0,
 			       sm->wpa_key_mgmt, sm->fils_key_auth_sta,
 			       sm->fils_key_auth_ap,
 			       &sm->fils_key_auth_len);
@@ -2140,13 +2217,109 @@ static int wpa_aead_decrypt(struct wpa_state_machine *sm, struct wpa_ptk *ptk,
 }
 
 
+const u8 * wpa_fils_validate_fils_session(struct wpa_state_machine *sm,
+					  const u8 *ies, size_t ies_len,
+					  const u8 *fils_session)
+{
+	const u8 *ie, *end;
+	const u8 *session = NULL;
+
+	if (!wpa_key_mgmt_fils(sm->wpa_key_mgmt)) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: Not a FILS AKM - reject association");
+		return NULL;
+	}
+
+	/* Verify Session element */
+	ie = ies;
+	end = ((const u8 *) ie) + ies_len;
+	while (ie + 1 < end) {
+		if (ie + 2 + ie[1] > end)
+			break;
+		if (ie[0] == WLAN_EID_EXTENSION &&
+		    ie[1] >= 1 + FILS_SESSION_LEN &&
+		    ie[2] == WLAN_EID_EXT_FILS_SESSION) {
+			session = ie;
+			break;
+		}
+		ie += 2 + ie[1];
+	}
+
+	if (!session) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: %s: Could not find FILS Session element in Assoc Req - reject",
+			   __func__);
+		return NULL;
+	}
+
+	if (!fils_session) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: %s: Could not find FILS Session element in STA entry - reject",
+			   __func__);
+		return NULL;
+	}
+
+	if (os_memcmp(fils_session, session + 3, FILS_SESSION_LEN) != 0) {
+		wpa_printf(MSG_DEBUG, "FILS: Session mismatch");
+		wpa_hexdump(MSG_DEBUG, "FILS: Expected FILS Session",
+			    fils_session, FILS_SESSION_LEN);
+		wpa_hexdump(MSG_DEBUG, "FILS: Received FILS Session",
+			    session + 3, FILS_SESSION_LEN);
+		return NULL;
+	}
+	return session;
+}
+
+
+int wpa_fils_validate_key_confirm(struct wpa_state_machine *sm, const u8 *ies,
+				  size_t ies_len)
+{
+	struct ieee802_11_elems elems;
+
+	if (ieee802_11_parse_elems(ies, ies_len, &elems, 1) == ParseFailed) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: Failed to parse decrypted elements");
+		return -1;
+	}
+
+	if (!elems.fils_session) {
+		wpa_printf(MSG_DEBUG, "FILS: No FILS Session element");
+		return -1;
+	}
+
+	if (!elems.fils_key_confirm) {
+		wpa_printf(MSG_DEBUG, "FILS: No FILS Key Confirm element");
+		return -1;
+	}
+
+	if (elems.fils_key_confirm_len != sm->fils_key_auth_len) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: Unexpected Key-Auth length %d (expected %d)",
+			   elems.fils_key_confirm_len,
+			   (int) sm->fils_key_auth_len);
+		return -1;
+	}
+
+	if (os_memcmp(elems.fils_key_confirm, sm->fils_key_auth_sta,
+		      sm->fils_key_auth_len) != 0) {
+		wpa_printf(MSG_DEBUG, "FILS: Key-Auth mismatch");
+		wpa_hexdump(MSG_DEBUG, "FILS: Received Key-Auth",
+			    elems.fils_key_confirm, elems.fils_key_confirm_len);
+		wpa_hexdump(MSG_DEBUG, "FILS: Expected Key-Auth",
+			    sm->fils_key_auth_sta, sm->fils_key_auth_len);
+		return -1;
+	}
+
+	return 0;
+}
+
+
 int fils_decrypt_assoc(struct wpa_state_machine *sm, const u8 *fils_session,
 		       const struct ieee80211_mgmt *mgmt, size_t frame_len,
 		       u8 *pos, size_t left)
 {
 	u16 fc, stype;
 	const u8 *end, *ie_start, *ie, *session, *crypt;
-	struct ieee802_11_elems elems;
 	const u8 *aad[5];
 	size_t aad_len[5];
 
@@ -2175,32 +2348,13 @@ int fils_decrypt_assoc(struct wpa_state_machine *sm, const u8 *fils_session,
 	 * Find FILS Session element which is the last unencrypted element in
 	 * the frame.
 	 */
-	session = NULL;
-	while (ie + 1 < end) {
-		if (ie + 2 + ie[1] > end)
-			break;
-		if (ie[0] == WLAN_EID_EXTENSION &&
-		    ie[1] >= 1 + FILS_SESSION_LEN &&
-		    ie[2] == WLAN_EID_EXT_FILS_SESSION) {
-			session = ie;
-			break;
-		}
-		ie += 2 + ie[1];
+	session = wpa_fils_validate_fils_session(sm, ie, end - ie,
+						 fils_session);
+	if (!session) {
+		wpa_printf(MSG_DEBUG, "FILS: Session validation failed");
+		return -1;
 	}
 
-	if (!session) {
-		wpa_printf(MSG_DEBUG,
-			   "FILS: Could not find FILS Session element in Association Request frame - reject");
-		return -1;
-	}
-	if (os_memcmp(fils_session, session + 3, FILS_SESSION_LEN) != 0) {
-		wpa_printf(MSG_DEBUG, "FILS: Session mismatch");
-		wpa_hexdump(MSG_DEBUG, "FILS: Expected FILS Session",
-			    fils_session, FILS_SESSION_LEN);
-		wpa_hexdump(MSG_DEBUG, "FILS: Received FILS Session",
-			    session + 3, FILS_SESSION_LEN);
-		return -1;
-	}
 	crypt = session + 2 + session[1];
 
 	if (end - crypt < AES_BLOCK_SIZE) {
@@ -2239,31 +2393,8 @@ int fils_decrypt_assoc(struct wpa_state_machine *sm, const u8 *fils_session,
 	wpa_hexdump(MSG_DEBUG, "FILS: Decrypted Association Request elements",
 		    pos, left - AES_BLOCK_SIZE);
 
-	if (ieee802_11_parse_elems(pos, left - AES_BLOCK_SIZE, &elems, 1) ==
-	    ParseFailed) {
-		wpa_printf(MSG_DEBUG,
-			   "FILS: Failed to parse decrypted elements");
-		return -1;
-	}
-	if (!elems.fils_key_confirm) {
-		wpa_printf(MSG_DEBUG, "FILS: No FILS Key Confirm element");
-		return -1;
-	}
-	if (elems.fils_key_confirm_len != sm->fils_key_auth_len) {
-		wpa_printf(MSG_DEBUG,
-			   "FILS: Unexpected Key-Auth length %d (expected %d)",
-			   elems.fils_key_confirm_len,
-			   (int) sm->fils_key_auth_len);
-		return -1;
-	}
-	if (os_memcmp(elems.fils_key_confirm, sm->fils_key_auth_sta,
-		      sm->fils_key_auth_len) != 0) {
-		wpa_printf(MSG_DEBUG, "FILS: Key-Auth mismatch");
-		wpa_hexdump(MSG_DEBUG, "FILS: Received Key-Auth",
-			    elems.fils_key_confirm,
-			    elems.fils_key_confirm_len);
-		wpa_hexdump(MSG_DEBUG, "FILS: Expected Key-Auth",
-			    sm->fils_key_auth_sta, sm->fils_key_auth_len);
+	if (wpa_fils_validate_key_confirm(sm, pos, left - AES_BLOCK_SIZE) < 0) {
+		wpa_printf(MSG_DEBUG, "FILS: Key Confirm validation failed");
 		return -1;
 	}
 
@@ -2279,11 +2410,6 @@ int fils_encrypt_assoc(struct wpa_state_machine *sm, u8 *buf,
 	u8 *pos = buf + current_len;
 	struct ieee80211_mgmt *mgmt;
 	struct wpabuf *plain;
-	u8 *len, *tmp, *tmp2;
-	u8 hdr[2];
-	u8 *gtk, dummy_gtk[32];
-	size_t gtk_len;
-	struct wpa_group *gsm;
 	const u8 *aad[5];
 	size_t aad_len[5];
 
@@ -2319,10 +2445,54 @@ int fils_encrypt_assoc(struct wpa_state_machine *sm, u8 *buf,
 	aad_len[4] = pos - aad[4];
 
 	/* The following elements will be encrypted with AES-SIV */
+	plain = fils_prepare_plainbuf(sm, hlp);
+	if (!plain) {
+		wpa_printf(MSG_DEBUG, "FILS: Plain buffer prep failed");
+		return -1;
+	}
+
+	if (pos + wpabuf_len(plain) + AES_BLOCK_SIZE > end) {
+		wpa_printf(MSG_DEBUG,
+			   "FILS: Not enough room for FILS elements");
+		wpabuf_free(plain);
+		return -1;
+	}
+
+	wpa_hexdump_buf_key(MSG_DEBUG, "FILS: Association Response plaintext",
+			    plain);
+
+	if (aes_siv_encrypt(sm->PTK.kek, sm->PTK.kek_len,
+			    wpabuf_head(plain), wpabuf_len(plain),
+			    5, aad, aad_len, pos) < 0) {
+		wpabuf_free(plain);
+		return -1;
+	}
+
+	wpa_hexdump(MSG_DEBUG,
+		    "FILS: Encrypted Association Response elements",
+		    pos, AES_BLOCK_SIZE + wpabuf_len(plain));
+	current_len += wpabuf_len(plain) + AES_BLOCK_SIZE;
+	wpabuf_free(plain);
+
+	sm->fils_completed = 1;
+
+	return current_len;
+}
+
+
+static struct wpabuf * fils_prepare_plainbuf(struct wpa_state_machine *sm,
+					     const struct wpabuf *hlp)
+{
+	struct wpabuf *plain;
+	u8 *len, *tmp, *tmp2;
+	u8 hdr[2];
+	u8 *gtk, dummy_gtk[32];
+	size_t gtk_len;
+	struct wpa_group *gsm;
 
 	plain = wpabuf_alloc(1000);
 	if (!plain)
-		return -1;
+		return NULL;
 
 	/* TODO: FILS Public Key */
 
@@ -2356,7 +2526,7 @@ int fils_encrypt_assoc(struct wpa_state_machine *sm, u8 *buf,
 		 */
 		if (random_get_bytes(dummy_gtk, gtk_len) < 0) {
 			wpabuf_free(plain);
-			return -1;
+			return NULL;
 		}
 		gtk = dummy_gtk;
 	}
@@ -2373,33 +2543,7 @@ int fils_encrypt_assoc(struct wpa_state_machine *sm, u8 *buf,
 	wpabuf_put(plain, tmp2 - tmp);
 
 	*len = (u8 *) wpabuf_put(plain, 0) - len - 1;
-
-	if (pos + wpabuf_len(plain) + AES_BLOCK_SIZE > end) {
-		wpa_printf(MSG_DEBUG,
-			   "FILS: Not enough room for FILS elements");
-		wpabuf_free(plain);
-		return -1;
-	}
-
-	wpa_hexdump_buf_key(MSG_DEBUG, "FILS: Association Response plaintext",
-			    plain);
-
-	if (aes_siv_encrypt(sm->PTK.kek, sm->PTK.kek_len,
-			    wpabuf_head(plain), wpabuf_len(plain),
-			    5, aad, aad_len, pos) < 0) {
-		wpabuf_free(plain);
-		return -1;
-	}
-
-	wpa_hexdump(MSG_DEBUG,
-		    "FILS: Encrypted Association Response elements",
-		    pos, AES_BLOCK_SIZE + wpabuf_len(plain));
-	current_len += wpabuf_len(plain) + AES_BLOCK_SIZE;
-	wpabuf_free(plain);
-
-	sm->fils_completed = 1;
-
-	return current_len;
+	return plain;
 }
 
 
@@ -2422,6 +2566,36 @@ int fils_set_tk(struct wpa_state_machine *sm)
 	}
 
 	return 0;
+}
+
+
+u8 * hostapd_eid_assoc_fils_session(struct wpa_state_machine *sm, u8 *buf,
+				    const u8 *fils_session, struct wpabuf *hlp)
+{
+	struct wpabuf *plain;
+	u8 *pos = buf;
+
+	/* FILS Session */
+	*pos++ = WLAN_EID_EXTENSION; /* Element ID */
+	*pos++ = 1 + FILS_SESSION_LEN; /* Length */
+	*pos++ = WLAN_EID_EXT_FILS_SESSION; /* Element ID Extension */
+	os_memcpy(pos, fils_session, FILS_SESSION_LEN);
+	pos += FILS_SESSION_LEN;
+
+	plain = fils_prepare_plainbuf(sm, hlp);
+	if (!plain) {
+		wpa_printf(MSG_DEBUG, "FILS: Plain buffer prep failed");
+		return NULL;
+	}
+
+	os_memcpy(pos, wpabuf_head(plain), wpabuf_len(plain));
+	pos += wpabuf_len(plain);
+
+	wpa_printf(MSG_DEBUG, "%s: plain buf_len: %u", __func__,
+		   (unsigned int) wpabuf_len(plain));
+	wpabuf_free(plain);
+	sm->fils_completed = 1;
+	return pos;
 }
 
 #endif /* CONFIG_FILS */
@@ -2447,7 +2621,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 	sm->update_snonce = FALSE;
 	os_memset(&PTK, 0, sizeof(PTK));
 
-	mic_len = wpa_mic_len(sm->wpa_key_mgmt);
+	mic_len = wpa_mic_len(sm->wpa_key_mgmt, sm->pmk_len);
 
 	/* WPA with IEEE 802.1X: use the derived PMK from EAP
 	 * WPA-PSK: iterate through possible PSKs and select the one matching
@@ -2469,7 +2643,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 			break;
 
 		if (mic_len &&
-		    wpa_verify_key_mic(sm->wpa_key_mgmt, &PTK,
+		    wpa_verify_key_mic(sm->wpa_key_mgmt, pmk_len, &PTK,
 				       sm->last_rx_eapol_key,
 				       sm->last_rx_eapol_key_len) == 0) {
 			ok = 1;
@@ -2538,12 +2712,14 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 		wpa_hexdump(MSG_DEBUG, "WPA IE in msg 2/4",
 			    eapol_key_ie, eapol_key_ie_len);
 		/* MLME-DEAUTHENTICATE.request */
-		wpa_sta_disconnect(wpa_auth, sm->addr);
+		wpa_sta_disconnect(wpa_auth, sm->addr,
+				   WLAN_REASON_PREV_AUTH_NOT_VALID);
 		return;
 	}
 #ifdef CONFIG_IEEE80211R_AP
 	if (ft && ft_check_msg_2_of_4(wpa_auth, sm, &kde) < 0) {
-		wpa_sta_disconnect(wpa_auth, sm->addr);
+		wpa_sta_disconnect(wpa_auth, sm->addr,
+				   WLAN_REASON_PREV_AUTH_NOT_VALID);
 		return;
 	}
 #endif /* CONFIG_IEEE80211R_AP */
@@ -2853,7 +3029,8 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 
 	wpa_send_eapol(sm->wpa_auth, sm,
 		       (secure ? WPA_KEY_INFO_SECURE : 0) |
-		       (wpa_mic_len(sm->wpa_key_mgmt) ? WPA_KEY_INFO_MIC : 0) |
+		       (wpa_mic_len(sm->wpa_key_mgmt, sm->pmk_len) ?
+			WPA_KEY_INFO_MIC : 0) |
 		       WPA_KEY_INFO_ACK | WPA_KEY_INFO_INSTALL |
 		       WPA_KEY_INFO_KEY_TYPE,
 		       _rsc, sm->ANonce, kde, pos - kde, keyidx, encr);
@@ -2870,7 +3047,8 @@ SM_STATE(WPA_PTK, PTKINITDONE)
 		int klen = wpa_cipher_key_len(sm->pairwise);
 		if (wpa_auth_set_key(sm->wpa_auth, 0, alg, sm->addr, 0,
 				     sm->PTK.tk, klen)) {
-			wpa_sta_disconnect(sm->wpa_auth, sm->addr);
+			wpa_sta_disconnect(sm->wpa_auth, sm->addr,
+					   WLAN_REASON_PREV_AUTH_NOT_VALID);
 			return;
 		}
 		/* FIX: MLME-SetProtection.Request(TA, Tx_Rx) */
@@ -2883,7 +3061,9 @@ SM_STATE(WPA_PTK, PTKINITDONE)
 					       sm->wpa_auth, sm);
 		}
 
-		if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt)) {
+		if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt) ||
+		    sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP ||
+		    sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE) {
 			wpa_auth_set_eapol(sm->wpa_auth, sm->addr,
 					   WPA_EAPOL_authorized, 1);
 		}
@@ -2952,15 +3132,22 @@ SM_STEP(WPA_PTK)
 		    wpa_auth_get_eapol(sm->wpa_auth, sm->addr,
 				       WPA_EAPOL_keyRun) > 0)
 			SM_ENTER(WPA_PTK, INITPMK);
-		else if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt)
+		else if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt) ||
+			 sm->wpa_key_mgmt == WPA_KEY_MGMT_OWE
 			 /* FIX: && 802.1X::keyRun */)
 			SM_ENTER(WPA_PTK, INITPSK);
+		else if (sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP)
+			SM_ENTER(WPA_PTK, INITPMK);
 		break;
 	case WPA_PTK_INITPMK:
 		if (wpa_auth_get_eapol(sm->wpa_auth, sm->addr,
-				       WPA_EAPOL_keyAvailable) > 0)
+				       WPA_EAPOL_keyAvailable) > 0) {
 			SM_ENTER(WPA_PTK, PTKSTART);
-		else {
+#ifdef CONFIG_DPP
+		} else if (sm->wpa_key_mgmt == WPA_KEY_MGMT_DPP && sm->pmksa) {
+			SM_ENTER(WPA_PTK, PTKSTART);
+#endif /* CONFIG_DPP */
+		} else {
 			wpa_auth->dot11RSNA4WayHandshakeFailures++;
 			wpa_auth_logger(sm->wpa_auth, sm->addr, LOGGER_INFO,
 					"INITPMK - keyAvailable = false");
@@ -3099,7 +3286,8 @@ SM_STATE(WPA_PTK_GROUP, REKEYNEGOTIATING)
 
 	wpa_send_eapol(sm->wpa_auth, sm,
 		       WPA_KEY_INFO_SECURE |
-		       (wpa_mic_len(sm->wpa_key_mgmt) ? WPA_KEY_INFO_MIC : 0) |
+		       (wpa_mic_len(sm->wpa_key_mgmt, sm->pmk_len) ?
+			WPA_KEY_INFO_MIC : 0) |
 		       WPA_KEY_INFO_ACK |
 		       (!sm->Pair ? WPA_KEY_INFO_INSTALL : 0),
 		       rsc, NULL, kde, kde_len, gsm->GN, 1);
@@ -3257,7 +3445,7 @@ static int wpa_group_update_sta(struct wpa_state_machine *sm, void *ctx)
 }
 
 
-#ifdef CONFIG_WNM
+#ifdef CONFIG_WNM_AP
 /* update GTK when exiting WNM-Sleep Mode */
 void wpa_wnmsleep_rekey_gtk(struct wpa_state_machine *sm)
 {
@@ -3336,7 +3524,7 @@ int wpa_wnmsleep_igtk_subelem(struct wpa_state_machine *sm, u8 *pos)
 	return pos - start;
 }
 #endif /* CONFIG_IEEE80211W */
-#endif /* CONFIG_WNM */
+#endif /* CONFIG_WNM_AP */
 
 
 static void wpa_group_setkeys(struct wpa_authenticator *wpa_auth,
@@ -3827,6 +4015,22 @@ int wpa_auth_pmksa_add_sae(struct wpa_authenticator *wpa_auth, const u8 *addr,
 }
 
 
+int wpa_auth_pmksa_add2(struct wpa_authenticator *wpa_auth, const u8 *addr,
+			const u8 *pmk, size_t pmk_len, const u8 *pmkid,
+			int session_timeout, int akmp)
+{
+	if (wpa_auth->conf.disable_pmksa_caching)
+		return -1;
+
+	if (pmksa_cache_auth_add(wpa_auth->pmksa, pmk, pmk_len, pmkid,
+				 NULL, 0, wpa_auth->addr, addr, session_timeout,
+				 NULL, akmp))
+		return 0;
+
+	return -1;
+}
+
+
 void wpa_auth_pmksa_remove(struct wpa_authenticator *wpa_auth,
 			   const u8 *sta_addr)
 {
@@ -4216,3 +4420,70 @@ void wpa_auth_reconfig_group_keys(struct wpa_authenticator *wpa_auth)
 	for (group = wpa_auth->group; group; group = group->next)
 		wpa_group_config_group_keys(wpa_auth, group);
 }
+
+
+#ifdef CONFIG_FILS
+
+struct wpa_auth_fils_iter_data {
+	struct wpa_authenticator *auth;
+	const u8 *cache_id;
+	struct rsn_pmksa_cache_entry *pmksa;
+	const u8 *spa;
+	const u8 *pmkid;
+};
+
+
+static int wpa_auth_fils_iter(struct wpa_authenticator *a, void *ctx)
+{
+	struct wpa_auth_fils_iter_data *data = ctx;
+
+	if (a == data->auth || !a->conf.fils_cache_id_set ||
+	    os_memcmp(a->conf.fils_cache_id, data->cache_id,
+		      FILS_CACHE_ID_LEN) != 0)
+		return 0;
+	data->pmksa = pmksa_cache_auth_get(a->pmksa, data->spa, data->pmkid);
+	return data->pmksa != NULL;
+}
+
+
+struct rsn_pmksa_cache_entry *
+wpa_auth_pmksa_get_fils_cache_id(struct wpa_authenticator *wpa_auth,
+				 const u8 *sta_addr, const u8 *pmkid)
+{
+	struct wpa_auth_fils_iter_data idata;
+
+	if (!wpa_auth->conf.fils_cache_id_set)
+		return NULL;
+	idata.auth = wpa_auth;
+	idata.cache_id = wpa_auth->conf.fils_cache_id;
+	idata.pmksa = NULL;
+	idata.spa = sta_addr;
+	idata.pmkid = pmkid;
+	wpa_auth_for_each_auth(wpa_auth, wpa_auth_fils_iter, &idata);
+	return idata.pmksa;
+}
+
+
+#ifdef CONFIG_IEEE80211R_AP
+int wpa_auth_write_fte(struct wpa_authenticator *wpa_auth, u8 *buf, size_t len)
+{
+	struct wpa_auth_config *conf = &wpa_auth->conf;
+
+	return wpa_write_ftie(conf, conf->r0_key_holder,
+			      conf->r0_key_holder_len,
+			      NULL, NULL, buf, len, NULL, 0);
+}
+#endif /* CONFIG_IEEE80211R_AP */
+
+
+void wpa_auth_get_fils_aead_params(struct wpa_state_machine *sm,
+				   u8 *fils_anonce, u8 *fils_snonce,
+				   u8 *fils_kek, size_t *fils_kek_len)
+{
+	os_memcpy(fils_anonce, sm->ANonce, WPA_NONCE_LEN);
+	os_memcpy(fils_snonce, sm->SNonce, WPA_NONCE_LEN);
+	os_memcpy(fils_kek, sm->PTK.kek, WPA_KEK_MAX_LEN);
+	*fils_kek_len = sm->PTK.kek_len;
+}
+
+#endif /* CONFIG_FILS */

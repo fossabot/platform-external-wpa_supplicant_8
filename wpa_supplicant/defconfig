@@ -299,6 +299,7 @@ CONFIG_PEERKEY=y
 # openssl = OpenSSL (default)
 # gnutls = GnuTLS
 # internal = Internal TLSv1 implementation (experimental)
+# linux = Linux kernel AF_ALG and internal TLSv1 implementation (experimental)
 # none = Empty template
 #CONFIG_TLS=openssl
 
@@ -315,6 +316,10 @@ CONFIG_PEERKEY=y
 # with TLS v1.2 message (ClientHello is sent prior to negotiating which version
 # will be used)
 #CONFIG_TLSV12=y
+
+# Select which ciphers to use by default with OpenSSL if the user does not
+# specify them.
+#CONFIG_TLS_DEFAULT_CIPHERS="DEFAULT:!EXP:!LOW"
 
 # If CONFIG_TLS=internal is used, additional library and include paths are
 # needed for LibTomMath. Alternatively, an integrated, minimal version of
@@ -557,6 +562,8 @@ CONFIG_PEERKEY=y
 # Note: This is an experimental and not yet complete implementation. This
 # should not be enabled for production use.
 #CONFIG_FILS=y
+# FILS shared key authentication with PFS
+#CONFIG_FILS_SK_PFS=y
 
 # Support RSN on IBSS networks
 # This is needed to be able to use mode=1 network profile with proto=RSN and
@@ -580,3 +587,7 @@ CONFIG_PEERKEY=y
 # Learn channels used by the network and try to avoid bgscans on other
 # channels (experimental)
 #CONFIG_BGSCAN_LEARN=y
+
+# Opportunistic Wireless Encryption (OWE)
+# Experimental implementation of draft-harkins-owe-07.txt
+#CONFIG_OWE=y
