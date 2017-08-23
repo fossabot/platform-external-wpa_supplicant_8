@@ -3918,6 +3918,7 @@ int p2p_listen_end(struct p2p_data *p2p, unsigned int freq)
 			 * offchannel operation for some reason. p2p_search()
 			 * will be started from internal timeout.
 			 */
+                        p2p->pending_listen_freq = 0;
 			p2p_dbg(p2p, "Listen operation did not seem to start - delay search phase to avoid busy loop");
 			p2p_set_timeout(p2p, 0, 100000);
 			return 1;
