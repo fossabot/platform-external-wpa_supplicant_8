@@ -15,6 +15,7 @@
 
 extern "C" {
 #include "src/eap_common/eap_sim_common.h"
+#include "src/common/defs.h"
 }
 
 namespace {
@@ -447,7 +448,7 @@ int HidlManager::registerInterface(struct wpa_supplicant *wpa_s)
 			return 1;
 		}
 		sta_iface_callbacks_map_[wpa_s->ifname] =
-		    std::vector<android::sp<ISupplicantStaIfaceCallback>>();
+		    std::vector<android::sp<ISupplicantVendorStaIfaceCallback>>();
 	}
 
 	// Invoke the |onInterfaceCreated| method on all registered callbacks.
@@ -669,13 +670,18 @@ int HidlManager::notifyStateChange(struct wpa_supplicant *wpa_s)
 	} else {
 		bssid = wpa_s->bssid;
 	}
+	bool fils_hlp_sent =
+		(wpa_auth_alg_fils(wpa_s->auth_alg) &&
+		 !dl_list_empty(&wpa_s->fils_hlp_req) &&
+		 (wpa_s->wpa_state == WPA_COMPLETED)) ? true : false;
+
 	callWithEachStaIfaceCallback(
 	    wpa_s->ifname, std::bind(
-			       &ISupplicantStaIfaceCallback::onStateChanged,
-			       std::placeholders::_1,
-			       static_cast<ISupplicantStaIfaceCallback::State>(
-				   wpa_s->wpa_state),
-			       bssid, hidl_network_id, hidl_ssid));
+		&ISupplicantVendorStaIfaceCallback::onVendorStateChanged,
+		std::placeholders::_1,
+		static_cast<ISupplicantStaIfaceCallback::State>(
+		wpa_s->wpa_state),
+		bssid, hidl_network_id, hidl_ssid, fils_hlp_sent));
 	return 0;
 }
 
@@ -1417,7 +1423,7 @@ int HidlManager::getP2pIfaceHidlObjectByIfname(
 }
 
 /**
- * Retrieve the |ISupplicantStaIface| hidl object reference using the provided
+ * Retrieve the |ISupplicantVendorStaIface| hidl object reference using the provided
  * ifname.
  *
  * @param ifname Name of the corresponding interface.
@@ -1426,7 +1432,7 @@ int HidlManager::getP2pIfaceHidlObjectByIfname(
  * @return 0 on success, 1 on failure.
  */
 int HidlManager::getStaIfaceHidlObjectByIfname(
-    const std::string &ifname, android::sp<ISupplicantStaIface> *iface_object)
+    const std::string &ifname, android::sp<ISupplicantVendorStaIface> *iface_object)
 {
 	if (ifname.empty() || !iface_object)
 		return 1;
@@ -1480,7 +1486,7 @@ int HidlManager::getP2pNetworkHidlObjectByIfnameAndNetworkId(
  */
 int HidlManager::getStaNetworkHidlObjectByIfnameAndNetworkId(
     const std::string &ifname, int network_id,
-    android::sp<ISupplicantStaNetwork> *network_object)
+    android::sp<ISupplicantVendorStaNetwork> *network_object)
 {
 	if (ifname.empty() || network_id < 0 || !network_object)
 		return 1;
@@ -1550,10 +1556,10 @@ int HidlManager::addP2pIfaceCallbackHidlObject(
  */
 int HidlManager::addStaIfaceCallbackHidlObject(
     const std::string &ifname,
-    const android::sp<ISupplicantStaIfaceCallback> &callback)
+    const android::sp<ISupplicantVendorStaIfaceCallback> &callback)
 {
 	const std::function<void(
-	    const android::sp<ISupplicantStaIfaceCallback> &)>
+	    const android::sp<ISupplicantVendorStaIfaceCallback> &)>
 	    on_hidl_died_fctor = std::bind(
 		&HidlManager::removeStaIfaceCallbackHidlObject, this, ifname,
 		std::placeholders::_1);
@@ -1649,7 +1655,7 @@ void HidlManager::removeP2pIfaceCallbackHidlObject(
  */
 void HidlManager::removeStaIfaceCallbackHidlObject(
     const std::string &ifname,
-    const android::sp<ISupplicantStaIfaceCallback> &callback)
+    const android::sp<ISupplicantVendorStaIfaceCallback> &callback)
 {
 	return removeIfaceCallbackHidlObjectFromMap(
 	    ifname, callback, sta_iface_callbacks_map_);
@@ -1732,7 +1738,7 @@ void HidlManager::callWithEachP2pIfaceCallback(
  */
 void HidlManager::callWithEachStaIfaceCallback(
     const std::string &ifname,
-    const std::function<Return<void>(android::sp<ISupplicantStaIfaceCallback>)>
+    const std::function<Return<void>(android::sp<ISupplicantVendorStaIfaceCallback>)>
 	&method)
 {
 	callWithEachIfaceCallback(ifname, method, sta_iface_callbacks_map_);

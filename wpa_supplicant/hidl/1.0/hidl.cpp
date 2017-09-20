@@ -151,8 +151,8 @@ int wpas_hidl_notify_state_changed(struct wpa_supplicant *wpa_s)
 		return 1;
 
 	wpa_printf(
-	    MSG_DEBUG, "Notifying state change event to hidl control: %d",
-	    wpa_s->wpa_state);
+	    MSG_DEBUG, "Notifying state change event to hidl control: %s",
+	    wpa_supplicant_state_txt(wpa_s->wpa_state));
 
 	HidlManager *hidl_manager = HidlManager::getInstance();
 	if (!hidl_manager)

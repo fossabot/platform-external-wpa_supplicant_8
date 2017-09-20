@@ -17,6 +17,7 @@
 
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetwork.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetworkCallback.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.0/ISupplicantVendorStaNetwork.h>
 
 extern "C" {
 #include "utils/common.h"
@@ -41,7 +42,7 @@ namespace implementation {
  * object is used for control operations on a specific network
  * controlled by wpa_supplicant.
  */
-class StaNetwork : public ISupplicantStaNetwork
+class StaNetwork : public vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork
 {
 public:
 	StaNetwork(
@@ -120,6 +121,7 @@ public:
 	Return<void> setEapDomainSuffixMatch(
 	    const hidl_string& match,
 	    setEapDomainSuffixMatch_cb _hidl_cb) override;
+	Return<void> setEapErp(bool enable, setEapErp_cb _hidl_cb) override;
 	Return<void> setProactiveKeyCaching(
 	    bool enable, setProactiveKeyCaching_cb _hidl_cb) override;
 	Return<void> setIdStr(
@@ -229,6 +231,7 @@ private:
 	SupplicantStatus setEapEngineIDInternal(const std::string& id);
 	SupplicantStatus setEapDomainSuffixMatchInternal(
 	    const std::string& match);
+	SupplicantStatus setEapErpInternal(bool enable);
 	SupplicantStatus setProactiveKeyCachingInternal(bool enable);
 	SupplicantStatus setIdStrInternal(const std::string& id_str);
 	SupplicantStatus setUpdateIdentifierInternal(uint32_t id);

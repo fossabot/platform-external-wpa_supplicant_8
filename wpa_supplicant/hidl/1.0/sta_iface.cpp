@@ -497,6 +497,22 @@ Return<void> StaIface::enableAutoReconnect(
 	    &StaIface::enableAutoReconnectInternal, _hidl_cb, enable);
 }
 
+Return<void> StaIface::filsHlpFlushRequest(filsHlpFlushRequest_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &StaIface::filsHlpFlushRequestInternal, _hidl_cb);
+}
+
+Return<void> StaIface::filsHlpAddRequest(
+    const hidl_array<uint8_t, 6> &dst_mac, const hidl_vec<uint8_t> &pkt,
+    filsHlpAddRequest_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &StaIface::filsHlpAddRequestInternal, _hidl_cb, dst_mac, pkt);
+}
+
 std::pair<SupplicantStatus, std::string> StaIface::getNameInternal()
 {
 	return {{SupplicantStatusCode::SUCCESS, ""}, ifname_};
@@ -510,7 +526,7 @@ std::pair<SupplicantStatus, IfaceType> StaIface::getTypeInternal()
 std::pair<SupplicantStatus, sp<ISupplicantNetwork>>
 StaIface::addNetworkInternal()
 {
-	android::sp<ISupplicantStaNetwork> network;
+	android::sp<ISupplicantVendorStaNetwork> network;
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	struct wpa_ssid *ssid = wpa_supplicant_add_network(wpa_s);
 	if (!ssid) {
@@ -541,7 +557,7 @@ SupplicantStatus StaIface::removeNetworkInternal(SupplicantNetworkId id)
 std::pair<SupplicantStatus, sp<ISupplicantNetwork>>
 StaIface::getNetworkInternal(SupplicantNetworkId id)
 {
-	android::sp<ISupplicantStaNetwork> network;
+	android::sp<ISupplicantVendorStaNetwork> network;
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	struct wpa_ssid *ssid = wpa_config_get_network(wpa_s->conf, id);
 	if (!ssid) {
@@ -573,8 +589,10 @@ SupplicantStatus StaIface::registerCallbackInternal(
     const sp<ISupplicantStaIfaceCallback> &callback)
 {
 	HidlManager *hidl_manager = HidlManager::getInstance();
+	sp<ISupplicantVendorStaIfaceCallback> vendorCallback =
+		ISupplicantVendorStaIfaceCallback::castFrom(callback);
 	if (!hidl_manager ||
-	    hidl_manager->addStaIfaceCallbackHidlObject(ifname_, callback)) {
+	    hidl_manager->addStaIfaceCallbackHidlObject(ifname_, vendorCallback)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
@@ -1000,6 +1018,45 @@ SupplicantStatus StaIface::enableAutoReconnectInternal(bool enable)
 	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
 	wpa_s->auto_reconnect_disabled = enable ? 0 : 1;
 	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+SupplicantStatus StaIface::filsHlpFlushRequestInternal()
+{
+#ifdef CONFIG_FILS
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+
+	wpas_flush_fils_hlp_req(wpa_s);
+	return {SupplicantStatusCode::SUCCESS, ""};
+#else /* CONFIG_FILS */
+	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+#endif /* CONFIG_FILS */
+}
+
+SupplicantStatus StaIface::filsHlpAddRequestInternal(
+    const std::array<uint8_t, 6> &dst_mac, const std::vector<uint8_t> &pkt)
+{
+#ifdef CONFIG_FILS
+	struct wpa_supplicant *wpa_s = retrieveIfacePtr();
+	struct fils_hlp_req *req;
+
+	req = (struct fils_hlp_req *)os_zalloc(sizeof(*req));
+	if (!req)
+		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+
+	os_memcpy(req->dst, dst_mac.data(), ETH_ALEN);
+
+	req->pkt = wpabuf_alloc_copy(pkt.data(), pkt.size());
+	if (!req->pkt) {
+		wpabuf_free(req->pkt);
+		os_free(req);
+		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+	}
+
+	dl_list_add_tail(&wpa_s->fils_hlp_req, &req->list);
+	return {SupplicantStatusCode::SUCCESS, ""};
+#else /* CONFIG_FILS */
+	return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+#endif /* CONFIG_FILS */
 }
 
 /**

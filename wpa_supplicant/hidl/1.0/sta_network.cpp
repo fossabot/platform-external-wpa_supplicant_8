@@ -19,6 +19,7 @@ extern "C" {
 namespace {
 using android::hardware::wifi::supplicant::V1_0::ISupplicantStaNetwork;
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatus;
+using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork;
 
 constexpr uint8_t kZeroBssid[6] = {0, 0, 0, 0, 0, 0};
 
@@ -29,6 +30,8 @@ constexpr uint32_t kAllowedKeyMgmtMask =
      static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::IEEE8021X) |
      static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::FT_EAP) |
      static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::FT_PSK) |
+     static_cast<uint32_t>(ISupplicantVendorStaNetwork::VendorKeyMgmtMask::FILS_SHA256) |
+     static_cast<uint32_t>(ISupplicantVendorStaNetwork::VendorKeyMgmtMask::FILS_SHA384) |
      static_cast<uint32_t>(ISupplicantStaNetwork::KeyMgmtMask::OSEN));
 constexpr uint32_t kAllowedProtoMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::ProtoMask::WPA) |
@@ -37,7 +40,8 @@ constexpr uint32_t kAllowedProtoMask =
 constexpr uint32_t kAllowedAuthAlgMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::OPEN) |
      static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::SHARED) |
-     static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::LEAP));
+     static_cast<uint32_t>(ISupplicantStaNetwork::AuthAlgMask::LEAP) |
+     static_cast<uint32_t>(ISupplicantVendorStaNetwork::VendorAuthAlgMask::FILS_SK));
 constexpr uint32_t kAllowedGroupCipherMask =
     (static_cast<uint32_t>(ISupplicantStaNetwork::GroupCipherMask::WEP40) |
      static_cast<uint32_t>(ISupplicantStaNetwork::GroupCipherMask::WEP104) |
@@ -334,6 +338,13 @@ Return<void> StaNetwork::setEapDomainSuffixMatch(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
 	    &StaNetwork::setEapDomainSuffixMatchInternal, _hidl_cb, match);
+}
+
+Return<void> StaNetwork::setEapErp(bool enable, setEapErp_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::setEapErpInternal, _hidl_cb, enable);
 }
 
 Return<void> StaNetwork::setProactiveKeyCaching(
@@ -1094,6 +1105,13 @@ SupplicantStatus StaNetwork::setEapDomainSuffixMatchInternal(
 		"eap domain_suffix_match")) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
+	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+SupplicantStatus StaNetwork::setEapErpInternal(bool enable)
+{
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
+	wpa_ssid->eap.erp = enable ? 1 : 0;
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
 
