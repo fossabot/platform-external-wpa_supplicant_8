@@ -1130,7 +1130,7 @@ static void handle_qmi_eap_reply(
 
                 /* ensure the reply packet exists  */
                 if (rspData->eap_response_pkt_len <= 0 ||
-                    rspData->eap_response_pkt_len > QMI_AUTH_EAP_RESP_PACKET_EXT_MAX_V01) {
+                    rspData->eap_response_pkt_len > QMI_AUTH_EAP_RESP_PACKET_MAX_V01) {
                         wpa_printf(MSG_ERROR, "eap_proxy: Reply packet is of invalid length %d"
                                 " error %d result %d\n", rspData->eap_response_pkt_len,
                                 rspData->resp.error, rspData->resp.result);
