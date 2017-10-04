@@ -154,7 +154,7 @@ static void wpas_hidl_notify_wps_event_pbc_overlap(struct wpa_supplicant *wpa_s)
 static void wpas_hidl_notify_p2p_device_found(
     struct wpa_supplicant *wpa_s, const u8 *addr,
     const struct p2p_peer_info *info, const u8 *peer_wfd_device_info,
-    u8 peer_wfd_device_info_len);
+    u8 peer_wfd_device_info_len)
 {
 }
 static void wpas_hidl_notify_p2p_device_lost(
