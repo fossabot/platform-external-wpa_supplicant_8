@@ -149,7 +149,7 @@ public:
 	    const android::sp<ISupplicantP2pIfaceCallback> &callback);
 	int addStaIfaceCallbackHidlObject(
 	    const std::string &ifname,
-	    const android::sp<ISupplicantVendorStaIfaceCallback> &callback);
+	    const android::sp<ISupplicantStaIfaceCallback> &callback);
 	int addP2pNetworkCallbackHidlObject(
 	    const std::string &ifname, int network_id,
 	    const android::sp<ISupplicantP2pNetworkCallback> &callback);
@@ -170,7 +170,7 @@ private:
 	    const android::sp<ISupplicantP2pIfaceCallback> &callback);
 	void removeStaIfaceCallbackHidlObject(
 	    const std::string &ifname,
-	    const android::sp<ISupplicantVendorStaIfaceCallback> &callback);
+	    const android::sp<ISupplicantStaIfaceCallback> &callback);
 	void removeP2pNetworkCallbackHidlObject(
 	    const std::string &ifname, int network_id,
 	    const android::sp<ISupplicantP2pNetworkCallback> &callback);
@@ -178,6 +178,7 @@ private:
 	    const std::string &ifname, int network_id,
 	    const android::sp<ISupplicantStaNetworkCallback> &callback);
 
+	bool checkForVendorStaIfaceCallback(const std::string &ifname);
 	void callWithEachSupplicantCallback(
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantCallback>)> &method);
@@ -186,6 +187,10 @@ private:
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantP2pIfaceCallback>)> &method);
 	void callWithEachStaIfaceCallback(
+	    const std::string &ifname,
+	    const std::function<android::hardware::Return<void>(
+		android::sp<ISupplicantStaIfaceCallback>)> &method);
+	void callWithEachVendorStaIfaceCallback(
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantVendorStaIfaceCallback>)> &method);
@@ -237,7 +242,7 @@ private:
 	// the corresponding |ifname|.
 	std::map<
 	    const std::string,
-	    std::vector<android::sp<ISupplicantVendorStaIfaceCallback>>>
+	    std::vector<android::sp<ISupplicantStaIfaceCallback>>>
 	    sta_iface_callbacks_map_;
 	// Map of all the callbacks registered for P2P network specific
 	// hidl objects controlled by wpa_supplicant.  This map is keyed in by
