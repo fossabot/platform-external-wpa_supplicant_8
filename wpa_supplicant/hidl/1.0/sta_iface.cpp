@@ -589,10 +589,8 @@ SupplicantStatus StaIface::registerCallbackInternal(
     const sp<ISupplicantStaIfaceCallback> &callback)
 {
 	HidlManager *hidl_manager = HidlManager::getInstance();
-	sp<ISupplicantVendorStaIfaceCallback> vendorCallback =
-		ISupplicantVendorStaIfaceCallback::castFrom(callback);
 	if (!hidl_manager ||
-	    hidl_manager->addStaIfaceCallbackHidlObject(ifname_, vendorCallback)) {
+	    hidl_manager->addStaIfaceCallbackHidlObject(ifname_, callback)) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};
