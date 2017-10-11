@@ -14,6 +14,8 @@ endif
 
 include $(LOCAL_PATH)/android.config
 
+HIDL_INTERFACE_VERSION = 1.0
+
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
 
@@ -82,6 +84,7 @@ else
 INCLUDES += external/libnl-headers
 endif
 endif
+INCLUDES += $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
 
 ifdef CONFIG_FIPS
 CONFIG_NO_RANDOM_POOL=
@@ -1679,12 +1682,20 @@ LOCAL_STATIC_LIBRARIES += $(LIB_STATIC_EAP_PROXY)
 LOCAL_SHARED_LIBRARIES += $(LIB_SHARED_EAP_PROXY)
 endif
 ifeq ($(CONFIG_TLS), openssl)
-LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore-wifi-hidl
+ifdef CONFIG_CTRL_IFACE_HIDL
+ LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore-wifi-hidl
+else
+LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore_binder
+endif
 endif
 
 # With BoringSSL we need libkeystore-engine in order to provide access to
 # keystore keys.
-LOCAL_SHARED_LIBRARIES += libkeystore-engine-wifi-hidl
+ifdef CONFIG_CTRL_IFACE_HIDL
+ LOCAL_SHARED_LIBRARIES += libkeystore-engine-wifi-hidl
+else
+LOCAL_SHARED_LIBRARIES += libkeystore-engine
+endif
 
 ifdef CONFIG_DRIVER_NL80211
 ifneq ($(wildcard external/libnl),)
@@ -1753,7 +1764,6 @@ LOCAL_MODULE := libwpa_hidl
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.0
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl_manager.cpp \
