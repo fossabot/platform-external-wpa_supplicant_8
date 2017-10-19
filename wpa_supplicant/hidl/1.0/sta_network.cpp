@@ -371,6 +371,14 @@ Return<void> StaNetwork::setUpdateIdentifier(
 	    &StaNetwork::setUpdateIdentifierInternal, _hidl_cb, id);
 }
 
+Return<void> StaNetwork::setSimNumber(
+    uint32_t id, setSimNumber_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_NETWORK_INVALID,
+	    &StaNetwork::setSimNumberInternal, _hidl_cb, id);
+}
+
 Return<void> StaNetwork::getSsid(getSsid_cb _hidl_cb)
 {
 	return validateAndCall(
@@ -1139,6 +1147,14 @@ SupplicantStatus StaNetwork::setUpdateIdentifierInternal(uint32_t id)
 	wpa_ssid->update_identifier = id;
 	wpa_printf(
 	    MSG_MSGDUMP, "update_identifier: %d", wpa_ssid->update_identifier);
+	resetInternalStateAfterParamsUpdate();
+	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+SupplicantStatus StaNetwork::setSimNumberInternal(uint32_t id)
+{
+	struct wpa_ssid *wpa_ssid = retrieveNetworkPtr();
+	wpa_ssid->eap.sim_num = id;
 	resetInternalStateAfterParamsUpdate();
 	return {SupplicantStatusCode::SUCCESS, ""};
 }
