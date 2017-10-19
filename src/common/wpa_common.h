@@ -191,6 +191,8 @@ struct wpa_eapol_key {
 	/* followed by key_data_length bytes of key_data */
 } STRUCT_PACKED;
 
+#define WPA_TK_MAX_LEN 32
+
 /**
  * struct wpa_ptk - WPA Pairwise Transient Key
  * IEEE Std 802.11i-2004 - 8.5.1.2 Pairwise key hierarchy
@@ -206,6 +208,7 @@ struct wpa_ptk {
 			u8 rx_mic_key[8];
 		} auth;
 	} u;
+	int installed; /* 1 if key has already been installed to driver */
 } STRUCT_PACKED;
 
 struct wpa_gtk {
