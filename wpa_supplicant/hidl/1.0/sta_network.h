@@ -128,6 +128,8 @@ public:
 	    const hidl_string& id_str, setIdStr_cb _hidl_cb) override;
 	Return<void> setUpdateIdentifier(
 	    uint32_t id, setUpdateIdentifier_cb _hidl_cb) override;
+	Return<void> setSimNumber(
+	    uint32_t id, setSimNumber_cb _hidl_cb) override;
 	Return<void> getSsid(getSsid_cb _hidl_cb) override;
 	Return<void> getBssid(getBssid_cb _hidl_cb) override;
 	Return<void> getScanSsid(getScanSsid_cb _hidl_cb) override;
@@ -235,6 +237,7 @@ private:
 	SupplicantStatus setProactiveKeyCachingInternal(bool enable);
 	SupplicantStatus setIdStrInternal(const std::string& id_str);
 	SupplicantStatus setUpdateIdentifierInternal(uint32_t id);
+	SupplicantStatus setSimNumberInternal(uint32_t id);
 	std::pair<SupplicantStatus, std::vector<uint8_t>> getSsidInternal();
 	std::pair<SupplicantStatus, std::array<uint8_t, 6>> getBssidInternal();
 	std::pair<SupplicantStatus, bool> getScanSsidInternal();
