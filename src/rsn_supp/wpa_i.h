@@ -24,13 +24,18 @@ struct wpa_sm {
 	struct wpa_ptk ptk, tptk;
 	int ptk_set, tptk_set;
 	unsigned int msg_3_of_4_ok:1;
-	unsigned int tk_to_set:1;
 	u8 snonce[WPA_NONCE_LEN];
 	u8 anonce[WPA_NONCE_LEN]; /* ANonce from the last 1/4 msg */
 	int renew_snonce;
 	u8 rx_replay_counter[WPA_REPLAY_COUNTER_LEN];
 	int rx_replay_counter_set;
 	u8 request_counter[WPA_REPLAY_COUNTER_LEN];
+	struct wpa_gtk gtk;
+	struct wpa_gtk gtk_wnm_sleep;
+#ifdef CONFIG_IEEE80211W
+	struct wpa_igtk igtk;
+	struct wpa_igtk igtk_wnm_sleep;
+#endif /* CONFIG_IEEE80211W */
 
 	struct eapol_sm *eapol; /* EAPOL state machine from upper level code */
 
