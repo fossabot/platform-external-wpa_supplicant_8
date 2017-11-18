@@ -1258,7 +1258,9 @@ void HidlManager::notifyP2pGroupStarted(
 		&ISupplicantP2pIfaceCallback::onGroupStarted,
 		std::placeholders::_1, wpa_group_s->ifname, hidl_is_go,
 		std::vector<uint8_t>{ssid->ssid, ssid->ssid + ssid->ssid_len},
-		hidl_freq, hidl_psk, ssid->passphrase, wpa_group_s->go_dev_addr,
+		hidl_freq, hidl_psk, ssid->passphrase,
+		(ssid->mode == wpa_ssid::wpas_mode::WPAS_MODE_P2P_GO ?
+                wpa_group_s->global->p2p_dev_addr : wpa_group_s->go_dev_addr),
 		hidl_is_persistent));
 }
 
