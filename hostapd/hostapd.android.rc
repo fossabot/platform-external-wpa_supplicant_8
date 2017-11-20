@@ -21,7 +21,7 @@ service hostapd /vendor/bin/hostapd \
     oneshot
 
 service hostapd_dual /vendor/bin/hostapd \
-        -e /data/vendor/wifi/entropy.bin \
+        -e /data/misc/wifi/entropy.bin \
         /data/vendor/wifi/hostapd_dual2g.conf \
         /data/vendor/wifi/hostapd_dual5g.conf
     class main
