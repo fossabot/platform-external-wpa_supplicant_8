@@ -1025,7 +1025,7 @@ void * tls_init(const struct tls_config *conf)
 	if (conf && conf->openssl_ciphers)
 		ciphers = conf->openssl_ciphers;
 	else
-		ciphers = "DEFAULT:!EXP:!LOW";
+		ciphers = TLS_DEFAULT_CIPHERS;
 	if (SSL_CTX_set_cipher_list(ssl, ciphers) != 1) {
 		wpa_printf(MSG_ERROR,
 			   "OpenSSL: Failed to set cipher string '%s'",
@@ -2775,6 +2775,19 @@ static int tls_connection_engine_private_key(struct tls_connection *conn)
 }
 
 
+static void tls_clear_default_passwd_cb(SSL_CTX *ssl_ctx, SSL *ssl)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+	if (ssl) {
+		SSL_set_default_passwd_cb(ssl, NULL);
+		SSL_set_default_passwd_cb_userdata(ssl, NULL);
+	}
+#endif /* >= 1.1.0f && !LibreSSL */
+	SSL_CTX_set_default_passwd_cb(ssl_ctx, NULL);
+	SSL_CTX_set_default_passwd_cb_userdata(ssl_ctx, NULL);
+}
+
+
 static int tls_connection_private_key(struct tls_data *data,
 				      struct tls_connection *conn,
 				      const char *private_key,
@@ -2796,6 +2809,15 @@ static int tls_connection_private_key(struct tls_data *data,
 	} else
 		passwd = NULL;
 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+	/*
+	 * In OpenSSL >= 1.1.0f SSL_use_PrivateKey_file() uses the callback
+	 * from the SSL object. See OpenSSL commit d61461a75253.
+	 */
+	SSL_set_default_passwd_cb(conn->ssl, tls_passwd_cb);
+	SSL_set_default_passwd_cb_userdata(conn->ssl, passwd);
+#endif /* >= 1.1.0f && !LibreSSL */
+	/* Keep these for OpenSSL < 1.1.0f */
 	SSL_CTX_set_default_passwd_cb(ssl_ctx, tls_passwd_cb);
 	SSL_CTX_set_default_passwd_cb_userdata(ssl_ctx, passwd);
 
@@ -2882,11 +2904,12 @@ static int tls_connection_private_key(struct tls_data *data,
 	if (!ok) {
 		tls_show_errors(MSG_INFO, __func__,
 				"Failed to load private key");
+		tls_clear_default_passwd_cb(ssl_ctx, conn->ssl);
 		os_free(passwd);
 		return -1;
 	}
 	ERR_clear_error();
-	SSL_CTX_set_default_passwd_cb(ssl_ctx, NULL);
+	tls_clear_default_passwd_cb(ssl_ctx, conn->ssl);
 	os_free(passwd);
 
 	if (!SSL_check_private_key(conn->ssl)) {
@@ -2929,13 +2952,14 @@ static int tls_global_private_key(struct tls_data *data,
 	    tls_read_pkcs12(data, NULL, private_key, passwd)) {
 		tls_show_errors(MSG_INFO, __func__,
 				"Failed to load private key");
+		tls_clear_default_passwd_cb(ssl_ctx, NULL);
 		os_free(passwd);
 		ERR_clear_error();
 		return -1;
 	}
+	tls_clear_default_passwd_cb(ssl_ctx, NULL);
 	os_free(passwd);
 	ERR_clear_error();
-	SSL_CTX_set_default_passwd_cb(ssl_ctx, NULL);
 
 	if (!SSL_CTX_check_private_key(ssl_ctx)) {
 		tls_show_errors(MSG_INFO, __func__,
@@ -3764,7 +3788,7 @@ static int ocsp_resp_cb(SSL *s, void *arg)
 {
 	struct tls_connection *conn = arg;
 	const unsigned char *p;
-	int len, status, reason;
+	int len, status, reason, res;
 	OCSP_RESPONSE *rsp;
 	OCSP_BASICRESP *basic;
 	OCSP_CERTID *id;
@@ -3859,16 +3883,33 @@ static int ocsp_resp_cb(SSL *s, void *arg)
 		return 0;
 	}
 
-	id = OCSP_cert_to_id(NULL, conn->peer_cert, conn->peer_issuer);
+	id = OCSP_cert_to_id(EVP_sha256(), conn->peer_cert, conn->peer_issuer);
 	if (!id) {
-		wpa_printf(MSG_DEBUG, "OpenSSL: Could not create OCSP certificate identifier");
+		wpa_printf(MSG_DEBUG,
+			   "OpenSSL: Could not create OCSP certificate identifier (SHA256)");
 		OCSP_BASICRESP_free(basic);
 		OCSP_RESPONSE_free(rsp);
 		return 0;
 	}
 
-	if (!OCSP_resp_find_status(basic, id, &status, &reason, &produced_at,
-				   &this_update, &next_update)) {
+	res = OCSP_resp_find_status(basic, id, &status, &reason, &produced_at,
+				    &this_update, &next_update);
+	if (!res) {
+		id = OCSP_cert_to_id(NULL, conn->peer_cert, conn->peer_issuer);
+		if (!id) {
+			wpa_printf(MSG_DEBUG,
+				   "OpenSSL: Could not create OCSP certificate identifier (SHA1)");
+			OCSP_BASICRESP_free(basic);
+			OCSP_RESPONSE_free(rsp);
+			return 0;
+		}
+
+		res = OCSP_resp_find_status(basic, id, &status, &reason,
+					    &produced_at, &this_update,
+					    &next_update);
+	}
+
+	if (!res) {
 		wpa_printf(MSG_INFO, "OpenSSL: Could not find current server certificate from OCSP response%s",
 			   (conn->flags & TLS_CONN_REQUIRE_OCSP) ? "" :
 			   " (OCSP not required)");
@@ -4227,11 +4268,10 @@ static int tls_session_ticket_ext_cb(SSL *s, const unsigned char *data,
 	wpa_hexdump(MSG_DEBUG, "OpenSSL: ClientHello SessionTicket "
 		    "extension", data, len);
 
-	conn->session_ticket = os_malloc(len);
+	conn->session_ticket = os_memdup(data, len);
 	if (conn->session_ticket == NULL)
 		return 0;
 
-	os_memcpy(conn->session_ticket, data, len);
 	conn->session_ticket_len = len;
 
 	return 1;
