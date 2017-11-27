@@ -208,9 +208,9 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 #ifdef CONFIG_IEEE80211R
 	const u8 *ie;
 #endif /* CONFIG_IEEE80211R */
-#ifdef CONFIG_IEEE80211R
+#if defined(CONFIG_IEEE80211R) || defined(CONFIG_FILS)
 	const u8 *md = NULL;
-#endif /* CONFIG_IEEE80211R */
+#endif /* CONFIG_IEEE80211R || CONFIG_FILS */
 	int i, bssid_changed;
 	struct wpabuf *resp = NULL;
 	u8 ext_capab[18];
@@ -301,13 +301,19 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	     wpa_bss_get_ie(bss, WLAN_EID_RSN)) &&
 	    wpa_key_mgmt_wpa(ssid->key_mgmt)) {
 		int try_opportunistic;
+		const u8 *cache_id = NULL;
+
 		try_opportunistic = (ssid->proactive_key_caching < 0 ?
 				     wpa_s->conf->okc :
 				     ssid->proactive_key_caching) &&
 			(ssid->proto & WPA_PROTO_RSN);
+#ifdef CONFIG_FILS
+		if (wpa_key_mgmt_fils(ssid->key_mgmt))
+			cache_id = wpa_bss_get_fils_cache_id(bss);
+#endif /* CONFIG_FILS */
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
 					    wpa_s->current_ssid,
-					    try_opportunistic) == 0)
+					    try_opportunistic, cache_id) == 0)
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
 		wpa_s->sme.assoc_req_ie_len = sizeof(wpa_s->sme.assoc_req_ie);
 		if (wpa_supplicant_set_suites(wpa_s, bss, ssid,
@@ -367,7 +373,12 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 		wpa_ft_prepare_auth_request(wpa_s->wpa, ie);
 	}
 
-	if (md && wpa_key_mgmt_ft(ssid->key_mgmt)) {
+	if (md && !wpa_key_mgmt_ft(ssid->key_mgmt))
+		md = NULL;
+	if (md) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "SME: FT mobility domain %02x%02x",
+			md[0], md[1]);
+
 		if (wpa_s->sme.assoc_req_ie_len + 5 <
 		    sizeof(wpa_s->sme.assoc_req_ie)) {
 			struct rsn_mdie *mdie;
@@ -516,8 +527,8 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 
 #ifdef CONFIG_SAE
 	if (!skip_auth && params.auth_alg == WPA_AUTH_ALG_SAE &&
-	    pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid, ssid, 0) == 0)
-	{
+	    pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid, ssid, 0,
+				    NULL) == 0) {
 		wpa_dbg(wpa_s, MSG_DEBUG,
 			"PMKSA cache entry found - try to use PMKSA caching instead of new SAE authentication");
 		params.auth_alg = WPA_AUTH_ALG_OPEN;
@@ -551,18 +562,63 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	 * networks). */
 	if (params.auth_alg == WPA_AUTH_ALG_OPEN &&
 	    wpa_key_mgmt_fils(ssid->key_mgmt)) {
+		const u8 *indic;
+		u16 fils_info;
+
+		/*
+		 * Check FILS Indication element (FILS Information field) bits
+		 * indicating supported authentication algorithms against local
+		 * configuration (ssid->fils_dh_group). Try to use FILS
+		 * authentication only if the AP supports the combination in the
+		 * network profile. */
+		indic = wpa_bss_get_ie(bss, WLAN_EID_FILS_INDICATION);
+		if (!indic || indic[1] < 2) {
+			wpa_printf(MSG_DEBUG, "SME: " MACSTR
+				   " does not include FILS Indication element - cannot use FILS authentication with it",
+				   MAC2STR(bss->bssid));
+			goto no_fils;
+		}
+
+		fils_info = WPA_GET_LE16(indic + 2);
+		if (ssid->fils_dh_group == 0 && !(fils_info & BIT(9))) {
+			wpa_printf(MSG_DEBUG, "SME: " MACSTR
+				   " does not support FILS SK without PFS - cannot use FILS authentication with it",
+				   MAC2STR(bss->bssid));
+			goto no_fils;
+		}
+		if (ssid->fils_dh_group != 0 && !(fils_info & BIT(10))) {
+			wpa_printf(MSG_DEBUG, "SME: " MACSTR
+				   " does not support FILS SK with PFS - cannot use FILS authentication with it",
+				   MAC2STR(bss->bssid));
+			goto no_fils;
+		}
+
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
-					    ssid, 0) == 0)
+					    ssid, 0,
+					    wpa_bss_get_fils_cache_id(bss)) ==
+		    0)
 			wpa_printf(MSG_DEBUG,
 				   "SME: Try to use FILS with PMKSA caching");
-		resp = fils_build_auth(wpa_s->wpa);
+		resp = fils_build_auth(wpa_s->wpa, ssid->fils_dh_group, md);
 		if (resp) {
-			params.auth_alg = WPA_AUTH_ALG_FILS;
+			int auth_alg;
+
+			if (ssid->fils_dh_group)
+				wpa_printf(MSG_DEBUG,
+					   "SME: Try to use FILS SK authentication with PFS (DH Group %u)",
+					   ssid->fils_dh_group);
+			else
+				wpa_printf(MSG_DEBUG,
+					   "SME: Try to use FILS SK authentication without PFS");
+			auth_alg = ssid->fils_dh_group ?
+				WPA_AUTH_ALG_FILS_SK_PFS : WPA_AUTH_ALG_FILS;
+			params.auth_alg = auth_alg;
 			params.auth_data = wpabuf_head(resp);
 			params.auth_data_len = wpabuf_len(resp);
-			wpa_s->sme.auth_alg = WPA_AUTH_ALG_FILS;
+			wpa_s->sme.auth_alg = auth_alg;
 		}
 	}
+no_fils:
 #endif /* CONFIG_FILS */
 
 	wpa_supplicant_cancel_sched_scan(wpa_s);
@@ -572,6 +628,7 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 		" (SSID='%s' freq=%d MHz)", MAC2STR(params.bssid),
 		wpa_ssid_txt(params.ssid, params.ssid_len), params.freq);
 
+	eapol_sm_notify_portValid(wpa_s->eapol, FALSE);
 	wpa_clear_keys(wpa_s, bss->bssid);
 	wpa_supplicant_set_state(wpa_s, WPA_AUTHENTICATING);
 	if (old_ssid != wpa_s->current_ssid)
@@ -959,9 +1016,29 @@ void sme_event_auth(struct wpa_supplicant *wpa_s, union wpa_event_data *data)
 #endif /* CONFIG_IEEE80211R */
 
 #ifdef CONFIG_FILS
-	if (data->auth.auth_type == WLAN_AUTH_FILS_SK) {
-		if (fils_process_auth(wpa_s->wpa, data->auth.ies,
-				      data->auth.ies_len) < 0) {
+	if (data->auth.auth_type == WLAN_AUTH_FILS_SK ||
+	    data->auth.auth_type == WLAN_AUTH_FILS_SK_PFS) {
+		u16 expect_auth_type;
+
+		expect_auth_type = wpa_s->sme.auth_alg ==
+			WPA_AUTH_ALG_FILS_SK_PFS ? WLAN_AUTH_FILS_SK_PFS :
+			WLAN_AUTH_FILS_SK;
+		if (data->auth.auth_type != expect_auth_type) {
+			wpa_dbg(wpa_s, MSG_DEBUG,
+				"SME: FILS Authentication response used different auth alg (%u; expected %u)",
+				data->auth.auth_type, expect_auth_type);
+			wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_DISCONNECTED "bssid="
+				MACSTR
+				" reason=%d locally_generated=1",
+				MAC2STR(wpa_s->pending_bssid),
+				WLAN_REASON_DEAUTH_LEAVING);
+			wpas_connection_failed(wpa_s, wpa_s->pending_bssid);
+			wpa_supplicant_mark_disassoc(wpa_s);
+			return;
+		}
+
+		if (fils_process_auth(wpa_s->wpa, wpa_s->pending_bssid,
+				      data->auth.ies, data->auth.ies_len) < 0) {
 			wpa_dbg(wpa_s, MSG_DEBUG,
 				"SME: FILS Authentication response processing failed");
 			wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_DISCONNECTED "bssid="
@@ -979,6 +1056,24 @@ void sme_event_auth(struct wpa_supplicant *wpa_s, union wpa_event_data *data)
 	sme_associate(wpa_s, ssid->mode, data->auth.peer,
 		      data->auth.auth_type);
 }
+
+
+#ifdef CONFIG_FILS
+#ifdef CONFIG_IEEE80211R
+static void remove_ie(u8 *buf, size_t *len, u8 eid)
+{
+	u8 *pos, *next, *end;
+
+	pos = (u8 *) get_ie(buf, *len, eid);
+	if (pos) {
+		next = pos + 2 + pos[1];
+		end = buf + *len;
+		*len -= 2 + pos[1];
+		os_memmove(pos, next, end - next);
+	}
+}
+#endif /* CONFIG_IEEE80211R */
+#endif /* CONFIG_FILS */
 
 
 void sme_associate(struct wpa_supplicant *wpa_s, enum wpas_mode mode,
@@ -1001,7 +1096,8 @@ void sme_associate(struct wpa_supplicant *wpa_s, enum wpas_mode mode,
 	os_memset(&params, 0, sizeof(params));
 
 #ifdef CONFIG_FILS
-	if (auth_type == WLAN_AUTH_FILS_SK) {
+	if (auth_type == WLAN_AUTH_FILS_SK ||
+	    auth_type == WLAN_AUTH_FILS_SK_PFS) {
 		struct wpabuf *buf;
 		const u8 *snonce, *anonce;
 		const unsigned int max_hlp = 20;
@@ -1035,6 +1131,30 @@ void sme_associate(struct wpa_supplicant *wpa_s, enum wpas_mode mode,
 			wpabuf_free(hlp[i]);
 		if (!buf)
 			return;
+		wpa_hexdump(MSG_DEBUG, "FILS: assoc_req before FILS elements",
+			    wpa_s->sme.assoc_req_ie,
+			    wpa_s->sme.assoc_req_ie_len);
+#ifdef CONFIG_IEEE80211R
+		if (wpa_key_mgmt_ft(wpa_s->key_mgmt)) {
+			/* Remove RSNE and MDE to allow them to be overridden
+			 * with FILS+FT specific values from
+			 * fils_build_assoc_req(). */
+			remove_ie(wpa_s->sme.assoc_req_ie,
+				  &wpa_s->sme.assoc_req_ie_len,
+				  WLAN_EID_RSN);
+			wpa_hexdump(MSG_DEBUG,
+				    "FILS: assoc_req after RSNE removal",
+				    wpa_s->sme.assoc_req_ie,
+				    wpa_s->sme.assoc_req_ie_len);
+			remove_ie(wpa_s->sme.assoc_req_ie,
+				  &wpa_s->sme.assoc_req_ie_len,
+				  WLAN_EID_MOBILITY_DOMAIN);
+			wpa_hexdump(MSG_DEBUG,
+				    "FILS: assoc_req after MDE removal",
+				    wpa_s->sme.assoc_req_ie,
+				    wpa_s->sme.assoc_req_ie_len);
+		}
+#endif /* CONFIG_IEEE80211R */
 		/* TODO: Make wpa_s->sme.assoc_req_ie use dynamic allocation */
 		if (wpa_s->sme.assoc_req_ie_len + wpabuf_len(buf) >
 		    sizeof(wpa_s->sme.assoc_req_ie)) {
@@ -1047,6 +1167,9 @@ void sme_associate(struct wpa_supplicant *wpa_s, enum wpas_mode mode,
 			  wpabuf_head(buf), wpabuf_len(buf));
 		wpa_s->sme.assoc_req_ie_len += wpabuf_len(buf);
 		wpabuf_free(buf);
+		wpa_hexdump(MSG_DEBUG, "FILS: assoc_req after FILS elements",
+			    wpa_s->sme.assoc_req_ie,
+			    wpa_s->sme.assoc_req_ie_len);
 
 		os_memcpy(nonces, snonce, FILS_NONCE_LEN);
 		os_memcpy(nonces + FILS_NONCE_LEN, anonce, FILS_NONCE_LEN);
@@ -1054,6 +1177,31 @@ void sme_associate(struct wpa_supplicant *wpa_s, enum wpas_mode mode,
 		params.fils_nonces_len = sizeof(nonces);
 	}
 #endif /* CONFIG_FILS */
+
+#ifdef CONFIG_OWE
+	if (auth_type == WLAN_AUTH_OPEN &&
+	    wpa_s->key_mgmt == WPA_KEY_MGMT_OWE) {
+		struct wpabuf *owe_ie;
+
+		owe_ie = owe_build_assoc_req(wpa_s->wpa);
+		if (!owe_ie) {
+			wpa_printf(MSG_ERROR,
+				   "OWE: Failed to build IE for Association Request frame");
+			return;
+		}
+		if (wpa_s->sme.assoc_req_ie_len + wpabuf_len(owe_ie) >
+		    sizeof(wpa_s->sme.assoc_req_ie)) {
+			wpa_printf(MSG_ERROR,
+				   "OWE: Not enough buffer room for own Association Request frame elements");
+			wpabuf_free(owe_ie);
+			return;
+		}
+		os_memcpy(wpa_s->sme.assoc_req_ie + wpa_s->sme.assoc_req_ie_len,
+			  wpabuf_head(owe_ie), wpabuf_len(owe_ie));
+		wpa_s->sme.assoc_req_ie_len += wpabuf_len(owe_ie);
+		wpabuf_free(owe_ie);
+	}
+#endif /* CONFIG_OWE */
 
 	params.bssid = bssid;
 	params.ssid = wpa_s->sme.ssid;
@@ -1158,10 +1306,9 @@ int sme_update_ft_ies(struct wpa_supplicant *wpa_s, const u8 *md,
 	os_memcpy(wpa_s->sme.mobility_domain, md, MOBILITY_DOMAIN_ID_LEN);
 	wpa_hexdump(MSG_DEBUG, "SME: FT IEs", ies, ies_len);
 	os_free(wpa_s->sme.ft_ies);
-	wpa_s->sme.ft_ies = os_malloc(ies_len);
+	wpa_s->sme.ft_ies = os_memdup(ies, ies_len);
 	if (wpa_s->sme.ft_ies == NULL)
 		return -1;
-	os_memcpy(wpa_s->sme.ft_ies, ies, ies_len);
 	wpa_s->sme.ft_ies_len = ies_len;
 	return 0;
 }

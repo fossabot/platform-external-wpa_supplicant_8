@@ -28,6 +28,7 @@
 #define DEFAULT_MESH_RETRY_TIMEOUT 40
 #define DEFAULT_MESH_CONFIRM_TIMEOUT 40
 #define DEFAULT_MESH_HOLDING_TIMEOUT 40
+#define DEFAULT_MESH_RSSI_THRESHOLD 1 /* no change */
 #define DEFAULT_DISABLE_HT 0
 #define DEFAULT_DISABLE_HT40 0
 #define DEFAULT_DISABLE_SGI 0
@@ -144,6 +145,19 @@ struct wpa_ssid {
 	 * bssid_set - Whether BSSID is configured for this network
 	 */
 	int bssid_set;
+
+	/**
+	 * bssid_hint - BSSID hint
+	 *
+	 * If set, this is configured to the driver as a preferred initial BSSID
+	 * while connecting to this network.
+	 */
+	u8 bssid_hint[ETH_ALEN];
+
+	/**
+	 * bssid_hint_set - Whether BSSID hint is configured for this network
+	 */
+	int bssid_hint_set;
 
 	/**
 	 * go_p2p_dev_addr - GO's P2P Device Address or all zeros if not set
@@ -470,12 +484,14 @@ struct wpa_ssid {
 	int dot11MeshConfirmTimeout; /* msec */
 	int dot11MeshHoldingTimeout; /* msec */
 
+	int ht;
 	int ht40;
 
 	int vht;
 
 	u8 max_oper_chwidth;
 
+	unsigned int vht_center_freq1;
 	unsigned int vht_center_freq2;
 
 	/**
@@ -806,12 +822,68 @@ struct wpa_ssid {
 	int no_auto_peer;
 
 	/**
+	 * mesh_rssi_threshold - Set mesh parameter mesh_rssi_threshold (dBm)
+	 *
+	 * -255..-1 = threshold value in dBm
+	 * 0 = not using RSSI threshold
+	 * 1 = do not change driver default
+	 */
+	int mesh_rssi_threshold;
+
+	/**
 	 * wps_disabled - WPS disabled in AP mode
 	 *
 	 * 0 = WPS enabled and configured (default)
 	 * 1 = WPS disabled
 	 */
 	int wps_disabled;
+
+	/**
+	 * fils_dh_group - FILS DH Group
+	 *
+	 * 0 = PFS disabled with FILS shared key authentication
+	 * 1-65535 DH Group to use for FILS PFS
+	 */
+	int fils_dh_group;
+
+	/**
+	 * dpp_connector - DPP Connector (signedConnector as string)
+	 */
+	char *dpp_connector;
+
+	/**
+	 * dpp_netaccesskey - DPP netAccessKey (own private key)
+	 */
+	u8 *dpp_netaccesskey;
+
+	/**
+	 * dpp_netaccesskey_len - DPP netAccessKey length in octets
+	 */
+	size_t dpp_netaccesskey_len;
+
+	/**
+	 * net_access_key_expiry - DPP netAccessKey expiry in UNIX time stamp
+	 *
+	 * 0 indicates no expiration.
+	 */
+	unsigned int dpp_netaccesskey_expiry;
+
+	/**
+	 * dpp_csign - C-sign-key (Configurator public key)
+	 */
+	u8 *dpp_csign;
+
+	/**
+	 * dpp_csign_len - C-sign-key length in octets
+	 */
+	size_t dpp_csign_len;
+
+	/**
+	 * dpp_csign_expiry - C-sign-key expiry in UNIX time stamp
+	 *
+	 * 0 indicates no expiration.
+	 */
+	unsigned int dpp_csign_expiry;
 };
 
 #endif /* CONFIG_SSID_H */

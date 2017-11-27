@@ -14,6 +14,8 @@ endif
 
 include $(LOCAL_PATH)/android.config
 
+HIDL_INTERFACE_VERSION = 1.0
+
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
 
@@ -82,6 +84,7 @@ else
 INCLUDES += external/libnl-headers
 endif
 endif
+INCLUDES += $(LOCAL_PATH)/hidl/$(HIDL_INTERFACE_VERSION)
 
 ifdef CONFIG_FIPS
 CONFIG_NO_RANDOM_POOL=
@@ -231,8 +234,6 @@ ifdef CONFIG_MESH
 NEED_80211_COMMON=y
 NEED_SHA256=y
 NEED_AES_SIV=y
-NEED_AES_OMAC1=y
-NEED_AES_CTR=y
 CONFIG_SAE=y
 CONFIG_AP=y
 L_CFLAGS += -DCONFIG_MESH
@@ -248,10 +249,39 @@ NEED_ECC=y
 NEED_DH_GROUPS=y
 endif
 
+ifdef CONFIG_DPP
+L_CFLAGS += -DCONFIG_DPP
+OBJS += src/common/dpp.c
+OBJS += dpp_supplicant.c
+NEED_AES_SIV=y
+NEED_HMAC_SHA256_KDF=y
+NEED_HMAC_SHA384_KDF=y
+NEED_HMAC_SHA512_KDF=y
+NEED_SHA256=y
+NEED_SHA384=y
+NEED_SHA512=y
+NEED_JSON=y
+NEED_GAS_SERVER=y
+endif
+
+ifdef CONFIG_OWE
+L_CFLAGS += -DCONFIG_OWE
+NEED_ECC=y
+NEED_HMAC_SHA256_KDF=y
+endif
+
 ifdef CONFIG_FILS
 L_CFLAGS += -DCONFIG_FILS
 NEED_SHA384=y
 NEED_AES_SIV=y
+ifdef CONFIG_FILS_SK_PFS
+L_CFLAGS += -DCONFIG_FILS_SK_PFS
+NEED_ECC=y
+endif
+endif
+
+ifdef CONFIG_MBO
+CONFIG_WNM=y
 endif
 
 ifdef CONFIG_WNM
@@ -834,7 +864,8 @@ ifdef CONFIG_IEEE80211AX
 OBJS += src/ap/ieee802_11_he.c
 endif
 endif
-ifdef CONFIG_WNM
+ifdef CONFIG_WNM_AP
+L_CFLAGS += -DCONFIG_WNM_AP
 OBJS += src/ap/wnm_ap.c
 endif
 ifdef CONFIG_MBO
@@ -875,6 +906,10 @@ L_CFLAGS += -DEAP_SERVER_WSC
 OBJS += src/ap/wps_hostapd.c
 OBJS += src/eap_server/eap_server_wsc.c
 endif
+ifdef CONFIG_DPP
+OBJS += src/ap/dpp_hostapd.c
+OBJS += src/ap/gas_query_ap.c
+endif
 ifdef CONFIG_INTERWORKING
 OBJS += src/ap/gas_serv.c
 endif
@@ -886,6 +921,10 @@ endif
 ifdef CONFIG_MBO
 OBJS += mbo.c
 L_CFLAGS += -DCONFIG_MBO
+endif
+
+ifdef CONFIG_TESTING_OPTIONS
+L_CFLAGS += -DCONFIG_TESTING_OPTIONS
 endif
 
 ifdef NEED_RSN_AUTHENTICATOR
@@ -1000,6 +1039,10 @@ ifdef CONFIG_TLS_ADD_DL
 LIBS += -ldl
 LIBS_p += -ldl
 endif
+ifndef CONFIG_TLS_DEFAULT_CIPHERS
+CONFIG_TLS_DEFAULT_CIPHERS = "DEFAULT:!EXP:!LOW"
+endif
+L_CFLAGS += -DTLS_DEFAULT_CIPHERS=\"$(CONFIG_TLS_DEFAULT_CIPHERS)\"
 endif
 
 ifeq ($(CONFIG_TLS), gnutls)
@@ -1160,6 +1203,12 @@ endif
 ifdef NEED_AES_EAX
 AESOBJS += src/crypto/aes-eax.c
 NEED_AES_CTR=y
+NEED_AES_OMAC1=y
+endif
+ifdef NEED_AES_SIV
+AESOBJS += src/crypto/aes-siv.c
+NEED_AES_CTR=y
+NEED_AES_OMAC1=y
 endif
 ifdef NEED_AES_CTR
 AESOBJS += src/crypto/aes-ctr.c
@@ -1191,9 +1240,6 @@ ifdef NEED_AES_ENC
 ifdef CONFIG_INTERNAL_AES
 AESOBJS += src/crypto/aes-internal-enc.c
 endif
-endif
-ifdef NEED_AES_SIV
-AESOBJS += src/crypto/aes-siv.c
 endif
 ifdef NEED_AES
 OBJS += $(AESOBJS)
@@ -1290,6 +1336,14 @@ ifdef NEED_HMAC_SHA256_KDF
 L_CFLAGS += -DCONFIG_HMAC_SHA256_KDF
 SHA256OBJS += src/crypto/sha256-kdf.c
 endif
+ifdef NEED_HMAC_SHA384_KDF
+L_CFLAGS += -DCONFIG_HMAC_SHA384_KDF
+SHA256OBJS += src/crypto/sha384-kdf.c
+endif
+ifdef NEED_HMAC_SHA512_KDF
+L_CFLAGS += -DCONFIG_HMAC_SHA512_KDF
+SHA256OBJS += src/crypto/sha512-kdf.c
+endif
 OBJS += $(SHA256OBJS)
 endif
 ifdef NEED_SHA384
@@ -1298,6 +1352,13 @@ ifneq ($(CONFIG_TLS), openssl)
 OBJS += src/crypto/sha384.c
 endif
 OBJS += src/crypto/sha384-prf.c
+endif
+ifdef NEED_SHA512
+L_CFLAGS += -DCONFIG_SHA512
+ifneq ($(CONFIG_TLS), openssl)
+OBJS += src/crypto/sha512.c
+endif
+OBJS += src/crypto/sha512-prf.c
 endif
 
 ifdef NEED_DH_GROUPS
@@ -1522,6 +1583,12 @@ OBJS += src/utils/ext_password.c
 L_CFLAGS += -DCONFIG_EXT_PASSWORD
 endif
 
+ifdef NEED_GAS_SERVER
+OBJS += src/common/gas_server.c
+L_CFLAGS += -DCONFIG_GAS_SERVER
+NEED_GAS=y
+endif
+
 ifdef NEED_GAS
 OBJS += src/common/gas.c
 OBJS += gas_query.c
@@ -1532,6 +1599,11 @@ endif
 ifdef NEED_OFFCHANNEL
 OBJS += offchannel.c
 L_CFLAGS += -DCONFIG_OFFCHANNEL
+endif
+
+ifdef NEED_JSON
+OBJS += src/utils/json.c
+L_CFLAGS += -DCONFIG_JSON
 endif
 
 OBJS += src/drivers/driver_common.c
@@ -1610,12 +1682,20 @@ LOCAL_STATIC_LIBRARIES += $(LIB_STATIC_EAP_PROXY)
 LOCAL_SHARED_LIBRARIES += $(LIB_SHARED_EAP_PROXY)
 endif
 ifeq ($(CONFIG_TLS), openssl)
-LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore-wifi-hidl
+ifdef CONFIG_CTRL_IFACE_HIDL
+ LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore-wifi-hidl
+else
+LOCAL_SHARED_LIBRARIES += libcrypto libssl libkeystore_binder
+endif
 endif
 
 # With BoringSSL we need libkeystore-engine in order to provide access to
 # keystore keys.
-LOCAL_SHARED_LIBRARIES += libkeystore-engine-wifi-hidl
+ifdef CONFIG_CTRL_IFACE_HIDL
+ LOCAL_SHARED_LIBRARIES += libkeystore-engine-wifi-hidl
+else
+LOCAL_SHARED_LIBRARIES += libkeystore-engine
+endif
 
 ifdef CONFIG_DRIVER_NL80211
 ifneq ($(wildcard external/libnl),)
@@ -1632,6 +1712,7 @@ LOCAL_SHARED_LIBRARIES += libdbus
 endif
 ifeq ($(WPA_SUPPLICANT_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
+LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@1.0_vendor
 LOCAL_SHARED_LIBRARIES += libhidlbase libhidltransport libhwbinder libutils
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
 endif
@@ -1684,7 +1765,6 @@ LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.0
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl_manager.cpp \
@@ -1696,6 +1776,7 @@ LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/supplicant.cpp
 LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@$(HIDL_INTERFACE_VERSION) \
+    vendor.qti.hardware.wifi.supplicant@$(HIDL_INTERFACE_VERSION)_vendor \
     libhidlbase \
     libhidltransport \
     libhwbinder \

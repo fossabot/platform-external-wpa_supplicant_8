@@ -362,12 +362,11 @@ static int wpa_driver_wext_event_wireless_assocreqie(
 	wpa_hexdump(MSG_DEBUG, "AssocReq IE wireless event", (const u8 *) ev,
 		    len);
 	os_free(drv->assoc_req_ies);
-	drv->assoc_req_ies = os_malloc(len);
+	drv->assoc_req_ies = os_memdup(ev, len);
 	if (drv->assoc_req_ies == NULL) {
 		drv->assoc_req_ies_len = 0;
 		return -1;
 	}
-	os_memcpy(drv->assoc_req_ies, ev, len);
 	drv->assoc_req_ies_len = len;
 
 	return 0;
@@ -383,12 +382,11 @@ static int wpa_driver_wext_event_wireless_assocrespie(
 	wpa_hexdump(MSG_DEBUG, "AssocResp IE wireless event", (const u8 *) ev,
 		    len);
 	os_free(drv->assoc_resp_ies);
-	drv->assoc_resp_ies = os_malloc(len);
+	drv->assoc_resp_ies = os_memdup(ev, len);
 	if (drv->assoc_resp_ies == NULL) {
 		drv->assoc_resp_ies_len = 0;
 		return -1;
 	}
-	os_memcpy(drv->assoc_resp_ies, ev, len);
 	drv->assoc_resp_ies_len = len;
 
 	return 0;
@@ -2353,19 +2351,21 @@ static int wpa_driver_wext_pmksa(struct wpa_driver_wext_data *drv,
 }
 
 
-static int wpa_driver_wext_add_pmkid(void *priv, const u8 *bssid,
-				     const u8 *pmkid)
+static int wpa_driver_wext_add_pmkid(void *priv,
+				     struct wpa_pmkid_params *params)
 {
 	struct wpa_driver_wext_data *drv = priv;
-	return wpa_driver_wext_pmksa(drv, IW_PMKSA_ADD, bssid, pmkid);
+	return wpa_driver_wext_pmksa(drv, IW_PMKSA_ADD, params->bssid,
+				     params->pmkid);
 }
 
 
-static int wpa_driver_wext_remove_pmkid(void *priv, const u8 *bssid,
-		 			const u8 *pmkid)
+static int wpa_driver_wext_remove_pmkid(void *priv,
+					struct wpa_pmkid_params *params)
 {
 	struct wpa_driver_wext_data *drv = priv;
-	return wpa_driver_wext_pmksa(drv, IW_PMKSA_REMOVE, bssid, pmkid);
+	return wpa_driver_wext_pmksa(drv, IW_PMKSA_REMOVE, params->bssid,
+				     params->pmkid);
 }
 
 

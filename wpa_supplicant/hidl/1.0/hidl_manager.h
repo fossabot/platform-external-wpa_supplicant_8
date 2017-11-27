@@ -39,6 +39,9 @@ namespace supplicant {
 namespace V1_0 {
 namespace implementation {
 
+using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork;
+using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaIface;
+
 /**
  * HidlManager is responsible for managing the lifetime of all
  * hidl objects created by wpa_supplicant. This is a singleton
@@ -132,13 +135,13 @@ public:
 	    android::sp<ISupplicantP2pIface> *iface_object);
 	int getStaIfaceHidlObjectByIfname(
 	    const std::string &ifname,
-	    android::sp<ISupplicantStaIface> *iface_object);
+	    android::sp<ISupplicantVendorStaIface> *iface_object);
 	int getP2pNetworkHidlObjectByIfnameAndNetworkId(
 	    const std::string &ifname, int network_id,
 	    android::sp<ISupplicantP2pNetwork> *network_object);
 	int getStaNetworkHidlObjectByIfnameAndNetworkId(
 	    const std::string &ifname, int network_id,
-	    android::sp<ISupplicantStaNetwork> *network_object);
+	    android::sp<ISupplicantVendorStaNetwork> *network_object);
 	int addSupplicantCallbackHidlObject(
 	    const android::sp<ISupplicantCallback> &callback);
 	int addP2pIfaceCallbackHidlObject(
@@ -175,6 +178,7 @@ private:
 	    const std::string &ifname, int network_id,
 	    const android::sp<ISupplicantStaNetworkCallback> &callback);
 
+	bool checkForVendorStaIfaceCallback(const std::string &ifname);
 	void callWithEachSupplicantCallback(
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantCallback>)> &method);
@@ -186,6 +190,10 @@ private:
 	    const std::string &ifname,
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantStaIfaceCallback>)> &method);
+	void callWithEachVendorStaIfaceCallback(
+	    const std::string &ifname,
+	    const std::function<android::hardware::Return<void>(
+		android::sp<ISupplicantVendorStaIfaceCallback>)> &method);
 	void callWithEachP2pNetworkCallback(
 	    const std::string &ifname, int network_id,
 	    const std::function<android::hardware::Return<void>(
