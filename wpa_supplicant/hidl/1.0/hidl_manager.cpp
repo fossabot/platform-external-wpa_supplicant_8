@@ -1314,7 +1314,7 @@ void HidlManager::notifyP2pInvitationReceived(
 void HidlManager::notifyP2pInvitationResult(
     struct wpa_supplicant *wpa_s, int status, const u8 *bssid)
 {
-	if (!wpa_s || !bssid)
+	if (!wpa_s)
 		return;
 
 	if (p2p_iface_object_map_.find(wpa_s->ifname) ==
@@ -1325,7 +1325,7 @@ void HidlManager::notifyP2pInvitationResult(
 	    wpa_s->ifname,
 	    std::bind(
 		&ISupplicantP2pIfaceCallback::onInvitationResult,
-		std::placeholders::_1, bssid,
+		std::placeholders::_1, bssid ? bssid : kZeroBssid,
 		static_cast<ISupplicantP2pIfaceCallback::P2pStatusCode>(
 		    status)));
 }
