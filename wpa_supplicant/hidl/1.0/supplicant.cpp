@@ -116,7 +116,7 @@ Supplicant::getInterfaceInternal(const IfaceInfo& iface_info)
 		wpa_s->conf->persistent_reconnect = true;
 		return {{SupplicantStatusCode::SUCCESS, ""}, iface};
 	} else {
-		android::sp<ISupplicantStaIface> iface;
+		android::sp<ISupplicantVendorStaIface> iface;
 		if (!hidl_manager ||
 		    hidl_manager->getStaIfaceHidlObjectByIfname(
 			wpa_s->ifname, &iface)) {
