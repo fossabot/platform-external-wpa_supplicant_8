@@ -662,15 +662,11 @@ void eap_peer_erp_free_keys(struct eap_sm *sm)
 }
 
 
-void eap_peer_erp_init(struct eap_sm *sm, u8 *ext_session_id,
-		       size_t ext_session_id_len, u8 *ext_emsk,
-		       size_t ext_emsk_len)
+static void eap_peer_erp_init(struct eap_sm *sm)
 {
 #ifdef CONFIG_ERP
 	u8 *emsk = NULL;
 	size_t emsk_len = 0;
-	u8 *session_id = NULL;
-	size_t session_id_len = 0;
 	u8 EMSKname[EAP_EMSK_NAME_LEN];
 	u8 len[2], ctx[3];
 	char *realm;
@@ -700,13 +696,7 @@ void eap_peer_erp_init(struct eap_sm *sm, u8 *ext_session_id,
 	if (erp == NULL)
 		goto fail;
 
-	if (ext_emsk) {
-		emsk = ext_emsk;
-		emsk_len = ext_emsk_len;
-	} else {
-		emsk = sm->m->get_emsk(sm, sm->eap_method_priv, &emsk_len);
-	}
-
+	emsk = sm->m->get_emsk(sm, sm->eap_method_priv, &emsk_len);
 	if (!emsk || emsk_len == 0 || emsk_len > ERP_MAX_KEY_LEN) {
 		wpa_printf(MSG_DEBUG,
 			   "EAP: No suitable EMSK available for ERP");
@@ -715,23 +705,10 @@ void eap_peer_erp_init(struct eap_sm *sm, u8 *ext_session_id,
 
 	wpa_hexdump_key(MSG_DEBUG, "EAP: EMSK", emsk, emsk_len);
 
-	if (ext_session_id) {
-		session_id = ext_session_id;
-		session_id_len = ext_session_id_len;
-	} else {
-		session_id = sm->eapSessionId;
-		session_id_len = sm->eapSessionIdLen;
-	}
-
-	if (!session_id || session_id_len == 0) {
-		wpa_printf(MSG_DEBUG,
-			   "EAP: No suitable session id available for ERP");
-		goto fail;
-	}
-
 	WPA_PUT_BE16(len, EAP_EMSK_NAME_LEN);
-	if (hmac_sha256_kdf(session_id, session_id_len, "EMSK", len,
-			    sizeof(len), EMSKname, EAP_EMSK_NAME_LEN) < 0) {
+	if (hmac_sha256_kdf(sm->eapSessionId, sm->eapSessionIdLen, "EMSK",
+			    len, sizeof(len),
+			    EMSKname, EAP_EMSK_NAME_LEN) < 0) {
 		wpa_printf(MSG_DEBUG, "EAP: Could not derive EMSKname");
 		goto fail;
 	}
@@ -768,7 +745,6 @@ void eap_peer_erp_init(struct eap_sm *sm, u8 *ext_session_id,
 	erp = NULL;
 fail:
 	bin_clear_free(emsk, emsk_len);
-	bin_clear_free(ext_session_id, ext_session_id_len);
 	bin_clear_free(erp, sizeof(*erp));
 	os_free(realm);
 #endif /* CONFIG_ERP */
@@ -910,6 +886,8 @@ SM_STATE(EAP, METHOD)
 
 	if (sm->m->isKeyAvailable && sm->m->getKey &&
 	    sm->m->isKeyAvailable(sm, sm->eap_method_priv)) {
+		struct eap_peer_config *config = eap_get_config(sm);
+
 		eap_sm_free_key(sm);
 		sm->eapKeyData = sm->m->getKey(sm, sm->eap_method_priv,
 					       &sm->eapKeyDataLen);
@@ -922,6 +900,8 @@ SM_STATE(EAP, METHOD)
 			wpa_hexdump(MSG_DEBUG, "EAP: Session-Id",
 				    sm->eapSessionId, sm->eapSessionIdLen);
 		}
+		if (config->erp && sm->m->get_emsk && sm->eapSessionId)
+			eap_peer_erp_init(sm);
 	}
 }
 
@@ -1019,8 +999,6 @@ SM_STATE(EAP, RETRANSMIT)
  */
 SM_STATE(EAP, SUCCESS)
 {
-	struct eap_peer_config *config = eap_get_config(sm);
-
 	SM_ENTRY(EAP, SUCCESS);
 	if (sm->eapKeyData != NULL)
 		sm->eapKeyAvailable = TRUE;
@@ -1043,11 +1021,6 @@ SM_STATE(EAP, SUCCESS)
 
 	wpa_msg(sm->msg_ctx, MSG_INFO, WPA_EVENT_EAP_SUCCESS
 		"EAP authentication completed successfully");
-
-	if (config->erp && sm->m->get_emsk && sm->eapSessionId &&
-	    sm->m->isKeyAvailable &&
-	    sm->m->isKeyAvailable(sm, sm->eap_method_priv))
-		eap_peer_erp_init(sm, NULL, 0, NULL, 0);
 }
 
 

@@ -16,7 +16,6 @@
 #include "crypto/md5.h"
 #include "common/eapol_common.h"
 #include "eap_peer/eap.h"
-#include "eap_peer/eap_config.h"
 #include "eap_peer/eap_proxy.h"
 #include "eapol_supp_sm.h"
 
@@ -493,20 +492,9 @@ SM_STATE(SUPP_BE, SUCCESS)
 #ifdef CONFIG_EAP_PROXY
 	if (sm->use_eap_proxy) {
 		if (eap_proxy_key_available(sm->eap_proxy)) {
-			u8 *session_id, *emsk;
-			size_t session_id_len, emsk_len;
-
 			/* New key received - clear IEEE 802.1X EAPOL-Key replay
 			 * counter */
 			sm->replay_counter_valid = FALSE;
-
-			session_id = eap_proxy_get_eap_session_id(
-				sm->eap_proxy, &session_id_len);
-			emsk = eap_proxy_get_emsk(sm->eap_proxy, &emsk_len);
-			if (sm->config->erp && session_id && emsk)
-				eap_peer_erp_init(sm->eap, session_id,
-						  session_id_len, emsk,
-						  emsk_len);
 		}
 		return;
 	}
@@ -911,9 +899,6 @@ static void eapol_sm_abortSupp(struct eapol_sm *sm)
 	wpabuf_free(sm->eapReqData);
 	sm->eapReqData = NULL;
 	eap_sm_abort(sm->eap);
-#ifdef CONFIG_EAP_PROXY
-	eap_proxy_sm_abort(sm->eap_proxy);
-#endif /* CONFIG_EAP_PROXY */
 }
 
 
