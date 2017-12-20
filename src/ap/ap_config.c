@@ -93,6 +93,10 @@ void hostapd_config_defaults_bss(struct hostapd_bss_config *bss)
 
 #ifdef CONFIG_IEEE80211R_AP
 	bss->ft_over_ds = 1;
+	bss->rkh_pos_timeout = 86400;
+	bss->rkh_neg_timeout = 60;
+	bss->rkh_pull_timeout = 1000;
+	bss->rkh_pull_retries = 4;
 #endif /* CONFIG_IEEE80211R_AP */
 
 	bss->radius_das_time_window = 300;
@@ -107,6 +111,12 @@ void hostapd_config_defaults_bss(struct hostapd_bss_config *bss)
 	bss->dhcp_server_port = DHCP_SERVER_PORT;
 	bss->dhcp_relay_port = DHCP_SERVER_PORT;
 #endif /* CONFIG_FILS */
+
+	bss->broadcast_deauth = 1;
+
+#ifdef CONFIG_MBO
+	bss->mbo_cell_data_conn_pref = -1;
+#endif /* CONFIG_MBO */
 }
 
 
@@ -203,6 +213,11 @@ struct hostapd_config * hostapd_config_defaults(void)
 #ifdef CONFIG_ACS
 	conf->acs_num_scans = 5;
 #endif /* CONFIG_ACS */
+
+	/* The third octet of the country string uses an ASCII space character
+	 * by default to indicate that the regulations encompass all
+	 * environments for the current frequency band in the country. */
+	conf->country[2] = ' ';
 
 	return conf;
 }
@@ -608,6 +623,12 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 	os_free(conf->no_auth_if_seen_on);
 
 	hostapd_config_free_fils_realms(conf);
+
+#ifdef CONFIG_DPP
+	os_free(conf->dpp_connector);
+	wpabuf_free(conf->dpp_netaccesskey);
+	wpabuf_free(conf->dpp_csign);
+#endif /* CONFIG_DPP */
 
 	os_free(conf);
 }
@@ -1015,6 +1036,9 @@ void hostapd_set_security_params(struct hostapd_bss_config *bss,
 		bss->rsn_pairwise = bss->wpa_pairwise;
 	bss->wpa_group = wpa_select_ap_group_cipher(bss->wpa, bss->wpa_pairwise,
 						    bss->rsn_pairwise);
+	if (!bss->wpa_group_rekey_set)
+		bss->wpa_group_rekey = bss->wpa_group == WPA_CIPHER_TKIP ?
+			600 : 86400;
 
 	if (full_config) {
 		bss->radius->auth_server = bss->radius->auth_servers;
