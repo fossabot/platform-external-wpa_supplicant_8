@@ -26,6 +26,7 @@ const char kConfigMethodStrDisplay[] = "display";
 const char kConfigMethodStrKeypad[] = "keypad";
 constexpr char kSetMiracastMode[] = "MIRACAST ";
 constexpr uint8_t kWfdDeviceInfoSubelemId = 0;
+constexpr uint8_t kWfdR2DeviceInfoSubelemId = 11;
 constexpr char kWfdDeviceInfoSubelemLenHexStr[] = "0006";
 
 using android::hardware::wifi::supplicant::V1_0::ISupplicantP2pIface;
@@ -464,6 +465,14 @@ Return<void> P2pIface::setWfdDeviceInfo(
 	return validateAndCall(
 	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
 	    &P2pIface::setWfdDeviceInfoInternal, _hidl_cb, info);
+}
+
+Return<void> P2pIface::setWfdR2DeviceInfo(
+    const hidl_array<uint8_t, 4>& info, setWfdR2DeviceInfo_cb _hidl_cb)
+{
+	return validateAndCall(
+	    this, SupplicantStatusCode::FAILURE_IFACE_INVALID,
+	    &P2pIface::setWfdR2DeviceInfoInternal, _hidl_cb, info);
 }
 
 Return<void> P2pIface::createNfcHandoverRequestMessage(
@@ -1179,6 +1188,29 @@ SupplicantStatus P2pIface::setWfdDeviceInfoInternal(
 		wfd_device_info_set_cmd_str.size() + 1);
 	if (wifi_display_subelem_set(
 		wpa_s->global, wfd_device_info_set_cmd.data())) {
+		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
+	}
+	return {SupplicantStatusCode::SUCCESS, ""};
+}
+
+SupplicantStatus P2pIface::setWfdR2DeviceInfoInternal(
+    const std::array<uint8_t, 4>& info)
+{
+	struct wpa_supplicant* wpa_s = retrieveIfacePtr();
+	uint32_t wfd_r2_device_info_hex_len = info.size() * 2 + 1;
+	std::vector<char> wfd_r2_device_info_hex(wfd_r2_device_info_hex_len);
+	wpa_snprintf_hex(
+	    wfd_r2_device_info_hex.data(), wfd_r2_device_info_hex.size(), info.data(),
+	    info.size());
+	std::string wfd_r2_device_info_set_cmd_str =
+	    std::to_string(kWfdR2DeviceInfoSubelemId) + " " +
+	    wfd_r2_device_info_hex.data();
+	std::vector<char> wfd_r2_device_info_set_cmd(
+	    wfd_r2_device_info_set_cmd_str.c_str(),
+	    wfd_r2_device_info_set_cmd_str.c_str() +
+		wfd_r2_device_info_set_cmd_str.size() + 1);
+	if (wifi_display_subelem_set(
+		wpa_s->global, wfd_r2_device_info_set_cmd.data())) {
 		return {SupplicantStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {SupplicantStatusCode::SUCCESS, ""};

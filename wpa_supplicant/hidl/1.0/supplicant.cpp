@@ -104,7 +104,7 @@ Supplicant::getInterfaceInternal(const IfaceInfo& iface_info)
 	}
 	HidlManager* hidl_manager = HidlManager::getInstance();
 	if (iface_info.type == IfaceType::P2P) {
-		android::sp<ISupplicantP2pIface> iface;
+		android::sp<ISupplicantVendorP2PIface> iface;
 		if (!hidl_manager ||
 		    hidl_manager->getP2pIfaceHidlObjectByIfname(
 			wpa_s->ifname, &iface)) {
