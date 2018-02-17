@@ -234,9 +234,15 @@ static void wpa_bss_remove(struct wpa_supplicant *wpa_s, struct wpa_bss *bss,
 	dl_list_del(&bss->list);
 	dl_list_del(&bss->list_id);
 	wpa_s->num_bss--;
+#ifdef ANDROID
+	wpa_printf(MSG_DEBUG, "BSS: Remove id %u BSSID " MACSTR
+		" SSID '%s' due to %s", bss->id, MAC2STR(bss->bssid),
+		wpa_ssid_txt(bss->ssid, bss->ssid_len), reason);
+#else
 	wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Remove id %u BSSID " MACSTR
 		" SSID '%s' due to %s", bss->id, MAC2STR(bss->bssid),
 		wpa_ssid_txt(bss->ssid, bss->ssid_len), reason);
+#endif
 	wpas_notify_bss_removed(wpa_s, bss->bssid, bss->id);
 	wpa_bss_anqp_free(bss->anqp);
 	os_free(bss);
@@ -450,10 +456,17 @@ static struct wpa_bss * wpa_bss_add(struct wpa_supplicant *wpa_s,
 	dl_list_add_tail(&wpa_s->bss, &bss->list);
 	dl_list_add_tail(&wpa_s->bss_id, &bss->list_id);
 	wpa_s->num_bss++;
+#ifdef ANDROID
+	wpa_printf(MSG_DEBUG, "BSS: Add new id %u BSSID " MACSTR
+		" SSID '%s' freq %d",
+		bss->id, MAC2STR(bss->bssid), wpa_ssid_txt(ssid, ssid_len),
+		bss->freq);
+#else
 	wpa_dbg(wpa_s, MSG_DEBUG, "BSS: Add new id %u BSSID " MACSTR
 		" SSID '%s' freq %d",
 		bss->id, MAC2STR(bss->bssid), wpa_ssid_txt(ssid, ssid_len),
 		bss->freq);
+#endif
 	wpas_notify_bss_added(wpa_s, bss->bssid, bss->id);
 	return bss;
 }
