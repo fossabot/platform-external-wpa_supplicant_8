@@ -574,6 +574,9 @@ wpa_auth_sta_init(struct wpa_authenticator *wpa_auth, const u8 *addr,
 {
 	struct wpa_state_machine *sm;
 
+	if (!wpa_auth || !wpa_auth->group)
+		return NULL;
+
 	if (wpa_auth->group->wpa_group_state == WPA_GROUP_FATAL_FAILURE)
 		return NULL;
 
