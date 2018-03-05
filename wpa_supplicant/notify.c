@@ -370,8 +370,10 @@ void wpas_notify_bss_added(struct wpa_supplicant *wpa_s,
 		return;
 
 	wpas_dbus_register_bss(wpa_s, bssid, id);
+#ifndef ANDROID
 	wpa_msg_ctrl(wpa_s, MSG_INFO, WPA_EVENT_BSS_ADDED "%u " MACSTR,
 		     id, MAC2STR(bssid));
+#endif
 }
 
 
@@ -382,8 +384,10 @@ void wpas_notify_bss_removed(struct wpa_supplicant *wpa_s,
 		return;
 
 	wpas_dbus_unregister_bss(wpa_s, bssid, id);
+#ifndef ANDROID
 	wpa_msg_ctrl(wpa_s, MSG_INFO, WPA_EVENT_BSS_REMOVED "%u " MACSTR,
 		     id, MAC2STR(bssid));
+#endif
 }
 
 
