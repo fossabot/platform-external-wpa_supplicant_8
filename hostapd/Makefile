@@ -914,6 +914,8 @@ OBJS += ../src/fst/fst_ctrl_iface.o
 endif
 endif
 
+CFLAGS += -DCONFIG_NO_UI
+
 ALL=hostapd hostapd_cli
 
 all: verify_config $(ALL)
