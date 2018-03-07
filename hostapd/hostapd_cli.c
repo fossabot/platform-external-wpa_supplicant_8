@@ -16,7 +16,6 @@
 #include "utils/edit.h"
 #include "common/version.h"
 
-
 static const char *const hostapd_cli_version =
 "hostapd_cli v" VERSION_STR "\n"
 "Copyright (c) 2004-2015, Jouni Malinen <j@w1.fi> and contributors";
@@ -411,10 +410,122 @@ static int hostapd_cli_cmd_sa_query(struct wpa_ctrl *ctrl, int argc,
 
 
 #ifdef CONFIG_WPS
+#ifdef CONFIG_NO_UI
+/**
+ * wps_pin_checksum - Compute PIN checksum
+ * @pin: Seven digit PIN (i.e., eight digit PIN without the checksum digit)
+ * Returns: Checksum digit
+ */
+static unsigned int wps_pin_checksum(unsigned int pin)
+{
+	unsigned int accum = 0;
+	while (pin) {
+		accum += 3 * (pin % 10);
+		pin /= 10;
+		accum += pin % 10;
+		pin /= 10;
+	}
+
+	return (10 - accum % 10) % 10;
+}
+
+/**
+ * wps_pin_valid - Check whether a PIN has a valid checksum
+ * @pin: Eight digit PIN (i.e., including the checksum digit)
+ * Returns: 1 if checksum digit is valid, or 0 if not
+ */
+static unsigned int wps_pin_valid(unsigned int pin)
+{
+	return wps_pin_checksum(pin / 10) == (pin % 10);
+}
+
+/**
+ * hostapd_cli_wps_check_pin - Check the validity of the PIN
+ * This function is mostly a copy of hostapd_ctrl_iface_wps_check_pin() in
+ * ctrl_iface.c. But it's applied before the "WPS_PIN any " command.
+ * @cmd: The input cmd including the PIN number
+ * @buf: The output PIN number after filter the illegal symbols
+ * Returns: Return output PIN length if succ, or minus value if fail
+ */
+static int hostapd_cli_wps_check_pin(char *cmd, char *buf, size_t buflen)
+{
+	char pin[9];
+	size_t len;
+	char *pos;
+	int ret;
+
+	/* Only digit 0-9 is allowed */
+	for (pos = cmd, len = 0; *pos != '\0'; pos++) {
+		if (*pos < '0' || *pos > '9')
+			continue;
+		pin[len++] = *pos;
+		if (len == 9) {
+			wpa_printf(MSG_DEBUG, "WPS: Too long PIN");
+			return -1;
+		}
+	}
+	if (len != 4 && len != 8) {
+		wpa_printf(MSG_DEBUG, "WPS: Invalid PIN length %d", (int) len);
+		return -1;
+	}
+	pin[len] = '\0';
+
+	/* Check if the checksum is valid */
+	if (len == 8) {
+		unsigned int pin_val;
+		pin_val = atoi(pin);
+		if (!wps_pin_valid(pin_val)) {
+			wpa_printf(MSG_DEBUG, "WPS: Invalid checksum digit");
+			wpa_printf(MSG_ERROR, "FAIL-CHECKSUM");
+			return -1;
+		}
+	}
+
+	ret = os_snprintf(buf, buflen, "%s", pin);
+	return ret;
+}
+
+/**
+ * hostapd_cli_wps_check_wps_pin_any: Check the PIN in the cmd "WPS_PIN uuid "
+ * @buf: The command beginning from PIN number
+ * Returns: Negative value if fail, or not negative value if succ
+ */
+static int hostapd_cli_wps_check_wps_pin_cmd(char *buf)
+{
+	int ret = 0;
+	char *pin_pos;
+	char *uuid;
+	/* Check the PIN only if the last param in the cmd
+	 * is the PIN or part of the PIN.
+	 */
+	uuid = os_strchr(buf, ' ');
+	if (NULL == uuid) {
+		wpa_printf(MSG_ERROR, "No UUID");
+		return -1;
+	}
+	pin_pos = os_strchr(uuid + 1, ' ');
+	if (NULL == pin_pos) {
+		wpa_printf(MSG_ERROR, "No PIN");
+		return -1;
+	}
+	/* skip whitespace */
+	pin_pos++;
+	if(os_strlen(pin_pos) <= 9)
+		ret = hostapd_cli_wps_check_pin(pin_pos, pin_pos, 9);
+	return ret;
+}
+#else
+static int hostapd_cli_wps_check_wps_pin_cmd(char *buf)
+{
+	return 0;
+}
+#endif
+
 static int hostapd_cli_cmd_wps_pin(struct wpa_ctrl *ctrl, int argc,
 				   char *argv[])
 {
 	char buf[256];
+
 	if (argc < 2) {
 		printf("Invalid 'wps_pin' command - at least two arguments, "
 		       "UUID and PIN, are required.\n");
@@ -423,11 +534,20 @@ static int hostapd_cli_cmd_wps_pin(struct wpa_ctrl *ctrl, int argc,
 	if (argc > 3)
 		snprintf(buf, sizeof(buf), "WPS_PIN %s %s %s %s",
 			 argv[0], argv[1], argv[2], argv[3]);
-	else if (argc > 2)
-		snprintf(buf, sizeof(buf), "WPS_PIN %s %s %s",
-			 argv[0], argv[1], argv[2]);
-	else
-		snprintf(buf, sizeof(buf), "WPS_PIN %s %s", argv[0], argv[1]);
+	else {
+		int ret;
+		if (argc > 2)
+			snprintf(buf, sizeof(buf), "WPS_PIN %s %s %s",
+			argv[0], argv[1], argv[2]);
+		else
+			snprintf(buf, sizeof(buf), "WPS_PIN %s %s",
+			argv[0], argv[1]);
+
+		/* Check the PIN in the cmd "WPS_PIN uuid " */
+		ret = hostapd_cli_wps_check_wps_pin_cmd(buf);
+		if (ret < 0)
+			return -1;
+	}
 	return wpa_ctrl_command(ctrl, buf);
 }
 
