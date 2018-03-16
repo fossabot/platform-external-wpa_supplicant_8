@@ -71,6 +71,7 @@ NEED_AES=y
 NEED_MD5=y
 NEED_SHA1=y
 
+CONFIG_WPS_UPNP=y
 OBJS += ../src/drivers/drivers.o
 CFLAGS += -DHOSTAPD
 
