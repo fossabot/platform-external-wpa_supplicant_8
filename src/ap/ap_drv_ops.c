@@ -96,14 +96,14 @@ int hostapd_build_ap_extra_ies(struct hostapd_data *hapd,
 		wpabuf_put_buf(assocresp, hapd->iface->fst_ies);
 	}
 #endif /* CONFIG_FST */
-
-	if (hapd->wps_beacon_ie) {
-		if (wpabuf_resize(&beacon, wpabuf_len(hapd->wps_beacon_ie)) <
-		    0)
-			goto fail;
-		wpabuf_put_buf(beacon, hapd->wps_beacon_ie);
+	if(!(hapd->conf->macaddr_acl && !hapd->conf->num_accept_mac)){
+		if (hapd->wps_beacon_ie) {
+			if (wpabuf_resize(&beacon, wpabuf_len(hapd->wps_beacon_ie)) <
+			    0)
+				goto fail;
+			wpabuf_put_buf(beacon, hapd->wps_beacon_ie);
+		}
 	}
-
 	if (hapd->wps_probe_resp_ie) {
 		if (wpabuf_resize(&proberesp,
 				  wpabuf_len(hapd->wps_probe_resp_ie)) < 0)

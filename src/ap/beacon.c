@@ -804,8 +804,10 @@ int ieee802_11_build_ap_params(struct hostapd_data *hapd,
 	head = os_zalloc(BEACON_HEAD_BUF_SIZE);
 	tail_len = BEACON_TAIL_BUF_SIZE;
 #ifdef CONFIG_WPS
-	if (hapd->conf->wps_state && hapd->wps_beacon_ie)
-		tail_len += wpabuf_len(hapd->wps_beacon_ie);
+	if(!(hapd->conf->macaddr_acl && !hapd->conf->num_accept_mac)){
+		if (hapd->conf->wps_state && hapd->wps_beacon_ie)
+			tail_len += wpabuf_len(hapd->wps_beacon_ie);
+	}
 #endif /* CONFIG_WPS */
 #ifdef CONFIG_P2P
 	if (hapd->p2p_beacon_ie)
@@ -936,10 +938,12 @@ int ieee802_11_build_ap_params(struct hostapd_data *hapd,
 	tailpos = hostapd_eid_wmm(hapd, tailpos);
 
 #ifdef CONFIG_WPS
-	if (hapd->conf->wps_state && hapd->wps_beacon_ie) {
-		os_memcpy(tailpos, wpabuf_head(hapd->wps_beacon_ie),
-			  wpabuf_len(hapd->wps_beacon_ie));
-		tailpos += wpabuf_len(hapd->wps_beacon_ie);
+	if(!(hapd->conf->macaddr_acl && !hapd->conf->num_accept_mac)){
+		if (hapd->conf->wps_state && hapd->wps_beacon_ie) {
+			os_memcpy(tailpos, wpabuf_head(hapd->wps_beacon_ie),
+				  wpabuf_len(hapd->wps_beacon_ie));
+			tailpos += wpabuf_len(hapd->wps_beacon_ie);
+		}
 	}
 #endif /* CONFIG_WPS */
 
