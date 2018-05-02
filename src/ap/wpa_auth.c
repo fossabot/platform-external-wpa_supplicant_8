@@ -13,6 +13,7 @@
 #include "utils/state_machine.h"
 #include "utils/bitfield.h"
 #include "common/ieee802_11_defs.h"
+#include "crypto/aes.h"
 #include "crypto/aes_wrap.h"
 #include "crypto/crypto.h"
 #include "crypto/sha1.h"
@@ -828,6 +829,7 @@ static int wpa_try_alt_snonce(struct wpa_state_machine *sm, u8 *data,
 	int ok = 0;
 	const u8 *pmk = NULL;
 
+	os_memset(&PTK, 0, sizeof(PTK));
 	for (;;) {
 		if (wpa_key_mgmt_wpa_psk(sm->wpa_key_mgmt)) {
 			pmk = wpa_auth_get_psk(sm->wpa_auth, sm->addr,
@@ -1458,6 +1460,8 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 	}
 
 	len += key_data_len;
+	if (!mic_len && encr)
+		len += AES_BLOCK_SIZE;
 
 	hdr = os_zalloc(len);
 	if (hdr == NULL)
@@ -1509,6 +1513,30 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 			WPA_PUT_BE16(key192->key_data_length, kde_len);
 		else
 			WPA_PUT_BE16(key->key_data_length, kde_len);
+#ifdef CONFIG_FILS
+	} else if (!mic_len) {
+		const u8 *aad[1];
+		size_t aad_len[1];
+
+		WPA_PUT_BE16(key_mic, AES_BLOCK_SIZE + kde_len);
+		wpa_hexdump_key(MSG_DEBUG, "Plaintext EAPOL-Key Key Data",
+				kde, kde_len);
+
+		wpa_hexdump_key(MSG_DEBUG, "WPA: KEK",
+				sm->PTK.kek, sm->PTK.kek_len);
+		/* AES-SIV AAD from EAPOL protocol version field (inclusive) to
+		 * to Key Data (exclusive). */
+		aad[0] = (u8 *) hdr;
+		aad_len[0] = key_mic + 2 - (u8 *) hdr;
+		if (aes_siv_encrypt(sm->PTK.kek, sm->PTK.kek_len, kde, kde_len,
+				    1, aad, aad_len, key_mic + 2) < 0) {
+			wpa_printf(MSG_DEBUG, "WPA: AES-SIV encryption failed");
+			return;
+		}
+
+		wpa_hexdump(MSG_DEBUG, "WPA: Encrypted Key Data from SIV",
+			    key_mic + 2, AES_BLOCK_SIZE + kde_len);
+#endif /* CONFIG_FILS */
 	} else if (encr && kde) {
 		buf = os_zalloc(key_data_len);
 		if (buf == NULL) {
@@ -1566,7 +1594,7 @@ void __wpa_send_eapol(struct wpa_authenticator *wpa_auth,
 	if (key_info & WPA_KEY_INFO_MIC) {
 		u8 *key_mic;
 
-		if (!sm->PTK_valid) {
+		if (!sm->PTK_valid || !mic_len) {
 			wpa_auth_logger(wpa_auth, sm->addr, LOGGER_DEBUG,
 					"PTK not valid when sending EAPOL-Key "
 					"frame");
@@ -2032,6 +2060,7 @@ SM_STATE(WPA_PTK, PTKCALCNEGOTIATING)
 	SM_ENTRY_MA(WPA_PTK, PTKCALCNEGOTIATING, wpa_ptk);
 	sm->EAPOLKeyReceived = FALSE;
 	sm->update_snonce = FALSE;
+	os_memset(&PTK, 0, sizeof(PTK));
 
 	/* WPA with IEEE 802.1X: use the derived PMK from EAP
 	 * WPA-PSK: iterate through possible PSKs and select the one matching
@@ -2338,7 +2367,8 @@ SM_STATE(WPA_PTK, PTKINITNEGOTIATING)
 #endif /* CONFIG_P2P */
 
 	wpa_send_eapol(sm->wpa_auth, sm,
-		       (secure ? WPA_KEY_INFO_SECURE : 0) | WPA_KEY_INFO_MIC |
+		       (secure ? WPA_KEY_INFO_SECURE : 0) |
+		       (wpa_mic_len(sm->wpa_key_mgmt) ? WPA_KEY_INFO_MIC : 0) |
 		       WPA_KEY_INFO_ACK | WPA_KEY_INFO_INSTALL |
 		       WPA_KEY_INFO_KEY_TYPE,
 		       _rsc, sm->ANonce, kde, pos - kde, keyidx, encr);
@@ -2585,7 +2615,8 @@ SM_STATE(WPA_PTK_GROUP, REKEYNEGOTIATING)
 	}
 
 	wpa_send_eapol(sm->wpa_auth, sm,
-		       WPA_KEY_INFO_SECURE | WPA_KEY_INFO_MIC |
+		       WPA_KEY_INFO_SECURE |
+		       (wpa_mic_len(sm->wpa_key_mgmt) ? WPA_KEY_INFO_MIC : 0) |
 		       WPA_KEY_INFO_ACK |
 		       (!sm->Pair ? WPA_KEY_INFO_INSTALL : 0),
 		       rsc, gsm->GNonce, kde, kde_len, gsm->GN, 1);
