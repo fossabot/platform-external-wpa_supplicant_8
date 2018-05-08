@@ -18,6 +18,8 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pNetworkCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetworkCallback.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorP2PIface.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorP2PIfaceCallback.h>
 
 #include "p2p_iface.h"
 #include "p2p_network.h"
@@ -39,9 +41,11 @@ namespace supplicant {
 namespace V1_0 {
 namespace implementation {
 
-using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork;
-using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaIface;
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorStaNetwork;
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorStaIface;
 
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorP2PIfaceCallback;
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorP2PIface;
 /**
  * HidlManager is responsible for managing the lifetime of all
  * hidl objects created by wpa_supplicant. This is a singleton
@@ -89,7 +93,9 @@ public:
 	void notifyP2pDeviceFound(
 	    struct wpa_supplicant *wpa_s, const u8 *addr,
 	    const struct p2p_peer_info *info, const u8 *peer_wfd_device_info,
-	    u8 peer_wfd_device_info_len);
+	    u8 peer_wfd_device_info_len,
+	    const u8 *peer_wfd_r2_device_info,
+	    u8 peer_wfd_r2_device_info_len);
 	void notifyP2pDeviceLost(
 	    struct wpa_supplicant *wpa_s, const u8 *p2p_device_addr);
 	void notifyP2pFindStopped(struct wpa_supplicant *wpa_s);
@@ -132,7 +138,7 @@ public:
 
 	int getP2pIfaceHidlObjectByIfname(
 	    const std::string &ifname,
-	    android::sp<ISupplicantP2pIface> *iface_object);
+	    android::sp<ISupplicantVendorP2PIface> *iface_object);
 	int getStaIfaceHidlObjectByIfname(
 	    const std::string &ifname,
 	    android::sp<ISupplicantVendorStaIface> *iface_object);
@@ -179,6 +185,7 @@ private:
 	    const android::sp<ISupplicantStaNetworkCallback> &callback);
 
 	bool checkForVendorStaIfaceCallback(const std::string &ifname);
+	bool checkForVendorP2pIfaceCallback(const std::string &ifname);
 	void callWithEachSupplicantCallback(
 	    const std::function<android::hardware::Return<void>(
 		android::sp<ISupplicantCallback>)> &method);
