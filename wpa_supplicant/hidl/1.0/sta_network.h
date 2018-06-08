@@ -17,7 +17,7 @@
 
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetwork.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetworkCallback.h>
-#include <vendor/qti/hardware/wifi/supplicant/1.0/ISupplicantVendorStaNetwork.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorStaNetwork.h>
 
 extern "C" {
 #include "utils/common.h"
@@ -42,7 +42,7 @@ namespace implementation {
  * object is used for control operations on a specific network
  * controlled by wpa_supplicant.
  */
-class StaNetwork : public vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork
+class StaNetwork : public vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorStaNetwork
 {
 public:
 	StaNetwork(

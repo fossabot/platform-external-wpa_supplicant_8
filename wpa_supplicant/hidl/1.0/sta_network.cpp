@@ -19,7 +19,7 @@ extern "C" {
 namespace {
 using android::hardware::wifi::supplicant::V1_0::ISupplicantStaNetwork;
 using android::hardware::wifi::supplicant::V1_0::SupplicantStatus;
-using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaNetwork;
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorStaNetwork;
 
 constexpr uint8_t kZeroBssid[6] = {0, 0, 0, 0, 0, 0};
 
