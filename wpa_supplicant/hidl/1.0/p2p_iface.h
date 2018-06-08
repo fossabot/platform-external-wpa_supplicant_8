@@ -19,6 +19,8 @@
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantP2pNetwork.h>
 
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorP2PIface.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorP2PIfaceCallback.h>
 extern "C" {
 #include "utils/common.h"
 #include "utils/includes.h"
@@ -36,13 +38,15 @@ namespace supplicant {
 namespace V1_0 {
 namespace implementation {
 
+using vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorP2PIfaceCallback;
+
 /**
  * Implementation of P2pIface hidl object. Each unique hidl
  * object is used for control operations on a specific interface
  * controlled by wpa_supplicant.
  */
-class P2pIface
-    : public android::hardware::wifi::supplicant::V1_0::ISupplicantP2pIface
+class P2pIface :
+	public vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorP2PIface
 {
 public:
 	P2pIface(struct wpa_global* wpa_global, const char ifname[]);
@@ -174,6 +178,9 @@ public:
 	Return<void> setWfdDeviceInfo(
 	    const hidl_array<uint8_t, 6>& info,
 	    setWfdDeviceInfo_cb _hidl_cb) override;
+	Return<void> setWfdR2DeviceInfo(
+	    const hidl_array<uint8_t, 4>& info,
+	    setWfdR2DeviceInfo_cb _hidl_cb) override;
 	Return<void> createNfcHandoverRequestMessage(
 	    createNfcHandoverRequestMessage_cb _hidl_cb) override;
 	Return<void> createNfcHandoverSelectMessage(
@@ -280,6 +287,8 @@ private:
 	SupplicantStatus enableWfdInternal(bool enable);
 	SupplicantStatus setWfdDeviceInfoInternal(
 	    const std::array<uint8_t, 6>& info);
+	SupplicantStatus setWfdR2DeviceInfoInternal(
+	    const std::array<uint8_t, 4>& info);
 	std::pair<SupplicantStatus, std::vector<uint8_t>>
 	createNfcHandoverRequestMessageInternal();
 	std::pair<SupplicantStatus, std::vector<uint8_t>>

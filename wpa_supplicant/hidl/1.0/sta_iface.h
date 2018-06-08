@@ -16,11 +16,11 @@
 #include <android-base/macros.h>
 
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIface.h>
-#include <vendor/qti/hardware/wifi/supplicant/1.0/ISupplicantVendorStaIface.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorStaIface.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaIfaceCallback.h>
 #include <vendor/qti/hardware/wifi/supplicant/1.0/ISupplicantVendorStaIfaceCallback.h>
 #include <android/hardware/wifi/supplicant/1.0/ISupplicantStaNetwork.h>
-#include <vendor/qti/hardware/wifi/supplicant/1.0/ISupplicantVendorStaNetwork.h>
+#include <vendor/qti/hardware/wifi/supplicant/1.1/ISupplicantVendorStaNetwork.h>
 
 extern "C" {
 #include "utils/common.h"
@@ -46,7 +46,7 @@ using vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaIfaceCa
  * controlled by wpa_supplicant.
  */
 class StaIface
-    : public vendor::qti::hardware::wifi::supplicant::V1_0::ISupplicantVendorStaIface
+    : public vendor::qti::hardware::wifi::supplicant::V1_1::ISupplicantVendorStaIface
 {
 public:
 	StaIface(struct wpa_global* wpa_global, const char ifname[]);
