@@ -1713,6 +1713,7 @@ endif
 ifeq ($(WPA_SUPPLICANT_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@1.0_vendor
+LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@1.1_vendor
 LOCAL_SHARED_LIBRARIES += libhidlbase libhidltransport libhwbinder libutils
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
 endif
@@ -1777,6 +1778,7 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@$(HIDL_INTERFACE_VERSION) \
     vendor.qti.hardware.wifi.supplicant@$(HIDL_INTERFACE_VERSION)_vendor \
+    vendor.qti.hardware.wifi.supplicant@1.1_vendor \
     libhidlbase \
     libhidltransport \
     libhwbinder \
